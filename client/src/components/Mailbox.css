@@ -1,10 +1,12 @@
+/* Mailbox.css - High Contrast Update */
+
 .mailbox-overlay {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.9);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -12,120 +14,113 @@
 }
 
 .mailbox-window {
-    width: 600px;
-    height: 80vh;
-    background: #0f1218;
+    width: 90vw;
+    max-width: 1000px;
+    height: 90vh;
+    background: #0b0d12;
     border: 1px solid #3366ff;
     border-radius: 8px;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 0 30px rgba(51, 102, 255, 0.2);
+    box-shadow: 0 0 50px rgba(51, 102, 255, 0.2);
+    color: #eee;
 }
 
 .mailbox-header {
     padding: 15px;
+    background: #12151d;
     border-bottom: 1px solid #333;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: linear-gradient(90deg, #1a1f2e, #0f1218);
 }
 
 .mailbox-header h2 {
     margin: 0;
     color: #3366ff;
-    text-shadow: 0 0 5px #3366ff;
-    font-size: 1.2rem;
+    font-family: 'Orbitron', sans-serif;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.close-btn:hover {
+    color: #fff;
 }
 
 .mailbox-content {
     flex: 1;
     overflow-y: auto;
-    padding: 10px;
+    padding: 20px;
+    background: #0b0d12;
 }
 
-.report-list {
+/* Battle Report Detail */
+.battle-report-detail {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 20px;
 }
 
-.report-item {
+.br-nav {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    background: #1e2330;
-    padding: 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.2s;
-    border-left: 4px solid transparent;
-}
-
-.report-item.won {
-    border-left-color: #00cc66;
-}
-
-.report-item.lost {
-    border-left-color: #ff3333;
-}
-
-.report-item:hover {
-    background: #2a3042;
-}
-
-.report-icon {
-    font-size: 1.5rem;
-    margin-right: 15px;
-}
-
-.report-summary {
-    flex: 1;
-}
-
-.report-title {
-    font-weight: bold;
-    color: #e0e0e0;
-}
-
-.report-date {
-    font-size: 0.8rem;
-    color: #888;
-}
-
-.report-status {
-    font-weight: bold;
-    font-size: 0.9rem;
-}
-
-.report-status.win {
-    color: #00cc66;
-}
-
-.report-status.loss {
-    color: #ff3333;
-}
-
-/* Detail View */
-.battle-report-detail {
-    padding: 15px;
 }
 
 .back-btn {
-    background: none;
-    border: 1px solid #444;
-    color: #aaa;
-    padding: 5px 10px;
+    background: #222;
+    border: 1px solid #555;
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 4px;
     cursor: pointer;
-    margin-bottom: 15px;
+}
+
+.back-btn:hover {
+    background: #333;
+}
+
+.br-tabs {
+    display: flex;
+    background: #1a1e26;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #333;
+}
+
+.br-tabs button {
+    background: #1a1e26;
+    border: none;
+    padding: 10px 20px;
+    color: #888;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1rem;
+}
+
+.br-tabs button:hover {
+    color: #ccc;
+    background: #252b36;
+}
+
+.br-tabs button.active {
+    background: #3366ff;
+    color: #fff;
 }
 
 .report-header {
     text-align: center;
-    padding: 20px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent);
+    padding: 15px;
+    border: 2px solid #333;
     border-radius: 8px;
-    margin-bottom: 20px;
-    border: 1px solid #333;
+    background: rgba(255, 255, 255, 0.02);
 }
 
 .report-header.victory {
@@ -139,94 +134,514 @@
 }
 
 .report-header h3 {
-    margin: 0 0 5px 0;
-    font-size: 1.5rem;
+    margin: 0;
+    font-size: 2rem;
+    letter-spacing: 2px;
 }
 
-.combat-lanes {
-    margin: 20px 0;
+.sub-status {
+    color: #ccc;
+    font-size: 1rem;
+    margin-top: 5px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
-.lanes-container {
+/* Overview Stats */
+.br-overview {
     display: flex;
-    gap: 10px;
-}
-
-.lane-col {
-    flex: 1;
-    background: #141820;
-    border: 1px solid #333;
-    padding: 10px;
-    text-align: center;
-    border-radius: 4px;
-}
-
-.lane-col.attacker-win {
-    border-color: #00cc66;
-    box-shadow: inset 0 0 10px rgba(0, 204, 102, 0.1);
-}
-
-.lane-col.defender-win {
-    border-color: #ff3333;
-    box-shadow: inset 0 0 10px rgba(255, 51, 51, 0.1);
+    flex-direction: column;
+    gap: 20px;
 }
 
 .loot-section {
-    background: #1a1e26;
-    padding: 10px;
+    background: #151922;
+    padding: 20px;
     border-radius: 4px;
-    margin-bottom: 15px;
+    border: 1px solid #333;
+}
+
+.loot-section h4 {
+    color: #aaa;
+    margin-top: 0;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
 }
 
 .loot-grid {
     display: flex;
-    gap: 20px;
+    gap: 30px;
 }
 
 .loot-item {
-    font-size: 1.1rem;
+    font-size: 1.2rem;
+    font-weight: bold;
     display: flex;
     align-items: center;
-    gap: 5px;
-}
-
-.loot-item .icon {
-    font-weight: bold;
-    opacity: 0.7;
+    gap: 8px;
 }
 
 .loot-item.carbon {
-    color: #a3a3a3;
+    color: #ccc;
 }
 
 .loot-item.titanium {
-    color: #8a2be2;
+    color: #c080ff;
 }
 
 .loot-item.food {
-    color: #32cd32;
+    color: #80ff80;
+}
+
+.total-casualties-section {
+    background: #151922;
+    padding: 20px;
+    border-radius: 4px;
+    border: 1px solid #333;
+}
+
+.total-casualties-section h4 {
+    color: #aaa;
+    margin-top: 0;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
 }
 
 .casualties-grid {
     display: flex;
-    gap: 20px;
+    gap: 40px;
 }
 
 .cas-col {
     flex: 1;
 }
 
-.cas-row {
+.cas-col h5 {
+    margin: 0 0 10px 0;
+    font-size: 1rem;
+    color: #fff;
+}
+
+.unit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.unit-entry {
     display: flex;
     justify-content: space-between;
-    padding: 4px 0;
-    border-bottom: 1px solid #333;
+    font-size: 0.9rem;
+    padding: 2px 0;
+    border-bottom: 1px solid #222;
 }
 
-.cas-row.red span:last-child {
+.unit-entry:last-child {
+    border-bottom: none;
+}
+
+.unit-entry .u-name {
+    color: #bbb;
+}
+
+.unit-entry .u-count {
+    font-weight: bold;
+}
+
+.unit-entry.red .u-count {
+    color: #ff5555;
+}
+
+.unit-entry.green .u-count {
+    color: #55ff55;
+}
+
+.unit-entry.neutral .u-count {
+    color: #fff;
+}
+
+/* Flank Flowchart */
+.br-details-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.flanks-row {
+    display: flex;
+    gap: 15px;
+    overflow-x: auto;
+}
+
+.flank-col {
+    flex: 1;
+    min-width: 220px;
+    background: #151922;
+    border: 1px solid #333;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+
+.flank-col.empty {
+    opacity: 0.5;
+    justify-content: center;
+    align-items: center;
+}
+
+.flank-header {
+    text-align: center;
+    padding: 8px;
+    font-weight: bold;
+    background: #252b36;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    color: #fff;
+    border: 1px solid #444;
+}
+
+.flank-header.att-win {
     color: #ff3333;
+    border: 1px solid #ff3333;
 }
 
-.cas-row.green span:last-child {
+/* Attacker Win often Red if Hostile? Or GGE uses Green/Red relative to player. */
+/* Let's stick to neutral until we map "IsAttacker" context */
+.flank-header.def-win {
     color: #00cc66;
+    border: 1px solid #00cc66;
+}
+
+.flank-side {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 5px;
+    min-height: 140px;
+    /* Alignment Fix: Ensure minimum height so toggle buttons align better */
+    display: flex;
+    flex-direction: column;
+}
+
+.fs-title {
+    font-size: 0.8rem;
+    color: #888;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 4px;
+}
+
+.unit-list {
+    font-size: 0.8rem;
+}
+
+.unit-entry {
+    display: flex;
+    justify-content: space-between;
+}
+
+.unit-entry.red {
+    color: #ff6666;
+}
+
+.unit-entry.green {
+    color: #66ff66;
+}
+
+.unit-entry.neutral {
+    color: #ccc;
+}
+
+.tool-list {
+    margin-top: auto;
+    /* Push to bottom of container if flex */
+    padding-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.tool-entry {
+    background: #333;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    color: #ddd;
+    border: 1px solid #555;
+}
+
+.vs-divider {
+    text-align: center;
+    color: #666;
+    font-size: 0.8rem;
+    margin: 8px 0;
+    font-style: italic;
+    min-height: 24px;
+    /* Match height of button roughly to keep vertical rhythm */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.losses {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    border-top: 1px solid #333;
+    padding-top: 4px;
+    color: #aaa;
+}
+
+/* Central Lane Action (Wave Toggle) */
+.lane-action {
+    display: flex;
+    justify-content: center;
+    margin: 8px 0;
+}
+
+.wave-toggle-btn {
+    background: #1a1e26;
+    border: 1px solid #444;
+    color: #3366ff;
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.wave-toggle-btn:hover {
+    background: #333;
+    color: #66aaff;
+    border-color: #3366ff;
+}
+
+.wave-toggle-btn.active {
+    background: #3366ff;
+    color: #fff;
+    border-color: #3366ff;
+}
+
+.outcome-arrow {
+    margin-top: auto;
+    text-align: center;
+    padding: 10px;
+    font-weight: bold;
+    font-size: 0.9rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.outcome-arrow.breach {
+    background: rgba(255, 51, 51, 0.1);
+    color: #ff5555;
+    border: 1px solid #ff5555;
+}
+
+.outcome-arrow.blocked {
+    background: rgba(0, 204, 102, 0.1);
+    color: #55ff55;
+    border: 1px solid #55ff55;
+}
+
+/* Courtyard */
+.courtyard-section {
+    background: #151922;
+    padding: 20px;
+    border: 2px solid #333;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.courtyard-section h4 {
+    color: #ccc;
+    margin-top: 0;
+}
+
+.courtyard-content {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 40px;
+    margin-top: 20px;
+}
+
+.cy-side {
+    background: #0b0d12;
+    padding: 20px;
+    border-radius: 8px;
+    min-width: 250px;
+    border: 1px solid #333;
+}
+
+.cy-side h5 {
+    margin-top: 0;
+    color: #888;
+}
+
+.cy-vs {
+    font-size: 2rem;
+    color: #444;
+    font-weight: bold;
+}
+
+.cy-result {
+    margin-top: 25px;
+    font-size: 1.4rem;
+    font-weight: bold;
+    padding: 15px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.cy-result.att-win {
+    background: #ff3333;
+    color: white;
+    box-shadow: 0 0 20px rgba(255, 51, 51, 0.4);
+}
+
+.cy-result.def-win {
+    background: #00cc66;
+    color: white;
+    box-shadow: 0 0 20px rgba(0, 204, 102, 0.4);
+}
+
+/* Report List items */
+.report-item {
+    display: flex;
+    align-items: center;
+    background: #1e2330;
+    padding: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 8px;
+    border-left: 4px solid #444;
+}
+
+.report-item.won {
+    border-left-color: #00cc66;
+}
+
+.report-item.lost {
+    border-left-color: #ff3333;
+}
+
+.report-icon {
+    font-size: 1.5rem;
+    margin-right: 15px;
+}
+
+.report-summary {
+    flex: 1;
+}
+
+.report-title {
+    font-weight: bold;
+    color: #eee;
+}
+
+.report-date {
+    font-size: 0.8rem;
+    color: #888;
+}
+
+.report-status.win {
+    color: #00cc66;
+}
+
+
+/* Wave Details */
+.wave-toggle {
+    margin-top: 10px;
+    font-size: 0.8rem;
+    color: #3366ff;
+    cursor: pointer;
+    text-align: center;
+    border: 1px solid #3366ff;
+    border-radius: 4px;
+    padding: 4px;
+    transition: all 0.2s;
+}
+
+.mail-wave-toggle:hover {
+    background: rgba(51, 102, 255, 0.1);
+}
+
+.mail-wave-breakdown {
+    margin-top: 10px;
+    background: #0b0d12;
+    border: 1px solid #444;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.mail-wave-row {
+    border-bottom: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+}
+
+.mail-wave-row:last-child {
+    border-bottom: none;
+}
+
+.mail-wave-header {
+    background: #1a1e26;
+    padding: 6px 10px;
+    border-bottom: 1px solid #222;
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: #eebb00;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mail-wave-body {
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 15px;
+    font-size: 0.85rem;
+}
+
+.mail-wave-part {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.wp-label {
+    font-size: 0.75rem;
+    color: #888;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 2px;
+}
+
+.mail-wave-vs {
+    font-size: 0.8rem;
+    color: #666;
+    align-self: center;
+    font-style: italic;
+    padding-top: 20px;
+    /* Align roughly with content */
+}
+
+.wp-loss {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: #ff5555;
+    border-top: 1px solid #222;
+    padding-top: 2px;
+}
+
+/* Ensure tool list inside wave wraps nicely */
+.mail-wave-part .tool-list {
+    margin-top: 4px;
+    margin-bottom: 4px;
 }

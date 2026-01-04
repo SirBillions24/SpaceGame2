@@ -112,10 +112,9 @@ router.get('/battles/:id', authenticateToken, async (req: AuthRequest, res: Resp
       defenderLosses,
       myLosses: isAttacker ? attackerLosses : defenderLosses,
       enemyLosses: isAttacker ? defenderLosses : attackerLosses,
-      loot: isAttacker ? loot : null, // Only attacker sees loot? Defender sees losses? 
-      // Defender should see what was stolen too.
-      // If winner is attacker, loot was stolen.
+      loot: isAttacker ? loot : null,
       resourcesStolen: loot,
+      resourcesJson: report.resourcesJson, // Required by Mailbox.tsx
       createdAt: report.createdAt,
     });
   } catch (error) {

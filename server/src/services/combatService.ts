@@ -1,491 +1,536 @@
 import prisma from '../lib/prisma';
 
-// Unit base stats
-const UNIT_STATS: Record<string, { attack: number; defense: number }> = {
-  marine: { attack: 10, defense: 8 },    // Formerly swords
-  ranger: { attack: 12, defense: 5 },    // Formerly archers
-  sentinel: { attack: 8, defense: 12 },  // Formerly pikes
-  interceptor: { attack: 15, defense: 10 }, // Formerly cavalry (new)
+// --- CONSTANTS & STATS ---
+
+// Unit Stats: Melee/Ranged Attack & Defense
+// Marine: Melee
+// Ranger: Ranged
+// Sentinel: Tank (High Def)
+// Interceptor: Fast (High Impact)
+const UNIT_STATS: Record<string, { meleeAtk: number; rangedAtk: number; meleeDef: number; rangedDef: number; capacity: number }> = {
+  marine: { meleeAtk: 12, rangedAtk: 0, meleeDef: 12, rangedDef: 6, capacity: 10 },
+  ranger: { meleeAtk: 4, rangedAtk: 14, meleeDef: 4, rangedDef: 10, capacity: 5 },
+  sentinel: { meleeAtk: 6, rangedAtk: 2, meleeDef: 18, rangedDef: 18, capacity: 20 },
+  interceptor: { meleeAtk: 16, rangedAtk: 0, meleeDef: 8, rangedDef: 8, capacity: 15 },
 };
 
-// Defense building bonuses (per level)
-const GRID_DEFENSE_BONUS = 50; // Defensive Grid: +50 defense per level
-const PERIMETER_RANGED_BLOCK = 30; // Perimeter Field: +30% block/mitigation
-const STARPORT_SORTIE_BONUS = 10; // Starport: +10% defender sortie power
+// Helper: Calculate total loot based on capacity and planet resources
+function calculateLoot(survivingUnits: FlankUnits, planetResources: { carbon: number; titanium: number; food: number }) {
+  let totalCapacity = 0;
+  for (const [u, count] of Object.entries(survivingUnits)) {
+    const caps = UNIT_STATS[u]?.capacity || 0;
+    totalCapacity += caps * count;
+  }
 
-// Tool effects (Sci-Fi equivalents)
-const BREACH_POD_GRID_REDUCTION = 0.3; // Reduces Grid/Wall effectiveness
-const PLASMA_GRENADE_FRONT_BONUS = 0.25; // Bonus on front
-const AUTO_TURRET_DEFENSE = 20; // Extra defense power
+  const available = { ...planetResources };
+  const totalAvailable = available.carbon + available.titanium + available.food;
+  const loot = { carbon: 0, titanium: 0, food: 0 };
 
-interface LaneUnits {
+  if (totalAvailable === 0 || totalCapacity === 0) return loot;
+
+  if (totalCapacity >= totalAvailable) {
+    return available;
+  }
+
+  const ratio = totalCapacity / totalAvailable;
+  loot.carbon = Math.floor(available.carbon * ratio);
+  loot.titanium = Math.floor(available.titanium * ratio);
+  loot.food = Math.floor(available.food * ratio);
+
+  return loot;
+}
+
+// Defense Building Bonuses (per level)
+const SHIELD_GENERATOR_BONUS = 50; // +50 Defense Power per level (Global or Front?) - Applies to Wall (Shield)
+const PERIMETER_FIELD_BONUS = 30;  // +30 Defense Power per level? Or %? Let's use flat power for MVP stability.
+const STARPORT_BONUS = 100;        // Starport (Gate) gives massive bonus to Center Sector.
+
+// Tool Effects (Max Reductions)
+const SHIELD_JAMMER_REDUCTION = 0.10; // Each jammer reduces Shield Bonus by 10%
+const HANGAR_BREACH_REDUCTION = 0.15; // Each charge reduces Starport Bonus by 15%
+const ECM_POD_REDUCTION = 0.05;       // Each pod reduces Ranged Defense Power by 5%
+const FIELD_NEUTRALIZER_REDUCTION = 0; // Not fully defined yet, can be moat reduction.
+
+// Interfaces
+interface FlankUnits {
   [unitType: string]: number;
 }
 
-interface LaneResult {
-  attackerPower: number;
-  defenderPower: number;
-  attackerLosses: LaneUnits;
-  defenderLosses: LaneUnits;
+interface Wave {
+  units: FlankUnits;
+  tools: Record<string, number>;
+}
+
+interface WaveResult {
+  waveIndex: number;
+  attackerUnits: FlankUnits;
+  defenderUnits: FlankUnits;
+  tools: Record<string, number>;
+  attackerLosses: FlankUnits;
+  defenderLosses: FlankUnits;
   winner: 'attacker' | 'defender';
+}
+
+interface SectorResult {
+  winner: 'attacker' | 'defender';
+  survivingAttackers: FlankUnits;
+  survivingDefenders: FlankUnits;
+  initialAttackerUnits: FlankUnits;
+  initialDefenderUnits: FlankUnits;
+  attackerToolsByWave: Record<string, number>[];
+  waveResults: WaveResult[]; // NEW: Detailed breakdown per wave
+  defenderTools: Record<string, number>;
+  attackerLosses: FlankUnits;
+  defenderLosses: FlankUnits;
+  wavesFought: number;
 }
 
 interface CombatResult {
   winner: 'attacker' | 'defender';
-  laneResults: {
-    front: LaneResult;
-    left: LaneResult;
-    right: LaneResult;
+  sectorResults: {
+    left: SectorResult;
+    center: SectorResult;
+    right: SectorResult;
   };
-  attackerTotalLosses: LaneUnits;
-  defenderTotalLosses: LaneUnits;
+  surfaceResult: {
+    winner: 'attacker' | 'defender';
+    attackerBonus: number;
+    defenderBonus: number;
+    initialAttackerUnits: FlankUnits; // NEW
+    initialDefenderUnits: FlankUnits; // NEW
+    attackerLosses: FlankUnits;
+    defenderLosses: FlankUnits;
+  } | null;
+  attackerTotalLosses: FlankUnits;
+  defenderTotalLosses: FlankUnits;
   resourcesJson: string | null;
 }
 
-/**
- * Calculate power for a lane given units and modifiers
- */
-function calculateLanePower(
-  units: LaneUnits,
-  attackBonus: number,
-  defenseBonus: number,
-  gridLevel: number,
-  perimeterLevel: number,
-  starportLevel: number,
-  isAttacker: boolean,
-  lane: 'front' | 'left' | 'right',
-  tools: { breachPod?: boolean; plasmaGrenade?: boolean; autoTurret?: boolean }
-): number {
-  let totalPower = 0;
+// Stats aggregation helper
+function getUnitStats(unitType: string) {
+  return UNIT_STATS[unitType] || { meleeAtk: 5, rangedAtk: 5, meleeDef: 5, rangedDef: 5 };
+}
 
-  // Calculate base power from units
-  for (const [unitType, count] of Object.entries(units)) {
-    const stats = UNIT_STATS[unitType] || { attack: 10, defense: 10 };
-    const basePower = isAttacker ? stats.attack : stats.defense;
-    totalPower += basePower * count;
+/**
+ * Resolve a single wave collision in a Sector
+ */
+// Export for testing
+export function resolveWaveCollision(
+  attackerUnits: FlankUnits,
+  defenderUnits: FlankUnits,
+  tools: Record<string, number>,
+  defenseBuildings: { shield: number; starport: number; perimeter: number },
+  isCenter: boolean
+): {
+  attackerWon: boolean;
+  attackerLosses: FlankUnits;
+  defenderLosses: FlankUnits;
+  remainingAttackers: FlankUnits;
+  remainingDefenders: FlankUnits;
+} {
+  // 1. Calculate Attacker Power
+  let attMelee = 0;
+  let attRanged = 0;
+
+  for (const [u, count] of Object.entries(attackerUnits)) {
+    const s = getUnitStats(u);
+    attMelee += s.meleeAtk * count;
+    attRanged += s.rangedAtk * count;
   }
 
-  // Apply admiral bonuses
-  if (isAttacker) {
-    totalPower *= 1 + attackBonus / 100;
+  // Tool Modifiers
+  // Plasma Grenades (+Ranged Dmg?)
+  if (tools.plasmaGrenade) {
+    attRanged *= (1 + (tools.plasmaGrenade * 0.05)); // 5% per grenade?
+  }
+
+  const totalAttackerPower = attMelee + attRanged;
+
+  // 2. Calculate Defender Power
+  let defMelee = 0;
+  let defRanged = 0;
+
+  for (const [u, count] of Object.entries(defenderUnits)) {
+    const s = getUnitStats(u);
+    // Defenders use stats relevant to what is hitting them?
+    // GGE Logic: Defense is composite.
+    // We calculate "Melee Defense" and "Ranged Defense" pools.
+    defMelee += s.meleeDef * count;
+    defRanged += s.rangedDef * count;
+  }
+
+  // Apply Defense Tool/Building Bonuses
+
+  // Shield Generator (Wall)
+  let shieldBonus = defenseBuildings.shield * SHIELD_GENERATOR_BONUS;
+  if (tools.shieldJammer) {
+    const reduction = Math.min(1.0, tools.shieldJammer * SHIELD_JAMMER_REDUCTION);
+    shieldBonus *= (1 - reduction);
+  }
+
+  // Starport (Gate) - Center only
+  let starportBonus = 0;
+  if (isCenter) {
+    starportBonus = defenseBuildings.starport * STARPORT_BONUS;
+    if (tools.hangarBreach) {
+      const reduction = Math.min(1.0, tools.hangarBreach * HANGAR_BREACH_REDUCTION);
+      starportBonus *= (1 - reduction);
+    }
+  }
+
+  // Auto Turrets (Add raw defense)
+  let turretBonus = (tools.autoTurret || 0) * 20; // +20 per turret
+
+  // ECM Pods (Reduce Defender Ranged Power)
+  if (tools.ecmPod) {
+    const reduction = Math.min(1.0, tools.ecmPod * ECM_POD_REDUCTION);
+    defRanged *= (1 - reduction);
+  }
+
+  // Total Defense Calculation
+  // In GGE, Melee units attack melee defense, Ranged attack ranged defense.
+  // We need the RATIO of attacker damage types.
+
+  let totalDefPower = 0;
+  if (totalAttackerPower > 0) {
+    const meleeRatio = attMelee / totalAttackerPower;
+    const rangedRatio = attRanged / totalAttackerPower;
+
+    totalDefPower = (defMelee * meleeRatio) + (defRanged * rangedRatio);
   } else {
-    totalPower *= 1 + defenseBonus / 100;
+    totalDefPower = 0.1; // Minimal logic to avoid div by 0
   }
 
-  // Apply defense modifiers (only for defender)
-  if (!isAttacker) {
-    // Grid bonus (stronger on front)
-    const gridMultiplier = lane === 'front' ? 1.0 : 0.6;
-    const effectiveGridLevel = tools.breachPod ? gridLevel * (1 - BREACH_POD_GRID_REDUCTION) : gridLevel;
-    const gridBonus = effectiveGridLevel * GRID_DEFENSE_BONUS * gridMultiplier;
+  // Add Bonuses
+  totalDefPower += shieldBonus + starportBonus + turretBonus;
 
-    totalPower += gridBonus;
+  // 3. Resolve Winner
+  const attackerWon = totalAttackerPower > totalDefPower;
 
-    // Perimeter bonus (stronger on flanks)
-    const perimeterMultiplier = lane === 'front' ? 0.5 : 1.0;
-    const perimeterBonus = perimeterLevel * PERIMETER_RANGED_BLOCK * perimeterMultiplier;
-    totalPower += perimeterBonus;
+  // 4. Calculate Casualties
+  // Loser is wiped out (or takes massive casualties). Winner takes proportional casualties.
 
-    // Starport bonus
-    if (starportLevel > 0) {
-      totalPower *= (1 + (starportLevel * STARPORT_SORTIE_BONUS) / 100);
-    }
+  const totalPower = totalAttackerPower + totalDefPower;
+  const casualtyRate = attackerWon
+    ? (totalDefPower / totalPower) // Attacker losses
+    : (totalAttackerPower / totalPower); // Defender losses
 
-    if (tools.autoTurret) {
-      totalPower += AUTO_TURRET_DEFENSE;
-    }
-  } else {
-    // Attacker modifiers
-    if (lane === 'front' && tools.plasmaGrenade) {
-      totalPower *= 1 + PLASMA_GRENADE_FRONT_BONUS;
-    }
+  // Winner usually takes less damage in GGE, but linear for now.
+  // Actually, standard GGE:
+  // If Attacker Power = 200, Defender = 100. Attacker wins.
+  // Attacker loses 100/200 = 50%? No, that's high.
+  // Let's use a "Victory Dampener".
+
+  const victoryDampener = 0.5; // Winner takes 50% of calculated stress.
+
+  const attLossRate = attackerWon ? (casualtyRate * victoryDampener) : 1.0; // Loser dies
+  const defLossRate = !attackerWon ? (casualtyRate * victoryDampener) : 1.0; // Loser dies
+
+  const attLosses: FlankUnits = {};
+  const remAtt: FlankUnits = {};
+  for (const [u, count] of Object.entries(attackerUnits)) {
+    const lost = Math.floor(count * attLossRate);
+    attLosses[u] = lost;
+    remAtt[u] = count - lost;
   }
 
-  return Math.max(0, totalPower);
-}
-
-/**
- * Calculate casualties
- */
-function calculateCasualties(
-  attackerPower: number,
-  defenderPower: number,
-  attackerUnits: LaneUnits,
-  defenderUnits: LaneUnits,
-  isAttacker: boolean
-): { attackerLosses: LaneUnits; defenderLosses: LaneUnits } {
-  const totalPower = attackerPower + defenderPower;
-  if (totalPower === 0) {
-    return { attackerLosses: {}, defenderLosses: {} };
+  const defLosses: FlankUnits = {};
+  const remDef: FlankUnits = {};
+  for (const [u, count] of Object.entries(defenderUnits)) {
+    const lost = Math.floor(count * defLossRate);
+    defLosses[u] = lost;
+    remDef[u] = count - lost;
   }
-
-  const attackerCasualtyRate = defenderPower / totalPower;
-  const defenderCasualtyRate = attackerPower / totalPower;
-
-  const winner = attackerPower > defenderPower ? 'attacker' : 'defender';
-  const attackerFinalRate = winner === 'attacker'
-    ? attackerCasualtyRate * 0.6
-    : attackerCasualtyRate;
-  const defenderFinalRate = winner === 'defender'
-    ? defenderCasualtyRate * 0.6
-    : defenderCasualtyRate;
-
-  const attackerLosses: LaneUnits = {};
-  const defenderLosses: LaneUnits = {};
-
-  for (const [unitType, count] of Object.entries(attackerUnits)) {
-    attackerLosses[unitType] = Math.floor(count * attackerFinalRate);
-  }
-
-  for (const [unitType, count] of Object.entries(defenderUnits)) {
-    defenderLosses[unitType] = Math.floor(count * defenderFinalRate);
-  }
-
-  return { attackerLosses, defenderLosses };
-}
-
-/**
- * Aggregate losses or units from multiple sources
- */
-function aggregateLosses(...sources: LaneUnits[]): LaneUnits {
-  const total: LaneUnits = {};
-  for (const source of sources) {
-    for (const [unit, count] of Object.entries(source)) {
-      total[unit] = (total[unit] || 0) + (count as number);
-    }
-  }
-  return total;
-}
-
-/**
- * Resolve combat for a single lane
- */
-function resolveLane(
-  attackerUnits: LaneUnits,
-  defenderUnits: LaneUnits,
-  attackBonus: number,
-  defenseBonus: number,
-  gridLevel: number,
-  perimeterLevel: number,
-  starportLevel: number,
-  lane: 'front' | 'left' | 'right',
-  tools: { breachPod?: boolean; plasmaGrenade?: boolean; autoTurret?: boolean }
-): LaneResult {
-  const attackerPower = calculateLanePower(
-    attackerUnits,
-    attackBonus,
-    0,
-    gridLevel,
-    perimeterLevel,
-    starportLevel,
-    true,
-    lane,
-    tools
-  );
-
-  const defenderPower = calculateLanePower(
-    defenderUnits,
-    0,
-    defenseBonus,
-    gridLevel,
-    perimeterLevel,
-    starportLevel,
-    false,
-    lane,
-    tools
-  );
-
-  const { attackerLosses, defenderLosses } = calculateCasualties(
-    attackerPower,
-    defenderPower,
-    attackerUnits,
-    defenderUnits,
-    true
-  );
-
-  const winner = attackerPower > defenderPower ? 'attacker' : 'defender';
 
   return {
-    attackerPower,
-    defenderPower,
-    attackerLosses,
-    defenderLosses,
-    winner,
+    attackerWon,
+    attackerLosses: attLosses,
+    defenderLosses: defLosses,
+    remainingAttackers: remAtt,
+    remainingDefenders: remDef,
   };
 }
 
 /**
- * Main combat resolver: processes a 3-lane battle
+ * Resolve a whole Sector (up to 4-6 waves)
  */
-export async function resolveCombat(
-  fleetId: string
-): Promise<CombatResult> {
-  // Get fleet with all related data
+export function resolveSector(
+  attackWaves: Wave[],
+  initialDefenders: FlankUnits,
+  defenseBuildings: { shield: number; starport: number; perimeter: number },
+  isCenter: boolean
+): SectorResult {
+
+  // -- Calculate Initials --
+  const initialAttackerUnits: FlankUnits = {};
+  const attackerToolsByWave: Record<string, number>[] = [];
+
+  for (const wave of attackWaves) {
+    for (const [u, c] of Object.entries(wave.units)) {
+      initialAttackerUnits[u] = (initialAttackerUnits[u] || 0) + c;
+    }
+    attackerToolsByWave.push({ ...wave.tools });
+  }
+
+  let currentDefenders = { ...initialDefenders };
+  let totalAttackerLosses: FlankUnits = {};
+  let totalDefenderLosses: FlankUnits = {};
+
+  const waveResults: WaveResult[] = [];
+
+  let winner: 'attacker' | 'defender' = 'defender';
+  let survivingAttackers: FlankUnits = {};
+  let wavesFought = 0;
+
+  for (let i = 0; i < attackWaves.length; i++) {
+    const wave = attackWaves[i];
+
+    // Snapshot state before collision
+    const defenderSnapshot = { ...currentDefenders };
+    const defCount = Object.values(currentDefenders).reduce((a, b) => a + b, 0);
+
+    // If defenders already wiped, just pass through (but log it if we want detailed "Unopposed Wave" logs)
+    if (defCount <= 0) {
+      winner = 'attacker';
+      for (const [u, c] of Object.entries(wave.units)) {
+        survivingAttackers[u] = (survivingAttackers[u] || 0) + c;
+      }
+      // We log this wave as "Unopposed"
+      waveResults.push({
+        waveIndex: i + 1,
+        attackerUnits: { ...wave.units },
+        defenderUnits: {},
+        tools: { ...wave.tools },
+        attackerLosses: {},
+        defenderLosses: {},
+        winner: 'attacker'
+      });
+      continue;
+    }
+
+    wavesFought++;
+
+    const result = resolveWaveCollision(
+      wave.units,
+      currentDefenders,
+      wave.tools,
+      defenseBuildings,
+      isCenter
+    );
+
+    // Record Wave Result
+    waveResults.push({
+      waveIndex: i + 1,
+      attackerUnits: { ...wave.units },
+      defenderUnits: defenderSnapshot, // What they faced
+      tools: { ...wave.tools },
+      attackerLosses: result.attackerLosses,
+      defenderLosses: result.defenderLosses,
+      winner: result.attackerWon ? 'attacker' : 'defender'
+    });
+
+    // Accumulate losses
+    for (const [u, c] of Object.entries(result.attackerLosses)) {
+      totalAttackerLosses[u] = (totalAttackerLosses[u] || 0) + c;
+    }
+    for (const [u, c] of Object.entries(result.defenderLosses)) {
+      totalDefenderLosses[u] = (totalDefenderLosses[u] || 0) + c;
+    }
+
+    // Update state
+    if (result.attackerWon) {
+      currentDefenders = {};
+      winner = 'attacker';
+      for (const [u, c] of Object.entries(result.remainingAttackers)) {
+        survivingAttackers[u] = (survivingAttackers[u] || 0) + c;
+      }
+    } else {
+      currentDefenders = result.remainingDefenders;
+    }
+  }
+
+  // If loop finishes and defenders still alive
+  const defCountFinal = Object.values(currentDefenders).reduce((a, b) => a + b, 0);
+  if (defCountFinal > 0) {
+    winner = 'defender';
+  }
+
+  return {
+    winner,
+    survivingAttackers,
+    survivingDefenders: currentDefenders,
+    initialAttackerUnits,
+    initialDefenderUnits: { ...initialDefenders },
+    attackerToolsByWave,
+    waveResults,
+    defenderTools: { ...defenseBuildings },
+    attackerLosses: totalAttackerLosses,
+    defenderLosses: totalDefenderLosses,
+    wavesFought
+  };
+}
+
+
+export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   const fleet = await prisma.fleet.findUnique({
     where: { id: fleetId },
     include: {
-      owner: {
-        include: { admiral: true },
-      },
-      toPlanet: {
-        include: {
-          owner: { include: { admiral: true } },
-          defenseLayout: true,
-        },
-      },
-    },
+      owner: { include: { admiral: true } },
+      toPlanet: { include: { defenseLayout: true, owner: true } }
+    }
   });
 
-  if (!fleet || fleet.type !== 'attack') {
-    throw new Error('Invalid fleet for combat resolution');
+  if (!fleet || fleet.type !== 'attack' || fleet.status !== 'arrived') {
+    throw new Error("Invalid fleet state");
   }
 
-  if (fleet.status !== 'arrived') {
-    throw new Error('Fleet has not arrived yet');
+  // 1. Parsing Inputs
+  let attStructure: { left: Wave[], front: Wave[], right: Wave[] } = { left: [], front: [], right: [] };
+
+  try {
+    const raw = JSON.parse(fleet.laneAssignmentsJson || '{}');
+    const normalize = (input: any) => {
+      if (Array.isArray(input)) return input;
+      if (input && typeof input === 'object') return [{ units: input, tools: {} }];
+      return [];
+    };
+    attStructure.left = normalize(raw.left);
+    attStructure.front = normalize(raw.front);
+    attStructure.right = normalize(raw.right);
+  } catch (e) {
+    console.error("Error parsing fleet assignments", e);
   }
 
-  // Parse lane assignments and tools
-  const laneAssignments = fleet.laneAssignmentsJson
-    ? JSON.parse(fleet.laneAssignmentsJson)
-    : { front: {}, left: {}, right: {} };
-  const tools = fleet.toolsJson ? JSON.parse(fleet.toolsJson) : {};
-
-  // Get defender's defense layout
   const defenseLayout = fleet.toPlanet.defenseLayout;
-  const frontDefense = defenseLayout
-    ? JSON.parse(defenseLayout.frontLaneJson)
-    : {};
-  const leftDefense = defenseLayout
-    ? JSON.parse(defenseLayout.leftLaneJson)
-    : {};
-  const rightDefense = defenseLayout
-    ? JSON.parse(defenseLayout.rightLaneJson)
-    : {};
+  const defLeft = defenseLayout ? JSON.parse(defenseLayout.leftLaneJson) : {};
+  const defCenter = defenseLayout ? JSON.parse(defenseLayout.frontLaneJson) : {};
+  const defRight = defenseLayout ? JSON.parse(defenseLayout.rightLaneJson) : {};
 
-  // Get admiral bonuses
-  const attackerBonus = fleet.owner.admiral?.attackBonus || 0;
-  const defenderBonus = fleet.toPlanet.owner.admiral?.defenseBonus || 0;
+  const buildings = {
+    shield: fleet.toPlanet.defensiveGridLevel,
+    starport: fleet.toPlanet.starportLevel,
+    perimeter: fleet.toPlanet.perimeterFieldLevel
+  };
 
-  // Get defense building levels
-  const gridLevel = fleet.toPlanet.defensiveGridLevel;
-  const perimeterLevel = fleet.toPlanet.perimeterFieldLevel;
-  const starportLevel = fleet.toPlanet.starportLevel;
+  // 2. Resolve Sectors
+  const leftResult = resolveSector(attStructure.left, defLeft, buildings, false);
+  const centerResult = resolveSector(attStructure.front, defCenter, buildings, true);
+  const rightResult = resolveSector(attStructure.right, defRight, buildings, false);
 
-  // Resolve each lane
-  const frontResult = resolveLane(
-    laneAssignments.front || {},
-    frontDefense,
-    attackerBonus,
-    defenderBonus,
-    gridLevel,
-    perimeterLevel,
-    starportLevel,
-    'front',
-    tools
-  );
+  // 3. Surface Invasion Logic
+  let attackerSectorsWon = 0;
+  if (leftResult.winner === 'attacker') attackerSectorsWon++;
+  if (centerResult.winner === 'attacker') attackerSectorsWon++;
+  if (rightResult.winner === 'attacker') attackerSectorsWon++;
 
-  const leftResult = resolveLane(
-    laneAssignments.left || {},
-    leftDefense,
-    attackerBonus,
-    defenderBonus,
-    gridLevel,
-    perimeterLevel,
-    starportLevel,
-    'left',
-    tools
-  );
+  let attBonus = 0;
+  let defBonus = 0;
 
-  const rightResult = resolveLane(
-    laneAssignments.right || {},
-    rightDefense,
-    attackerBonus,
-    defenderBonus,
-    gridLevel,
-    perimeterLevel,
-    starportLevel,
-    'right',
-    tools
-  );
+  if (attackerSectorsWon === 3) attBonus = 0.30;
+  else if (attackerSectorsWon === 1) defBonus = 0.30;
 
-  // --- COURTYARD PHASE ---
-  // Surviving attackers from WINNING lanes advance to the courtyard.
-  // Defenders from LOSING lanes retreat (partially or fully? GGE usually has them wiped or routed, let's assume wiped for MVP).
-  // Actually, standard GGE:
-  // - If attacker wins lane, remaining attackers flank the courtyard (bonus damage or just added power).
-  // - If defender holds lane, attackers are stopped there.
-  // - Defender has separate "Courtyard" setup, but here we'll assume unassigned troops or just survivors.
-  // For MVP: Courtyard is the final stand.
-
-  // 1. Aggregate Surviving Attackers from their WON lanes
-  const courtyardAttackers: LaneUnits = {};
-  if (frontResult.winner === 'attacker') {
-    for (const [u, count] of Object.entries(laneAssignments.front || {})) {
-      const lost = frontResult.attackerLosses[u] || 0;
-      courtyardAttackers[u] = (courtyardAttackers[u] || 0) + Math.max(0, (count as number) - lost);
+  const surfAtt: FlankUnits = {};
+  const addUnits = (target: FlankUnits, source: FlankUnits) => {
+    for (const [u, c] of Object.entries(source)) {
+      target[u] = (target[u] || 0) + c;
     }
-  }
-  if (leftResult.winner === 'attacker') {
-    for (const [u, count] of Object.entries(laneAssignments.left || {})) {
-      const lost = leftResult.attackerLosses[u] || 0;
-      courtyardAttackers[u] = (courtyardAttackers[u] || 0) + Math.max(0, (count as number) - lost);
-    }
-  }
-  if (rightResult.winner === 'attacker') {
-    for (const [u, count] of Object.entries(laneAssignments.right || {})) {
-      const lost = rightResult.attackerLosses[u] || 0;
-      courtyardAttackers[u] = (courtyardAttackers[u] || 0) + Math.max(0, (count as number) - lost);
-    }
-  }
+  };
 
-  // 2. Aggregate Defenders in Courtyard (unassigned + survivors from held lanes?)
-  // For GGE, usually defenders in lanes FIGHT TO THE DEATH.
-  // Survivors from WON defender lanes can support courtyard?
-  // Let's say yes for dynamic simple logic.
-  const courtyardDefenders: LaneUnits = {};
+  addUnits(surfAtt, leftResult.survivingAttackers);
+  addUnits(surfAtt, centerResult.survivingAttackers);
+  addUnits(surfAtt, rightResult.survivingAttackers);
 
-  if (frontResult.winner === 'defender') {
-    for (const [u, count] of Object.entries(frontDefense)) {
-      const lost = frontResult.defenderLosses[u] || 0;
-      courtyardDefenders[u] = (courtyardDefenders[u] || 0) + Math.max(0, (count as number) - lost);
-    }
-  }
-  if (leftResult.winner === 'defender') {
-    for (const [u, count] of Object.entries(leftDefense)) {
-      const lost = leftResult.defenderLosses[u] || 0;
-      courtyardDefenders[u] = (courtyardDefenders[u] || 0) + Math.max(0, (count as number) - lost);
-    }
-  }
-  if (rightResult.winner === 'defender') {
-    for (const [u, count] of Object.entries(rightDefense)) {
-      const lost = rightResult.defenderLosses[u] || 0;
-      courtyardDefenders[u] = (courtyardDefenders[u] || 0) + Math.max(0, (count as number) - lost);
-    }
-  }
-  // Also add any units NOT assigned to lanes? (Courtyard defenders)
-  // For now, we only have lane storage. Future feature: "Courtyard Slot".
+  // Courtyard Defense (Empty for now until Courtyard Units exist in DB)
+  const surfDef: FlankUnits = {};
 
-  // 3. Resolve Courtyard Battle
-  // Bonus: If attacker won Left/Right, they get a flanking power bonus against Courtyard.
-  let courtyardAttackerBonus = attackerBonus;
-  if (leftResult.winner === 'attacker') courtyardAttackerBonus += 30; // Flank bonus
-  if (rightResult.winner === 'attacker') courtyardAttackerBonus += 30;
+  let surfaceResult = null;
+  if (attackerSectorsWon > 0) {
+    // Check if attacker has units to fight with
+    const attCount = Object.values(surfAtt).reduce((a, b) => a + b, 0);
+    const defCount = Object.values(surfDef).reduce((a, b) => a + b, 0);
 
-  const courtyardResult = resolveLane(
-    courtyardAttackers,
-    courtyardDefenders,
-    courtyardAttackerBonus,
-    defenderBonus, // Keep defender bonus
-    0, // No Wall in courtyard
-    0, // No Moat
-    0, // No Starport
-    'front', // Treat as head-on
-    tools
-  );
+    let attackerWonSurface = false;
+    let attLosses: FlankUnits = {};
+    let defLosses: FlankUnits = {};
 
-  // 4. Overall Winner is determined by Courtyard
-  // If attackers breech courtyard, they win the Planet.
-  const overallWinner = courtyardResult.winner;
-
-  // 5. Aggregate TOTAL Losses (Lane Phase + Courtyard Phase)
-  // Note: Units that survived Lane Phase might have died in Courtyard.
-  // We need to track distinct deaths.
-
-  // Actually, easiest way:
-  // Total Losses = Initial Units - Final Survivors.
-  // Initial Units:
-  const initialAttackerTotal = aggregateLosses(laneAssignments.front || {}, laneAssignments.left || {}, laneAssignments.right || {});
-  const initialDefenderTotal = aggregateLosses(frontDefense, leftDefense, rightDefense);
-
-  // Final Survivors (Winners of Courtyard match)
-  // If Attacker Won Courtyard: Survivors = Courtyard Survivors.
-  // But wait, what about attackers who fought in a lane that the defender WON? They are dead.
-  // What about defenders who fought in a lane that attacker WON? They are dead.
-
-  // Let's just sum the calculated losses from the Lane Phase + Courtyard Phase.
-  // Be careful not to double count.
-  // Lane Losses are people who died in phase 1.
-  // Courtyard Losses are people who died in phase 2 (subset of survivors).
-
-  const totalAttackerLosses = aggregateLosses(
-    frontResult.attackerLosses,
-    leftResult.attackerLosses,
-    rightResult.attackerLosses
-  );
-  // Add courtyard losses
-  for (const [u, count] of Object.entries(courtyardResult.attackerLosses)) {
-    totalAttackerLosses[u] = (totalAttackerLosses[u] || 0) + count;
-  }
-
-  const totalDefenderLosses = aggregateLosses(
-    frontResult.defenderLosses,
-    leftResult.defenderLosses,
-    rightResult.defenderLosses
-  );
-  for (const [u, count] of Object.entries(courtyardResult.defenderLosses)) {
-    totalDefenderLosses[u] = (totalDefenderLosses[u] || 0) + count;
-  }
-
-  // Cap losses at initial count (safety check)
-  for (const [u, count] of Object.entries(initialAttackerTotal)) {
-    if ((totalAttackerLosses[u] || 0) > (count as number)) totalAttackerLosses[u] = (count as number);
-  }
-  for (const [u, count] of Object.entries(initialDefenderTotal)) {
-    if ((totalDefenderLosses[u] || 0) > (count as number)) totalDefenderLosses[u] = (count as number);
-  }
-
-  // --- LOOT CALCULATION ---
-  let lootedResources = null;
-  if (overallWinner === 'attacker') {
-    // Calculate capacity
-    // Marine = 0, Ranger = 0, Sentinel = 0?
-    // Need loot capacity stats. Let's assume 10 per unit for now or use cargo unit (Transporter).
-    // Standard units carry little.
-    let capacity = 0;
-    // Count survivors
-    for (const [u, initial] of Object.entries(initialAttackerTotal)) {
-      const lost = totalAttackerLosses[u] || 0;
-      const survivors = Math.max(0, (initial as number) - lost);
-      capacity += survivors * 10; // 10 Loot per unit
+    if (attCount > 0) {
+      if (defCount === 0) {
+        attackerWonSurface = true;
+      } else {
+        const finalBat = resolveWaveCollision(
+          surfAtt,
+          surfDef,
+          {},
+          { shield: 0, starport: 0, perimeter: 0 },
+          false
+        );
+        attackerWonSurface = finalBat.attackerWon;
+        attLosses = finalBat.attackerLosses;
+        defLosses = finalBat.defenderLosses;
+      }
     }
 
-    // Steal Logic
-    const planetRes = fleet.toPlanet;
-    // We need to update this via prisma later, here we just calc
-    // Simple logic: Take equal parts or prioritize?
-    // Take whatever is available up to capacity
-    const carbon = planetRes.carbon;
-    const titanium = planetRes.titanium;
-    const food = planetRes.food;
+    surfaceResult = {
+      winner: attackerWonSurface ? 'attacker' : 'defender',
+      attackerBonus: attBonus,
+      defenderBonus: defBonus,
+      initialAttackerUnits: { ...surfAtt },
+      initialDefenderUnits: { ...surfDef },
+      attackerLosses: attLosses,
+      defenderLosses: defLosses
+    } as const;
+  }
 
-    let takenC = 0, takenT = 0, takenF = 0;
+  const finalWinner = (surfaceResult && surfaceResult.winner === 'attacker') ? 'attacker' : 'defender';
 
-    // Split capacity 3 ways?
-    let remainingCap = capacity;
+  // 4. Loot & Losses Aggregation
+  const totalAttLosses: FlankUnits = {};
+  const totalDefLosses: FlankUnits = {};
+  const survivingUnitsFinal: FlankUnits = {};
 
-    // Take Food first? (GGE style: food is precious)
-    const takeF = Math.min(food, remainingCap);
-    takenF = takeF; remainingCap -= takeF;
+  const agg = (target: FlankUnits, source: FlankUnits) => {
+    for (const [u, c] of Object.entries(source)) target[u] = (target[u] || 0) + c;
+  };
 
-    const takeC = Math.min(carbon, remainingCap);
-    takenC = takeC; remainingCap -= takeC;
+  agg(totalAttLosses, leftResult.attackerLosses);
+  agg(totalAttLosses, centerResult.attackerLosses);
+  agg(totalAttLosses, rightResult.attackerLosses);
+  if (surfaceResult) agg(totalAttLosses, surfaceResult.attackerLosses);
 
-    const takeT = Math.min(titanium, remainingCap);
-    takenT = takeT; remainingCap -= takeT;
+  agg(totalDefLosses, leftResult.defenderLosses);
+  agg(totalDefLosses, centerResult.defenderLosses);
+  agg(totalDefLosses, rightResult.defenderLosses);
+  if (surfaceResult) agg(totalDefLosses, surfaceResult.defenderLosses);
 
-    lootedResources = { carbon: takenC, titanium: takenT, food: takenF };
+  // Calculate Final Survivors for Looting
+  if (finalWinner === 'attacker' && surfaceResult) {
+    for (const [u, c] of Object.entries(surfaceResult.initialAttackerUnits)) {
+      const loss = surfaceResult.attackerLosses[u] || 0;
+      survivingUnitsFinal[u] = Math.max(0, c - loss);
+    }
+  }
+
+  // Loot
+  let lootJson = null;
+  if (finalWinner === 'attacker') {
+    const rawLoot = calculateLoot(survivingUnitsFinal, {
+      carbon: fleet.toPlanet.carbon,
+      titanium: fleet.toPlanet.titanium,
+      food: fleet.toPlanet.food
+    });
+    lootJson = JSON.stringify(rawLoot);
   }
 
   return {
-    winner: overallWinner,
-    laneResults: {
-      front: frontResult,
+    winner: finalWinner,
+    sectorResults: {
       left: leftResult,
-      right: rightResult,
+      center: centerResult,
+      right: rightResult
     },
-    attackerTotalLosses: totalAttackerLosses,
-    defenderTotalLosses: totalDefenderLosses,
-    resourcesJson: lootedResources ? JSON.stringify(lootedResources) : null
+    surfaceResult,
+    attackerTotalLosses: totalAttLosses,
+    defenderTotalLosses: totalDefLosses,
+    resourcesJson: lootJson
   };
 }
-

@@ -89,9 +89,63 @@ export default function Mailbox({ onClose }: MailboxProps) {
     );
 }
 
+// Helper to render unit counts securely
+const UnitList = ({ units, colorClass }: { units: Record<string, number>, colorClass: string }) => {
+    if (!units || Object.keys(units).length === 0) return <div className="unit-entry">-</div>;
+    return (
+        <div className="unit-list">
+            {Object.entries(units).map(([u, c]) => (
+                <div key={u} className={`unit-entry ${colorClass}`}>
+                    <span className="u-name">{u}:</span> <span className="u-count">{c}</span>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+// Helper for tools
+const ToolList = ({ tools }: { tools: Record<string, number> | Record<string, number>[] }) => {
+    // If array (waves), aggregate
+    let agg: Record<string, number> = {};
+    if (Array.isArray(tools)) {
+        tools.forEach(t => {
+            Object.entries(t).forEach(([k, v]) => {
+                if (typeof v === 'number') agg[k] = (agg[k] || 0) + v;
+            });
+        });
+    } else {
+        agg = tools || {};
+    }
+
+    // Filter out 0s
+    const filtered = Object.entries(agg).filter(([_, c]) => c > 0);
+
+    if (filtered.length === 0) return null;
+    return (
+        <div className="tool-list">
+            <span className="tool-label">Tools: </span>
+            {filtered.map(([t, c]) => (
+                <div key={t} className="tool-entry" title={t}>
+                    {c} x {t}
+                </div>
+            ))}
+        </div>
+    );
+};
+
 function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
     const [report, setReport] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
+    const [viewMode, setViewMode] = useState<'overview' | 'details'>('details'); // Default to details as per user pref
+    const [expandedSectors, setExpandedSectors] = useState<string[]>([]);
+
+    const toggleSector = (laneKey: string) => {
+        setExpandedSectors(prev =>
+            prev.includes(laneKey)
+                ? prev.filter(k => k !== laneKey)
+                : [...prev, laneKey]
+        );
+    };
 
     useEffect(() => {
         api.getReport(id).then(setReport).finally(() => setLoading(false));
@@ -100,81 +154,231 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
     if (loading) return <div className="loading-detail">Decryption in progress...</div>;
     if (!report) return <div>Error loading report.</div>;
 
-    const isVictory = report.winner === (report.isAttacker ? 'attacker' : 'defender');
-    const loot = report.loot || report.resourcesStolen;
+    // Parse Lane Results (Backwards compatibility)
+    // New format: { sectors: {...}, surface: {...} }
+    // Old format: { left: ..., center: ..., right: ... }
 
-    const renderLane = (laneId: string, result: any, assignment: any) => {
-        if (!result) return <div className="lane-col empty">Empty Lane</div>;
+    // API might return 'laneResults' (parsed object) or 'laneResultsJson' (string)
+    let rawData = {};
+    if (report.laneResults && typeof report.laneResults === 'object') {
+        rawData = report.laneResults;
+    } else if (report.laneResultsJson) {
+        try {
+            rawData = JSON.parse(report.laneResultsJson);
+        } catch (e) {
+            console.error("Failed to parse laneResultsJson", e);
+        }
+    }
 
-        return (
-            <div className={`lane-col ${result.winner === 'attacker' ? 'attacker-win' : 'defender-win'}`}>
-                <h4>{laneId.toUpperCase()}</h4>
-                <div className="lane-result">
-                    Winner: {result.winner.toUpperCase()}
-                </div>
-                {/* Detailed unit breakdown could go here */}
-            </div>
-        );
+    const sectors = (rawData as any).sectors || rawData;
+    const surfaceResult = (rawData as any).surface || null;
+
+    // Helper to get sector by name, handling 'center' vs 'front'
+    const getSector = (key: string) => {
+        if (sectors[key]) return sectors[key];
+        if (key === 'center' && sectors['front']) return sectors['front'];
+        return null;
     };
+
+    // Derived Stats
+    const totalAttackerSent = Object.values(getSector('left')?.initialAttackerUnits || {}).reduce((a: number, b: any) => a + b, 0) +
+        Object.values(getSector('center')?.initialAttackerUnits || {}).reduce((a: number, b: any) => a + b, 0) +
+        Object.values(getSector('right')?.initialAttackerUnits || {}).reduce((a: number, b: any) => a + b, 0);
+    // Note: This is an approximation if we don't have totalSent in DB, but we added initials to SectorResult
 
     return (
         <div className="battle-report-detail">
-            <button className="back-btn" onClick={onBack}>← Back</button>
-
-            <div className={`report-header ${isVictory ? 'victory' : 'defeat'}`}>
-                <h3>{isVictory ? 'VICTORY' : 'DEFEAT'}</h3>
-                <div>{report.isAttacker ? 'Attacker' : 'Defender'}</div>
+            <div className="br-nav">
+                <button className="back-btn" onClick={onBack}>← Back</button>
+                <div className="br-tabs">
+                    <button className={viewMode === 'overview' ? 'active' : ''} onClick={() => setViewMode('overview')}>Overview</button>
+                    <button className={viewMode === 'details' ? 'active' : ''} onClick={() => setViewMode('details')}>Details</button>
+                </div>
             </div>
 
-            {loot && (
-                <div className="loot-section">
-                    <h4>Resources Plundered</h4>
-                    <div className="loot-grid">
-                        <div className="loot-item carbon">
-                            <span className="icon">C</span> {loot.carbon}
-                        </div>
-                        <div className="loot-item titanium">
-                            <span className="icon">Ti</span> {loot.titanium}
-                        </div>
-                        <div className="loot-item food">
-                            <span className="icon">F</span> {loot.food}
+            {/* Determine Victory relative to Viewer */}
+            {(() => {
+                const iAmAttacker = report.isAttacker !== undefined ? report.isAttacker : (report.attackerId === 1); // Fallback or assuming ID context? 
+                // Better: If isAttacker is missing, we can't be sure without user context.
+                // But previous code used report.isAttacker. I will assume API provides it.
+
+                // If API doesn't provide it, we have a problem.
+                // Assuming it does:
+                const iWon = (report.winner === 'attacker') === (report.isAttacker);
+                const resultText = iWon ? 'VICTORY' : 'DEFEAT';
+                const resultClass = iWon ? 'victory' : 'defeat';
+
+                return (
+                    <div className={`report-header ${resultClass}`}>
+                        <h3>{resultText}</h3>
+                        <div className="sub-status">{report.winner.toUpperCase()} PREVAILED</div>
+                    </div>
+                );
+            })()}
+
+            {viewMode === 'overview' && (
+                <div className="br-overview">
+                    <div className="loot-section">
+                        <h4>Resources Plundered</h4>
+                        {report.resourcesJson ? (
+                            <div className="loot-grid">
+                                {Object.entries(JSON.parse(report.resourcesJson)).map(([res, amount]) => (
+                                    <div key={res} className={`loot-item ${res}`}>
+                                        <span className="res-icon">📦</span>
+                                        <span className="res-amount">{amount as number}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : <div className="no-loot">No resources plundered.</div>}
+                    </div>
+
+                    <div className="total-casualties-section">
+                        <h4>Total Casualties</h4>
+                        <div className="casualties-grid">
+                            <div className="cas-col">
+                                <h5>My Losses</h5>
+                                <UnitList units={report.myLosses} colorClass="red" />
+                            </div>
+                            <div className="cas-col">
+                                <h5>Enemy Losses</h5>
+                                <UnitList units={report.enemyLosses} colorClass="green" />
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="combat-lanes">
-                <div className="lanes-container">
-                    {/* Visual representation of 3 lanes */}
-                    {renderLane('Left', report.laneResults.left, {})}
-                    {renderLane('Front', report.laneResults.front, {})}
-                    {renderLane('Right', report.laneResults.right, {})}
-                </div>
-            </div>
+            {viewMode === 'details' && (
+                <div className="br-details-flow">
+                    <div className="flanks-row">
+                        {['left', 'center', 'right'].map(laneKey => {
+                            const result = getSector(laneKey);
+                            const label = laneKey === 'left' ? 'Industrial' : laneKey === 'center' ? 'Starport' : 'Military';
 
-            <div className="casualties-section">
-                <h4>Casualties</h4>
-                <div className="casualties-grid">
-                    <div className="cas-col">
-                        <h5>My Force</h5>
-                        {Object.entries(report.myLosses).map(([u, count]: any) => (
-                            <div key={u} className="cas-row red">
-                                <span>{u}</span>
-                                <span>-{count}</span>
-                            </div>
-                        ))}
+                            if (!result) return <div key={laneKey} className="flank-col empty">Empty</div>;
+
+                            const attWon = result.winner === 'attacker';
+                            const wasUnopposed = result.wavesFought === 0 && Object.keys(result.initialAttackerUnits || {}).length > 0;
+                            const isExpanded = expandedSectors.includes(laneKey);
+
+                            return (
+                                <div key={laneKey} className="flank-col">
+                                    <div className={`flank-header ${attWon ? 'att-win' : 'def-win'}`}>
+                                        {label}
+                                    </div>
+
+                                    {/* Attacker Stats */}
+                                    <div className="flank-side attacker">
+                                        <div className="fs-title">Attacker</div>
+                                        <div className="fs-content">
+                                            <UnitList units={result.initialAttackerUnits} colorClass="neutral" />
+                                            <ToolList tools={result.attackerToolsByWave} />
+                                            <div className="losses">
+                                                {wasUnopposed ? (
+                                                    <span className="unopposed">Unopposed</span>
+                                                ) : (
+                                                    <>Lost: <UnitList units={result.attackerLosses} colorClass="red" /></>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Wave Toggle (Central Action) */}
+                                    {result.waveResults && result.waveResults.length > 0 ? (
+                                        <div className="lane-action">
+                                            <button
+                                                className={`wave-toggle-btn ${isExpanded ? 'active' : ''}`}
+                                                onClick={() => toggleSector(laneKey)}
+                                            >
+                                                {isExpanded ? 'Hide Waves' : `View ${result.waveResults.length} Waves`}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="vs-divider">VS</div>
+                                    )}
+
+                                    {/* Defender Stats */}
+                                    <div className="flank-side defender">
+                                        <div className="fs-title">Defender</div>
+                                        <div className="fs-content">
+                                            <UnitList units={result.initialDefenderUnits} colorClass="neutral" />
+                                            <ToolList tools={result.defenderTools} />
+                                            <div className="losses">
+                                                {wasUnopposed ? (
+                                                    <span className="unopposed">No Resistance</span>
+                                                ) : (
+                                                    <>Lost: <UnitList units={result.defenderLosses} colorClass="red" /></>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Wave Details Overlay / Expansion */}
+                                    {isExpanded && result.waveResults && (
+                                        <div className="mail-wave-breakdown">
+                                            {result.waveResults.map((wave: any, idx: number) => (
+                                                <div key={idx} className="mail-wave-row">
+                                                    <div className="mail-wave-header">
+                                                        <span>Wave {wave.waveIndex}</span>
+                                                    </div>
+                                                    <div className="mail-wave-body">
+                                                        <div className="mail-wave-part att">
+                                                            <div className="wp-label">Sent:</div>
+                                                            <UnitList units={wave.attackerUnits} />
+                                                            <ToolList tools={wave.tools} />
+                                                            <div className="wp-loss">Lost: <UnitList units={wave.attackerLosses} colorClass="red" /></div>
+                                                        </div>
+                                                        <div className="mail-wave-vs">vs</div>
+                                                        <div className="mail-wave-part def">
+                                                            <div className="wp-label">Def:</div>
+                                                            <UnitList units={wave.defenderUnits} />
+                                                            <div className="wp-loss">Lost: <UnitList units={wave.defenderLosses} colorClass="red" /></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Outcome Arrow */}
+                                    <div className={`outcome-arrow ${attWon ? 'breach' : 'blocked'}`}>
+                                        {attWon ? '⬇ BREACH ⬇' : '❌ BLOCKED'}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
-                    <div className="cas-col">
-                        <h5>Enemy Force</h5>
-                        {Object.entries(report.enemyLosses).map(([u, count]: any) => (
-                            <div key={u} className="cas-row green">
-                                <span>{u}</span>
-                                <span>-{count}</span>
+
+                    {/* Courtyard / Surface */}
+                    <div className="courtyard-section">
+                        <h4>Surface Invasion (Courtyard)</h4>
+                        {surfaceResult ? (
+                            <div className="courtyard-content">
+                                <div className="cy-side">
+                                    <h5>Attacker Force</h5>
+                                    {/* We don't have exact initial breakdown of courtyard stored in report root, but `surfaceResult` implies survivors */}
+                                    {/* For now show losses */}
+                                    <div>Deployed: <UnitList units={surfaceResult.initialAttackerUnits} colorClass="neutral" /></div>
+                                    <div>Bonus: +{(surfaceResult.attackerBonus * 100).toFixed(0)}%</div>
+                                    <div className="losses">Lost: <UnitList units={surfaceResult.attackerLosses} colorClass="red" /></div>
+                                </div>
+                                <div className="cy-vs">VS</div>
+                                <div className="cy-side">
+                                    <h5>Defender Force</h5>
+                                    <div>Deployed: <UnitList units={surfaceResult.initialDefenderUnits} colorClass="neutral" /></div>
+                                    <div>Bonus: +{(surfaceResult.defenderBonus * 100).toFixed(0)}%</div>
+                                    <div className="losses">Lost: <UnitList units={surfaceResult.defenderLosses} colorClass="red" /></div>
+                                </div>
                             </div>
-                        ))}
+                        ) : (
+                            <div className="cy-skipped">No Surface Combat</div>
+                        )}
+                        <div className={`cy-result ${surfaceResult?.winner === 'attacker' ? 'att-win' : 'def-win'}`}>
+                            {surfaceResult ? `Winner: ${surfaceResult.winner.toUpperCase()}` : 'Defense Prevailed'}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }

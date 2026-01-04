@@ -125,9 +125,9 @@ async function processArrivedFleets() {
               }
             };
 
-            applyLaneLosses(front, combatResult.laneResults.front.defenderLosses);
-            applyLaneLosses(left, combatResult.laneResults.left.defenderLosses);
-            applyLaneLosses(right, combatResult.laneResults.right.defenderLosses);
+            applyLaneLosses(front, combatResult.sectorResults.center.defenderLosses);
+            applyLaneLosses(left, combatResult.sectorResults.left.defenderLosses);
+            applyLaneLosses(right, combatResult.sectorResults.right.defenderLosses);
 
             // What about Courtyard losses?
             // If we implement Courtney logic fully, we'd deduct here too. 
@@ -170,7 +170,10 @@ async function processArrivedFleets() {
               attackerPlanetId: fleet.fromPlanetId,
               defenderPlanetId: fleet.toPlanetId,
               winner: combatResult.winner,
-              laneResultsJson: JSON.stringify(combatResult.laneResults),
+              laneResultsJson: JSON.stringify({
+                sectors: combatResult.sectorResults,
+                surface: combatResult.surfaceResult
+              }), // Storing extended result
               attackerTotalLossesJson: JSON.stringify(combatResult.attackerTotalLosses),
               defenderTotalLossesJson: JSON.stringify(combatResult.defenderTotalLosses),
               resourcesJson: resourcesJson

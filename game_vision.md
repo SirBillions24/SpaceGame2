@@ -26,7 +26,7 @@ Gold	Credits	Currency for recruiting units and research.
 Rubies	Dark Matter	Premium currency for speed-ups and cosmetics.
 Public Order	Stability	Percentage modifier to resource production. High Stability = High Productivity.
 3. The Combat System (The "3-Lane" Model)
-Combat remains the heart of the game. It occurs in Waves across 3 Lanes (Left Flank, Center, Right Flank).
+Combat remains the heart of the game. It occurs in Waves across 3 Defensive Sectors: Industrial District (Left), Starport Access (Center), and Military District (Right).
 
 A. The Setup (Space & Orbit)
 Instead of "Walls" and "Moats", we use "Shields" and "Defense Grids".
@@ -45,22 +45,28 @@ Anti-Cav	Pikeman	Sentinel	Heavy exo-suit/mech. High defense, counters rapid unit
 Fast/Cav	Knight	Interceptor	Fast atmospheric fighter. High impact.
 Combat Logic:
 
-Fleet Engagement (The Walls):
+Orbital Engagement (The Sectors):
 Attacking Interceptors try to break through the Shields.
 Defending Rangers fire from behind the shields.
 Sentinels block the breach points.
 Surface Invasion (The Courtyard):
-If the attacker wins a flank (breaks the shields), their surviving units land on the surface.
-The "Courtyard Battle" is a chaotic ground war between the landing force and the colony's garrison.
-Bonus: If attackers win 2+ flanks (Left/Right/Center), they flank the defenders in the Courtyard (+30% Combat Strength).
+If the attacker wins a Sector (breaches the shields), their surviving units land on the surface.
+The "Surface Invasion" (Courtyard Battle) is the final phase.
+Logic:
+- If Attacker wins 0 Sectors: Defender wins.
+- If Attacker wins 1 Sector: Defender gets +30% Combat Power bonus in Surface Invasion.
+- If Attacker wins 2 Sectors: No bonus.
+- If Attacker wins 3 Sectors: Attacker gets +30% Combat Power bonus in Surface Invasion.
 C. Tools (Siege & Defense)
 Tools are consumable items used in battle.
 
-Ladder -> Breach Pod: Negates Wall (Shield) protection.
-Battering Ram -> EMP Charge: Negates Gate (Starport) protection.
-Mantlet -> Deflector Screen: Protects attacking units from ranged fire.
-Flaming Arrows -> Plasma Grenades: Bonus damage to defenders.
-Tar Pot -> Auto-Turret: Bonus damage to attackers.
+Ladder -> Shield Jammer: Reduces Shield Generator (Wall) defense bonus.
+Battering Ram -> Hangar Breach: Reduces Starport (Gate) defense bonus.
+Mantlet -> ECM Pod: Reduces Defender's Ranged strength (protects attackers from fire).
+Fascine/Bridge -> Field Neutralizer: Reduces Perimeter Field (Moat) effectiveness.
+Flaming Arrows -> Plasma Grenades: Increases Ranged unit damage.
+Stones/Rocks -> Auto-Turret: Increases Wall defense power.
+Bulwarks -> Reinforced Bunker: Increases protection for defenders.
 4. Visual Style Guide
 Color Palette
 Background: Deep Space Blue/Black (#0a0b1e).
