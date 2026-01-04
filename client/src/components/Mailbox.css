@@ -1,0 +1,232 @@
+.mailbox-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.mailbox-window {
+    width: 600px;
+    height: 80vh;
+    background: #0f1218;
+    border: 1px solid #3366ff;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 30px rgba(51, 102, 255, 0.2);
+}
+
+.mailbox-header {
+    padding: 15px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(90deg, #1a1f2e, #0f1218);
+}
+
+.mailbox-header h2 {
+    margin: 0;
+    color: #3366ff;
+    text-shadow: 0 0 5px #3366ff;
+    font-size: 1.2rem;
+}
+
+.mailbox-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+.report-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.report-item {
+    display: flex;
+    align-items: center;
+    background: #1e2330;
+    padding: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-left: 4px solid transparent;
+}
+
+.report-item.won {
+    border-left-color: #00cc66;
+}
+
+.report-item.lost {
+    border-left-color: #ff3333;
+}
+
+.report-item:hover {
+    background: #2a3042;
+}
+
+.report-icon {
+    font-size: 1.5rem;
+    margin-right: 15px;
+}
+
+.report-summary {
+    flex: 1;
+}
+
+.report-title {
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+.report-date {
+    font-size: 0.8rem;
+    color: #888;
+}
+
+.report-status {
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.report-status.win {
+    color: #00cc66;
+}
+
+.report-status.loss {
+    color: #ff3333;
+}
+
+/* Detail View */
+.battle-report-detail {
+    padding: 15px;
+}
+
+.back-btn {
+    background: none;
+    border: 1px solid #444;
+    color: #aaa;
+    padding: 5px 10px;
+    cursor: pointer;
+    margin-bottom: 15px;
+}
+
+.report-header {
+    text-align: center;
+    padding: 20px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #333;
+}
+
+.report-header.victory {
+    border-color: #00cc66;
+    color: #00cc66;
+}
+
+.report-header.defeat {
+    border-color: #ff3333;
+    color: #ff3333;
+}
+
+.report-header h3 {
+    margin: 0 0 5px 0;
+    font-size: 1.5rem;
+}
+
+.combat-lanes {
+    margin: 20px 0;
+}
+
+.lanes-container {
+    display: flex;
+    gap: 10px;
+}
+
+.lane-col {
+    flex: 1;
+    background: #141820;
+    border: 1px solid #333;
+    padding: 10px;
+    text-align: center;
+    border-radius: 4px;
+}
+
+.lane-col.attacker-win {
+    border-color: #00cc66;
+    box-shadow: inset 0 0 10px rgba(0, 204, 102, 0.1);
+}
+
+.lane-col.defender-win {
+    border-color: #ff3333;
+    box-shadow: inset 0 0 10px rgba(255, 51, 51, 0.1);
+}
+
+.loot-section {
+    background: #1a1e26;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.loot-grid {
+    display: flex;
+    gap: 20px;
+}
+
+.loot-item {
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.loot-item .icon {
+    font-weight: bold;
+    opacity: 0.7;
+}
+
+.loot-item.carbon {
+    color: #a3a3a3;
+}
+
+.loot-item.titanium {
+    color: #8a2be2;
+}
+
+.loot-item.food {
+    color: #32cd32;
+}
+
+.casualties-grid {
+    display: flex;
+    gap: 20px;
+}
+
+.cas-col {
+    flex: 1;
+}
+
+.cas-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid #333;
+}
+
+.cas-row.red span:last-child {
+    color: #ff3333;
+}
+
+.cas-row.green span:last-child {
+    color: #00cc66;
+}

@@ -1,0 +1,273 @@
+.global-hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(to bottom, #2d2d2d, #1a1a1a);
+    border-bottom: 2px solid #5d4037;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    z-index: 4000;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    /* Let clicks pass through empty spaces if needed, but we have interactive elements */
+}
+
+.global-hud>* {
+    pointer-events: auto;
+}
+
+/* Profile */
+.hud-profile-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 250px;
+}
+
+.level-badge {
+    width: 40px;
+    height: 40px;
+    background: #d32f2f;
+    border: 2px solid #ffc107;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.2rem;
+    color: white;
+    box-shadow: 0 0 5px #000;
+}
+
+.profile-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.username {
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 1px 2px black;
+}
+
+.xp-bar-container {
+    height: 8px;
+    background: #333;
+    border: 1px solid #555;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.xp-bar {
+    height: 100%;
+    background: #00bcd4;
+}
+
+/* Top Center Resources */
+.hud-resources-bar {
+    display: flex;
+    gap: 30px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 5px 20px;
+    border-radius: 20px;
+    border: 1px solid #444;
+}
+
+.res-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: white;
+    font-weight: bold;
+    font-family: monospace;
+    font-size: 1.1rem;
+}
+
+.res-icon {
+    width: 20px;
+    height: 20px;
+    background: #ccc;
+    border-radius: 50%;
+}
+
+.carbon-icon {
+    background: #5d4037;
+    box-shadow: 0 0 5px #5d4037;
+}
+
+.titanium-icon {
+    background: #90a4ae;
+    box-shadow: 0 0 5px #90a4ae;
+}
+
+.food-icon {
+    background: #81c784;
+    box-shadow: 0 0 5px #81c784;
+}
+
+/* Currencies */
+.hud-currencies {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.currency-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #212121;
+    border: 1px solid #424242;
+    padding: 4px 12px;
+    border-radius: 15px;
+    color: #fb8c00;
+    /* Gold/Credits color */
+    font-weight: bold;
+}
+
+.currency-pill.premium {
+    color: #ff4081;
+    /* Ruby color */
+}
+
+.hud-icon-btn {
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 5px;
+    border-radius: 50%;
+    transition: background 0.2s;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.hud-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.mail-icon {
+    margin-left: 10px;
+}
+
+.icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 16px;
+    font-size: 10px;
+    color: black;
+    font-weight: bold;
+}
+
+.military-icon {
+    background: #d32f2f;
+    box-shadow: 0 0 5px #d32f2f;
+}
+
+.military-group {
+    position: relative;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.military-group:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.military-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #222;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 10px;
+    width: 180px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.8);
+    z-index: 5000;
+    margin-top: 10px;
+}
+
+/* Pseudo-element to bridge gap for hover */
+.military-dropdown::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: 0;
+    right: 0;
+    height: 10px;
+}
+
+.military-group:hover .military-dropdown {
+    display: block;
+}
+
+.military-dropdown h5 {
+    margin: 0 0 8px 0;
+    border-bottom: 1px solid #444;
+    padding-bottom: 4px;
+    color: #d32f2f;
+    text-align: center;
+}
+
+.military-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    padding: 2px 0;
+    color: #ddd;
+}
+
+.unit-name {
+    text-transform: capitalize;
+}
+
+.unit-count {
+    font-weight: bold;
+    color: white;
+}
+
+.coin-icon {
+    background: #fb8c00;
+}
+
+.ruby-icon {
+    background: #ff4081;
+}
+
+.hud-public-order {
+    position: absolute;
+    top: 60px;
+    /* Below the bar */
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.6);
+    padding: 2px 10px;
+    border-radius: 0 0 8px 8px;
+    font-size: 0.8rem;
+    color: #a5d6a7;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.order-indicator {
+    width: 100%;
+    height: 2px;
+    background: #4caf50;
+    margin-top: 2px;
+    box-shadow: 0 0 5px #4caf50;
+}

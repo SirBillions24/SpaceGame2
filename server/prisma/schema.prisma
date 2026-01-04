@@ -1,0 +1,203 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  planets Planet[]
+  fleets  Fleet[]
+  admiral Admiral?
+
+  @@map("users")
+}
+
+// Formerly Castle
+model Planet {
+  id          String   @id @default(uuid())
+  ownerId     String   @map("owner_user_id")
+  x           Int
+  y           Int
+  name        String
+  
+  // Economy & Resources
+  carbon      Int      @default(500) // Basic building material
+  titanium    Int      @default(500) // Advanced material
+  food        Int      @default(500) // Nutrient Paste (Upkeep)
+  credits     Int      @default(100)
+  stability   Int      @default(100) // Public Order (0-200+, 100 is neutral)
+  population  Int      @default(100)
+  
+  // NPC / PVE
+  isNpc       Boolean  @default(false) @map("is_npc")
+  npcLevel    Int      @default(0)     @map("npc_level")
+
+  // Economy State (Lazy Evaluation)
+  lastResourceUpdate        DateTime @default(now()) @map("last_resource_update")
+  
+  // Grid System
+  gridSize        Int       @default(10) @map("grid_size") // 10x10 starting grid
+  buildings       Building[]
+
+  // Construction Queue (Global/Sequential for now, or per building)
+  // For GGE style, usually one construction slot per base.
+  // We keep this to track which building is being upgraded if we enforce single slot.
+  isBuilding      Boolean   @default(false) @map("is_building")
+  // We might store the ID of the building being constructed here
+  activeBuildId   String?   @map("active_build_id") 
+  buildFinishTime DateTime? @map("build_finish_time")
+
+  // Recruitment (Military)
+  // Academy level is now determined by the building level
+  recruitmentQueue  String? @map("recruitment_queue") // JSON: [{ unit, count, finishTime }]
+
+  // Defense (Sci-Fi equivalents)
+  // These also become buildings or stay as "Global Defense"? 
+  // GGE has walls/gates as specific slots. For MVP grid, let's keep them as "Buildings" too?
+  // Or Keep them abstract for now to reduce complexity.
+  // The User said "copy gameplay exactly... plot of land... fit buildings".
+  // So defenses should likely be buildings or special slots.
+  // Let's keep them as abstract levels for THIS iteration to focus on the Grid Economy first.
+  defensiveGridLevel  Int      @default(0) @map("defensive_grid_level") 
+  perimeterFieldLevel Int      @default(0) @map("perimeter_field_level")
+  starportLevel       Int      @default(0) @map("starport_level")
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  units         PlanetUnit[]
+  fleetsFrom    Fleet[]        @relation("FromPlanet")
+  fleetsTo      Fleet[]        @relation("ToPlanet")
+  defenseLayout DefenseLayout?
+
+  @@unique([x, y])
+  @@map("planets")
+}
+
+// Formerly CastleUnit
+model PlanetUnit {
+  id        String   @id @default(uuid())
+  planetId  String   @map("planet_id")
+  unitType  String   @map("unit_type") // e.g., "marine", "ranger", "sentinel"
+  count     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  planet Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
+
+  @@unique([planetId, unitType])
+  @@map("planet_units")
+}
+
+// Defense layout: how troops are assigned to 3 lanes + Courtyard (Surface)
+model DefenseLayout {
+  id            String   @id @default(uuid())
+  planetId      String   @unique @map("planet_id")
+  // Lane assignments: JSON { "front": { "marine": 50, "ranger": 30 }, "left": {...}, "right": {...} }
+  frontLaneJson String   @map("front_lane_json")
+  leftLaneJson  String   @map("left_lane_json")
+  rightLaneJson String   @map("right_lane_json")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  planet Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
+
+  @@map("defense_layouts")
+}
+
+// Admiral system: provides combat bonuses (The Commander)
+model Admiral {
+  id           String   @id @default(uuid())
+  userId       String   @unique @map("user_id")
+  // Gear (JSON): { "helmet": { "rarity": "rare", "attackBonus": 5 }, ... }
+  gearJson     String   @default("{}") @map("gear_json")
+  // Computed bonuses (cached)
+  attackBonus  Int      @default(0) @map("attack_bonus") // Percentage
+  defenseBonus Int      @default(0) @map("defense_bonus") // Percentage
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admirals")
+}
+
+// Battle reports: results of combat
+model BattleReport {
+  id                      String   @id @default(uuid())
+  fleetId                 String   @unique @map("fleet_id")
+  attackerId              String   @map("attacker_user_id")
+  defenderId              String   @map("defender_user_id")
+  attackerPlanetId        String   @map("attacker_planet_id")
+  defenderPlanetId        String   @map("defender_planet_id")
+  // Battle outcome
+  winner                  String // "attacker" or "defender"
+  // Lane results: JSON { "front": { "attackerLosses": {...}, "defenderLosses": {...}, "winner": "attacker" }, ... }
+  laneResultsJson         String   @map("lane_results_json")
+  // Summary
+  attackerTotalLossesJson String   @map("attacker_total_losses_json")
+  defenderTotalLossesJson String   @map("defender_total_losses_json")
+  // Resources gained/lost
+  resourcesJson           String?  @map("resources_json") // { "carbon": 100, "titanium": 50 }
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  fleet Fleet @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+
+  @@map("battle_reports")
+}
+
+// Formerly March
+model Fleet {
+  id                  String   @id @default(uuid())
+  ownerId             String   @map("owner_user_id")
+  fromPlanetId        String   @map("from_planet_id")
+  toPlanetId          String   @map("to_planet_id")
+  type                String // "attack", "support", "scout", "trade"
+  unitsJson           String   @map("units_json") // JSON: { "marine": 50, "ranger": 30 }
+  // Lane assignments for attacks (3 lanes: front, left, right)
+  laneAssignmentsJson String?  @map("lane_assignments_json") // JSON: { "front": {...}, "left": {...}, "right": {...} }
+  // Tools/equipment (Breach Pods = Scaling Ladders, etc.)
+  toolsJson           String?  @map("tools_json")
+  // Loot carried by the fleet
+  cargoJson           String?  @map("cargo_json") 
+  departAt            DateTime @default(now()) @map("depart_at")
+  arriveAt            DateTime @map("arrive_at")
+  status              String   @default("enroute") // "enroute", "arrived", "returning", "completed", "resolved"
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  fromPlanet   Planet        @relation("FromPlanet", fields: [fromPlanetId], references: [id])
+  toPlanet     Planet        @relation("ToPlanet", fields: [toPlanetId], references: [id])
+  battleReport BattleReport?
+
+  @@map("fleets")
+}
+
+model Building {
+  id          String   @id @default(uuid())
+  planetId    String   @map("planet_id")
+  type        String   // "carbon_processor", "titanium_extractor", "hydroponics", "colony_hub", "academy"
+  x           Int
+  y           Int
+  level       Int      @default(1)
+  status      String   @default("active") // "active", "constructing", "busted"?
+  
+  planet      Planet   @relation(fields: [planetId], references: [id], onDelete: Cascade)
+
+  @@map("buildings")
+}

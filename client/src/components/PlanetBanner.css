@@ -1,0 +1,140 @@
+.planet-banner {
+  z-index: 99999 !important;
+  pointer-events: all;
+  user-select: none;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+}
+
+.banner-content {
+  position: relative;
+  /* Sci-Fi Panel Style */
+  background: rgba(11, 22, 34, 0.9);
+  /* Dark blue semi-transparent */
+  border: 1px solid #00f3ff;
+  /* Cyan border */
+  box-shadow: 0 0 10px rgba(0, 243, 255, 0.2), inset 0 0 20px rgba(0, 243, 255, 0.1);
+  border-radius: 4px;
+  /* Slight rounded corners */
+
+  min-width: 200px;
+  /* Smaller base width */
+  width: auto;
+  /* Expand as needed */
+  max-width: 400px;
+
+  padding: 10px 30px;
+  /* Reduced vertical padding, ample horizontal side padding */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Optional: Decorative corners or lines could be added with pseudo-elements if desired, 
+   but keeping it clean for now as requested "dynamic way". */
+
+.banner-title {
+  color: #00f3ff;
+  /* Cyan text for Sci-Fi look */
+  font-weight: bold;
+  font-size: 18px;
+  text-align: center;
+  text-shadow: 0 0 5px rgba(0, 243, 255, 0.5);
+  /* Glowing text */
+  white-space: nowrap;
+  /* Keep name on one line if possible */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Handle extremely long names */
+  max-width: 350px;
+  margin: 0;
+  transform: none;
+  font-family: 'Courier New', Courier, monospace;
+  /* Tech font */
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.banner-buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 5px;
+  /* Spacing below the scroll */
+  pointer-events: auto;
+}
+
+.banner-button {
+  background: rgba(0, 243, 255, 0.2);
+  border: 1px solid #00f3ff;
+  color: #00f3ff;
+  cursor: pointer;
+  padding: 8px 12px;
+  transition: transform 0.2s, background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 12px;
+  box-shadow: 0 0 5px rgba(0, 243, 255, 0.3);
+}
+
+.banner-button:hover {
+  transform: scale(1.05);
+  background: rgba(0, 243, 255, 0.4);
+}
+
+.banner-button:active {
+  transform: scale(0.95);
+}
+
+.button-icon {
+  width: 40px;
+  height: 40px;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  display: block;
+}
+
+.enter-planet-btn {
+  /* Additional styling for enter planet button if needed */
+}
+
+.banner-close {
+  position: absolute;
+  top: -15px;
+  /* Float above the top edge */
+  right: -25px;
+  /* Float to the right of the box */
+  background: rgba(0, 0, 0, 0.5);
+  /* Slight backing to read against stars */
+  border: 1px solid #00f3ff;
+  border-radius: 50%;
+  /* Circle */
+  color: #00f3ff;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  line-height: 22px;
+  /* Center 'x' vertically */
+  text-align: center;
+  transition: all 0.2s;
+  box-shadow: 0 0 5px rgba(0, 243, 255, 0.3);
+}
+
+.banner-close:hover {
+  background: #00f3ff;
+  color: #000;
+  box-shadow: 0 0 10px #00f3ff;
+}

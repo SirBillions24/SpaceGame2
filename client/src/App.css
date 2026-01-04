@@ -1,0 +1,76 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  overflow: hidden;
+}
+
+.app {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+/* Ensure banner appears above canvas */
+canvas {
+  position: relative;
+  z-index: 1;
+}
+
+.castle-info-panel {
+  position: absolute;
+  top: 80px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  min-width: 250px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+}
+
+.castle-info-panel h3 {
+  margin-bottom: 10px;
+  color: #ff6b6b;
+}
+
+.castle-info-panel p {
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.castle-info-panel button {
+  margin-top: 15px;
+  padding: 8px 16px;
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.castle-info-panel button:hover {
+  background: #ff8787;
+}
+
+.error-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: #2c3e50;
+  color: white;
+  padding: 20px;
+  text-align: center;
+}
+
+.error-message p {
+  margin: 10px 0;
+  font-size: 16px;
+}
