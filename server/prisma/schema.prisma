@@ -18,6 +18,10 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  // Progression
+  xp           Int      @default(0)
+  level        Int      @default(1)
+
   planets Planet[]
   fleets  Fleet[]
   admiral Admiral?
@@ -47,7 +51,11 @@ model Planet {
 
   // Economy State (Lazy Evaluation)
   lastResourceUpdate        DateTime @default(now()) @map("last_resource_update")
+  lastFoodConsumption       DateTime @default(now()) @map("last_food_consumption")
   
+  // Agents & Special Units
+  spyCount        Int       @default(0) @map("spy_count")
+
   // Grid System
   gridSize        Int       @default(10) @map("grid_size") // 10x10 starting grid
   buildings       Building[]
@@ -63,6 +71,7 @@ model Planet {
   // Recruitment (Military)
   // Academy level is now determined by the building level
   recruitmentQueue  String? @map("recruitment_queue") // JSON: [{ unit, count, finishTime }]
+  manufacturingQueue String? @map("manufacturing_queue") // JSON: [{ tool, count, finishTime }]
 
   // Defense (Sci-Fi equivalents)
   // These also become buildings or stay as "Global Defense"? 
@@ -80,6 +89,7 @@ model Planet {
 
   owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   units         PlanetUnit[]
+  tools         ToolInventory[]
   fleetsFrom    Fleet[]        @relation("FromPlanet")
   fleetsTo      Fleet[]        @relation("ToPlanet")
   defenseLayout DefenseLayout?
@@ -101,6 +111,20 @@ model PlanetUnit {
 
   @@unique([planetId, unitType])
   @@map("planet_units")
+}
+
+model ToolInventory {
+  id        String   @id @default(uuid())
+  planetId  String   @map("planet_id")
+  toolType  String   @map("tool_type") // e.g., "shield_jammer", "auto_turret"
+  count     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  planet Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
+
+  @@unique([planetId, toolType])
+  @@map("tool_inventories")
 }
 
 // Defense layout: how troops are assigned to 3 lanes + Courtyard (Surface)

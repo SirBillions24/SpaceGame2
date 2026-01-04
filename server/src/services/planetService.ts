@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma';
 import { spawnPirateBases } from './pveService';
+import { processManufacturingQueue } from './toolService';
 
 const WORLD_SIZE_X = parseInt(process.env.WORLD_SIZE_X || '5000');
 const WORLD_SIZE_Y = parseInt(process.env.WORLD_SIZE_Y || '5000');
@@ -119,7 +120,8 @@ export async function syncPlanetResources(planetId: string) {
     where: { id: planetId },
     include: {
       units: true,
-      buildings: true
+      buildings: true,
+      tools: true
     },
   });
 
@@ -178,9 +180,15 @@ export async function syncPlanetResources(planetId: string) {
   // Add Base (Command Center equiv) or just base 1
   // If they have no buildings, should they produce? Yes, base rate.
 
-  const carbonRate = BASE_PRODUCTION_RATE + (carbonLevel * LEVEL_MULTIPLIER);
-  const titaniumRate = BASE_PRODUCTION_RATE + (titaniumLevel * LEVEL_MULTIPLIER);
-  const foodRate = BASE_PRODUCTION_RATE + (foodLevel * LEVEL_MULTIPLIER);
+  // STABILITY MODIFIER
+  // 100 Stability = 100% Production.
+  // 0 Stability = 0% Production? Or just reduced? GGE usually has linear scaling.
+  // Let's assume linear for now: Production * (Stability / 100).
+  const stabilityMult = Math.max(0, planet.stability / 100);
+
+  const carbonRate = (BASE_PRODUCTION_RATE + (carbonLevel * LEVEL_MULTIPLIER)) * stabilityMult;
+  const titaniumRate = (BASE_PRODUCTION_RATE + (titaniumLevel * LEVEL_MULTIPLIER)) * stabilityMult;
+  const foodRate = (BASE_PRODUCTION_RATE + (foodLevel * LEVEL_MULTIPLIER)) * stabilityMult;
 
   // Calculate Gains
   let newCarbon = planet.carbon + (carbonRate * diffHours);
@@ -188,9 +196,46 @@ export async function syncPlanetResources(planetId: string) {
   let newFood = planet.food + (foodRate * diffHours);
 
   // Apply Unit Upkeep (Food)
+  // New Upkeep: 4 per unit per hour
+  const FOOD_PER_UNIT = 4;
   const totalUnits = planet.units.reduce((sum, u) => sum + u.count, 0);
-  const upkeep = totalUnits * UNIT_UPKEEP * diffHours;
+  const upkeep = totalUnits * FOOD_PER_UNIT * diffHours;
   newFood -= upkeep;
+
+  // DESERTION LOGIC
+  // If Food < 0, troops desert until consumption <= production.
+  if (newFood < 0 && totalUnits > 0) {
+    // Calculate how many units we can feed
+    // Sustainable = FoodRate / 4
+    const sustainableUnits = Math.floor(foodRate / FOOD_PER_UNIT);
+
+    if (sustainableUnits < totalUnits) {
+      const unitsToRemove = totalUnits - sustainableUnits;
+      const removalRatio = unitsToRemove / totalUnits;
+
+      console.log(`[Desertion] Planet ${planet.name}: Food ${newFood.toFixed(0)}, Removing ${unitsToRemove} units (${(removalRatio * 100).toFixed(1)}%)`);
+
+      // Remove proportionally
+      for (const unit of planet.units) {
+        if (unit.count > 0) {
+          const desertingParams = Math.ceil(unit.count * removalRatio);
+          const survivors = Math.max(0, unit.count - desertingParams);
+
+          // Update DB
+          await prisma.planetUnit.update({
+            where: { id: unit.id },
+            data: { count: survivors }
+          });
+
+          // Update local object for return
+          unit.count = survivors;
+        }
+      }
+
+      // Reset food to 0 (they ate everything and left)
+      newFood = 0;
+    }
+  }
 
   // Process Recruitment Queue (Lazy Eval)
   if (planet.recruitmentQueue) {
@@ -241,6 +286,9 @@ export async function syncPlanetResources(planetId: string) {
     }
   }
 
+  // Process Manufacturing Queue
+  await processManufacturingQueue(planet);
+
   // Update Database
   const updatedPlanet = await prisma.planet.update({
     where: { id: planetId },
@@ -250,7 +298,7 @@ export async function syncPlanetResources(planetId: string) {
       food: newFood,
       lastResourceUpdate: now,
     },
-    include: { units: true, buildings: true }, // Return units for correct reducing in API
+    include: { units: true, buildings: true, tools: true }, // Return units for correct reducing in API
   });
 
   return updatedPlanet;
@@ -282,7 +330,11 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
     'titanium_extractor': 2,
     'hydroponics': 2,
     'academy': 3,
-    'colony_hub': 4
+    'colony_hub': 4,
+    'tavern': 2,           // Intelligence Hub
+    'defense_workshop': 2, // Systems Workshop
+    'siege_workshop': 2,   // Munitions Factory
+    'monument': 1          // Holo-Monument
   };
   const size = BUILDING_SIZES[type] || 2;
 

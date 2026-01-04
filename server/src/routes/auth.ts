@@ -128,10 +128,41 @@ router.post('/login', async (req: Request, res: Response) => {
         id: user.id,
         username: user.username,
         email: user.email,
+        xp: user.xp,
+        level: user.level,
       },
     });
   } catch (error) {
     console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get Current User (Me)
+import { authenticateToken } from '../middleware/auth';
+
+router.get('/me', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    // req.userId is set by authenticateToken middleware
+    const userId = (req as any).userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      xp: user.xp,
+      level: user.level,
+    });
+  } catch (error) {
+    console.error('Get Me error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

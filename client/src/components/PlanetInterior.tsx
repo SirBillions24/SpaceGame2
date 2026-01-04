@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api, type Planet, getCurrentUser } from '../lib/api';
 import DefensePanel from './DefensePanel';
+import WorkshopPanel from './WorkshopPanel';
 import './PlanetInterior.css';
 
 interface PlanetInteriorProps {
@@ -13,7 +14,11 @@ const BUILDING_SIZES: Record<string, number> = {
   'carbon_processor': 2,
   'titanium_extractor': 2,
   'hydroponics': 2,
-  'academy': 3
+  'academy': 3,
+  'tavern': 2,
+  'defense_workshop': 2,
+  'siege_workshop': 2,
+  'monument': 1
 };
 
 const BUILDING_LABELS: Record<string, string> = {
@@ -21,7 +26,11 @@ const BUILDING_LABELS: Record<string, string> = {
   'carbon_processor': 'Carbon Processor',
   'titanium_extractor': 'Titanium Extractor',
   'hydroponics': 'Hydroponics',
-  'academy': 'Fleet Academy'
+  'academy': 'Naval Academy',
+  'tavern': 'Intelligence Hub',
+  'defense_workshop': 'Systems Workshop',
+  'siege_workshop': 'Munitions Factory',
+  'monument': 'Holo-Monument'
 };
 
 const BUILDING_COSTS: Record<string, { c: number, t: number }> = {
@@ -29,7 +38,11 @@ const BUILDING_COSTS: Record<string, { c: number, t: number }> = {
   'carbon_processor': { c: 100, t: 100 },
   'titanium_extractor': { c: 100, t: 100 },
   'hydroponics': { c: 100, t: 100 },
-  'academy': { c: 500, t: 500 }
+  'academy': { c: 500, t: 500 },
+  'tavern': { c: 300, t: 200 },
+  'defense_workshop': { c: 400, t: 300 },
+  'siege_workshop': { c: 400, t: 300 },
+  'monument': { c: 500, t: 0 } // Costs Carbon only? Should assume some cost.
 };
 
 const UNIT_COSTS: any = {
@@ -50,6 +63,7 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
   const [recruitCount, setRecruitCount] = useState<number>(10);
   const [showRecruitConsole, setShowRecruitConsole] = useState(false);
   const [showDefensePanel, setShowDefensePanel] = useState(false);
+  const [showWorkshop, setShowWorkshop] = useState<'defense_workshop' | 'siege_workshop' | null>(null);
 
   const currentUser = getCurrentUser();
   const isOwner = currentUser?.userId === planet.ownerId;
@@ -263,7 +277,7 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
           {/* Build Dock */}
           {isOwner && (
             <div className="build-dock">
-              {['carbon_processor', 'titanium_extractor', 'hydroponics', 'academy'].map(type => {
+              {['carbon_processor', 'titanium_extractor', 'hydroponics', 'academy', 'tavern', 'defense_workshop', 'siege_workshop', 'monument'].map(type => {
                 const cost = BUILDING_COSTS[type];
                 const canAfford = resources && resources.carbon >= cost.c && resources.titanium >= cost.t;
                 return (
@@ -312,6 +326,16 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
                     Defensive Strategy
                   </button>
                 </>
+              )}
+              {buildings.some(b => b.type === 'defense_workshop' && b.status === 'active') && (
+                <button className="recruit-btn" style={{ background: '#00bcd4' }} onClick={() => setShowWorkshop('defense_workshop')}>
+                  Systems Workshop
+                </button>
+              )}
+              {buildings.some(b => b.type === 'siege_workshop' && b.status === 'active') && (
+                <button className="recruit-btn" style={{ background: '#f44336' }} onClick={() => setShowWorkshop('siege_workshop')}>
+                  Munitions Factory
+                </button>
               )}
             </div>
 
@@ -372,6 +396,15 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
           {/* Modals */}
           {showDefensePanel && planetData && (
             <DefensePanel planet={planetData} onClose={() => setShowDefensePanel(false)} />
+          )}
+
+          {showWorkshop && planetData && (
+            <WorkshopPanel
+              planet={planetData}
+              type={showWorkshop}
+              onClose={() => setShowWorkshop(null)}
+              onUpdate={loadPlanetData}
+            />
           )}
 
         </div>

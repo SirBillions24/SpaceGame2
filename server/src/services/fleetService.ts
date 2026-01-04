@@ -78,4 +78,47 @@ export async function deductUnits(planetId: string, units: UnitCounts): Promise<
   }
 }
 
+/**
+ * Validate that tools exist at a planet
+ */
+export async function validateToolsAvailable(
+  planetId: string,
+  requestedTools: { [toolType: string]: number }
+): Promise<boolean> {
+  const planetTools = await prisma.toolInventory.findMany({
+    where: { planetId },
+  });
 
+  const toolMap = new Map<string, number>();
+  planetTools.forEach((t) => {
+    toolMap.set(t.toolType, t.count);
+  });
+
+  for (const [toolType, requestedCount] of Object.entries(requestedTools)) {
+    const available = toolMap.get(toolType) || 0;
+    if (requestedCount > available) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Deduct tools from a planet
+ */
+export async function deductTools(planetId: string, tools: { [toolType: string]: number }): Promise<void> {
+  for (const [toolType, count] of Object.entries(tools)) {
+    await prisma.toolInventory.updateMany({
+      where: {
+        planetId,
+        toolType,
+      },
+      data: {
+        count: {
+          decrement: count,
+        },
+      },
+    });
+  }
+}

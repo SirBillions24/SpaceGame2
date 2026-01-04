@@ -21,9 +21,8 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [needsSpawn, setNeedsSpawn] = useState(false);
   const [hudPlanet, setHudPlanet] = useState<Planet | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // Check for stored auth token
-  // Check for stored auth token & load initial data
   // Check for stored auth token & load initial data
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -35,22 +34,31 @@ function App() {
   }, []);
 
   const checkUserStatus = () => {
-    const user = getCurrentUser();
-    if (user) {
-      api.getPlanets().then(data => {
-        const myPlanets = data.planets.filter(p => p.ownerId === user.userId && !p.isNpc);
-        if (myPlanets.length === 0) {
-          setNeedsSpawn(true);
-        } else if (myPlanets.length === 1) {
-          setSourcePlanet(myPlanets[0]);
-          // Also fetch full details for HUD
-          api.getPlanet(myPlanets[0].id).then(setHudPlanet);
-        } else if (myPlanets.length > 0) {
-          // Default HUD to first planet
-          api.getPlanet(myPlanets[0].id).then(setHudPlanet);
-        }
-      }).catch(e => console.error(e));
-    }
+    // Fetch full user profile (with XP/Level)
+    api.getMe().then(u => {
+      setCurrentUser(u);
+
+      const user = getCurrentUser(); // Keep using token for ID if needed broadly logic
+      if (user) {
+        api.getPlanets().then(data => {
+          const myPlanets = data.planets.filter(p => p.ownerId === user.userId && !p.isNpc);
+          if (myPlanets.length === 0) {
+            setNeedsSpawn(true);
+          } else if (myPlanets.length === 1) {
+            setSourcePlanet(myPlanets[0]);
+            // Also fetch full details for HUD
+            api.getPlanet(myPlanets[0].id).then(setHudPlanet);
+          } else if (myPlanets.length > 0) {
+            // Default HUD to first planet
+            api.getPlanet(myPlanets[0].id).then(setHudPlanet);
+          }
+        }).catch(e => console.error(e));
+      }
+    }).catch(e => {
+      console.error("Failed to fetch user profile", e);
+      // Fallback if /me fails but token valid? Or logout?
+      // For now just log error.
+    });
   };
 
   const handleLogin = () => {
@@ -104,6 +112,7 @@ function App() {
     localStorage.removeItem('authToken');
     setIsLoggedIn(false);
     setAuthToken(''); // Clear from api memory
+    setCurrentUser(null);
   };
 
   const mapImageUrl = '/assets/world-map.png';
@@ -115,7 +124,7 @@ function App() {
 
   return (
     <div className="app">
-      <GlobalHUD user={getCurrentUser()} currentPlanet={hudPlanet} />
+      <GlobalHUD user={currentUser || getCurrentUser()} currentPlanet={hudPlanet} />
 
       <WorldMap
         mapImageUrl={mapImageUrl}

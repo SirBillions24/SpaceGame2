@@ -5,7 +5,7 @@ import { type Planet, api } from '../lib/api';
 import Mailbox from './Mailbox';
 
 interface GlobalHUDProps {
-    user: { username: string } | null;
+    user: { username: string; xp?: number; level?: number; } | null;
     currentPlanet: Planet | null;
 }
 
@@ -29,9 +29,18 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
         return () => clearInterval(interval);
     }, [planet?.id]);
 
-    // Mocks for features not yet in backend
-    const level = 12;
-    const xpPercent = 45;
+    // Level calculation
+    const level = user?.level || 1;
+    const xp = user?.xp || 0;
+
+    // XP Curve: Prev = 100*(L-1)^2, Next = 100*L^2
+    const prevThreshold = 100 * Math.pow(level - 1, 2);
+    const nextThreshold = 100 * Math.pow(level, 2);
+    const range = nextThreshold - prevThreshold;
+    const xpInLevel = Math.max(0, xp - prevThreshold);
+
+    const xpPercent = range > 0 ? (xpInLevel / range) * 100 : 0;
+
     const rubies = 250;
     const publicOrder = 180; // High order
 

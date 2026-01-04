@@ -64,6 +64,7 @@ router.post('/planets/:id/defense-layout', authenticateToken, async (req: AuthRe
     // Validate ownership
     const planet = await prisma.planet.findUnique({
       where: { id },
+      include: { tools: true }
     });
 
     if (!planet) {
@@ -79,7 +80,21 @@ router.post('/planets/:id/defense-layout', authenticateToken, async (req: AuthRe
       return res.status(400).json({ error: 'All three lanes (front, left, right) are required' });
     }
 
-    // Validate units exist at planet
+    // Normalize input (handle legacy format or new format)
+    // New format: { units: {...}, tools: [...] }
+    const normalizeLane = (lane: any) => {
+      if (!lane.units && !lane.tools) return { units: lane, tools: [] }; // Legacy: input IS the units object
+      return {
+        units: lane.units || {},
+        tools: Array.isArray(lane.tools) ? lane.tools : []
+      };
+    };
+
+    const frontLane = normalizeLane(front);
+    const leftLane = normalizeLane(left);
+    const rightLane = normalizeLane(right);
+
+    // 1. Validate Units Available
     const planetUnits = await prisma.planetUnit.findMany({
       where: { planetId: id },
     });
@@ -89,15 +104,14 @@ router.post('/planets/:id/defense-layout', authenticateToken, async (req: AuthRe
       unitMap.set(unit.unitType, unit.count);
     });
 
-    // Check if assigned units exceed available units
-    const allAssigned: { [unitType: string]: number } = {};
-    for (const lane of [front, left, right]) {
-      for (const [unitType, count] of Object.entries(lane as { [key: string]: number })) {
-        allAssigned[unitType] = (allAssigned[unitType] || 0) + (count as number);
+    const allAssignedUnits: { [unitType: string]: number } = {};
+    for (const lane of [frontLane, leftLane, rightLane]) {
+      for (const [unitType, count] of Object.entries(lane.units as { [key: string]: number })) {
+        allAssignedUnits[unitType] = (allAssignedUnits[unitType] || 0) + (count as number);
       }
     }
 
-    for (const [unitType, assignedCount] of Object.entries(allAssigned)) {
+    for (const [unitType, assignedCount] of Object.entries(allAssignedUnits)) {
       const available = unitMap.get(unitType) || 0;
       if (assignedCount > available) {
         return res.status(400).json({
@@ -106,19 +120,78 @@ router.post('/planets/:id/defense-layout', authenticateToken, async (req: AuthRe
       }
     }
 
+    // 2. Validate Tools
+    // A. Slot Limits
+    const maxSlots = Math.max(1, planet.defensiveGridLevel); // At least 1 slot, or based on level
+    // GGE: Wall Level 1 = 1 slot. Level 2 = 2 slots? Let's check user request.
+    // "At level one shield generator you can only equip 1 tool per flank on defense."
+    // Let's assume 1 slot per level for now.
+
+    const validateSlots = (laneTools: any[], laneName: string) => {
+      if (laneTools.length > maxSlots) {
+        throw new Error(`${laneName} lane exceeds max tool slots (${maxSlots})`);
+      }
+    };
+
+    try {
+      validateSlots(frontLane.tools, 'Center');
+      validateSlots(leftLane.tools, 'Left');
+      validateSlots(rightLane.tools, 'Right');
+    } catch (e: any) {
+      return res.status(400).json({ error: e.message });
+    }
+
+    // B. Tool Inventory Logic
+    // In GGE, tools assigned to defense are usually NOT deducted from inventory until consumed in battle.
+    // They are just "assigned". So we check if User HAS enough tools in Inventory to cover assignment.
+    // OR, do they stay in inventory and we just reference them?
+    // "On defense only 1 tool of each type is used per wave, however you can stack as many as you want in the slots"
+    // This implies we need to hold them in the slot.
+    // Usually, you assume the user *assigns* them and they are essentially "reserved" or just checked.
+    // With a shared global inventory, assigning 100 tools to Front and 100 to Left = 200 needed.
+
+    // Let's calculate total tools assigned.
+    const allAssignedTools: Record<string, number> = {};
+
+    // Tools structure: [{ type: 'auto_turret', count: 50 }, ...]
+    const tallyTools = (tools: any[]) => {
+      tools.forEach(t => {
+        if (t.type && t.count > 0) {
+          allAssignedTools[t.type] = (allAssignedTools[t.type] || 0) + t.count;
+        }
+      });
+    };
+    tallyTools(frontLane.tools);
+    tallyTools(leftLane.tools);
+    tallyTools(rightLane.tools);
+
+    // Check against Inventory
+    // We fetched planet.tools via include
+    const inventoryMap = new Map<string, number>();
+    planet.tools.forEach(t => inventoryMap.set(t.toolType, t.count));
+
+    for (const [toolType, required] of Object.entries(allAssignedTools)) {
+      const available = inventoryMap.get(toolType) || 0;
+      if (required > available) {
+        return res.status(400).json({
+          error: `Insufficient ${toolType}: assigned ${required}, available ${available}`,
+        });
+      }
+    }
+
     // Create or update defense layout
     const defenseLayout = await prisma.defenseLayout.upsert({
       where: { planetId: id },
       update: {
-        frontLaneJson: JSON.stringify(front),
-        leftLaneJson: JSON.stringify(left),
-        rightLaneJson: JSON.stringify(right),
+        frontLaneJson: JSON.stringify(frontLane),
+        leftLaneJson: JSON.stringify(leftLane),
+        rightLaneJson: JSON.stringify(rightLane),
       },
       create: {
         planetId: id,
-        frontLaneJson: JSON.stringify(front),
-        leftLaneJson: JSON.stringify(left),
-        rightLaneJson: JSON.stringify(right),
+        frontLaneJson: JSON.stringify(frontLane),
+        leftLaneJson: JSON.stringify(leftLane),
+        rightLaneJson: JSON.stringify(rightLane),
       },
     });
 
@@ -129,6 +202,8 @@ router.post('/planets/:id/defense-layout', authenticateToken, async (req: AuthRe
         left: JSON.parse(defenseLayout.leftLaneJson),
         right: JSON.parse(defenseLayout.rightLaneJson),
       },
+      // Return max slots for UI convenience
+      maxSlots
     });
   } catch (error) {
     console.error('Error updating defense layout:', error);

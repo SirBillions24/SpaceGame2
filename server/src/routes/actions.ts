@@ -70,6 +70,41 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
       return res.status(400).json({ error: 'Insufficient units at planet' });
     }
 
+    // --- TOOL VALIDATION (Attack Only) ---
+    const allTools: Record<string, number> = {};
+    if (type === 'attack' && req.body.laneAssignments) {
+      // Parse lane assignments to tally tools
+      const lanes = ['front', 'left', 'right'];
+      lanes.forEach(lane => {
+        const laneData = (req.body.laneAssignments as any)[lane];
+        if (laneData && Array.isArray(laneData)) {
+          // Multi-wave array format
+          laneData.forEach((wave: any) => {
+            if (wave.tools) {
+              for (const [t, c] of Object.entries(wave.tools as Record<string, number>)) {
+                allTools[t] = (allTools[t] || 0) + c;
+              }
+            }
+          });
+        } else if (laneData && laneData.tools) {
+          // Single Wave Object format (if used)
+          for (const [t, c] of Object.entries(laneData.tools as Record<string, number>)) {
+            allTools[t] = (allTools[t] || 0) + c;
+          }
+        }
+      });
+    }
+
+    // Check availability
+    if (Object.keys(allTools).length > 0) {
+      // Import helper inside or ensure it's top-level. 
+      // Assuming top-level import exists.
+      const toolsAvailable = await import('../services/fleetService').then(m => m.validateToolsAvailable(fromPlanetId, allTools));
+      if (!toolsAvailable) {
+        return res.status(400).json({ error: 'Insufficient tools at planet' });
+      }
+    }
+
     // Get planet positions
     const fromPlanet = await prisma.planet.findUnique({
       where: { id: fromPlanetId },
@@ -91,6 +126,11 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
     // Deduct units from origin planet
     await deductUnits(fromPlanetId, units);
 
+    // Deduct tools from origin planet
+    if (Object.keys(allTools).length > 0) {
+      await import('../services/fleetService').then(m => m.deductTools(fromPlanetId, allTools));
+    }
+
     // Create fleet
     const fleet = await prisma.fleet.create({
       data: {
@@ -102,7 +142,7 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
         laneAssignmentsJson: type === 'attack' && req.body.laneAssignments
           ? JSON.stringify(req.body.laneAssignments)
           : null,
-        toolsJson: req.body.tools ? JSON.stringify(req.body.tools) : null,
+        toolsJson: Object.keys(allTools).length > 0 ? JSON.stringify(allTools) : null,
         departAt,
         arriveAt,
         status: 'enroute',
@@ -277,6 +317,45 @@ router.post('/spawn', authenticateToken, async (req: AuthRequest, res: Response)
 
   } catch (error) {
     console.error('Spawn error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Manufacture Tools
+import { produceTool } from '../services/toolService';
+
+router.post('/manufacture', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { planetId, toolType, count } = req.body;
+
+    if (!planetId || !toolType || !count || count <= 0) {
+      return res.status(400).json({ error: 'Missing parameters' });
+    }
+
+    // Validate ownership
+    const ownsPlanet = await validatePlanetOwnership(userId, planetId);
+    if (!ownsPlanet) {
+      return res.status(403).json({ error: 'You do not own this planet' });
+    }
+
+    try {
+      const result = await produceTool(planetId, toolType, count);
+      res.json({
+        message: 'Production started',
+        ...result,
+      });
+    } catch (err) {
+      if (err instanceof Error) {
+        if (err.message.includes('Insufficient')) return res.status(400).json({ error: err.message });
+        if (err.message.includes('required')) return res.status(400).json({ error: err.message });
+        if (err.message.includes('Invalid tool')) return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
+
+  } catch (error) {
+    console.error('Manufacture error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

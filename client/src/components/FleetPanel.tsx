@@ -17,6 +17,7 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
   const [fleetType, setFleetType] = useState<'attack' | 'support' | 'scout'>('attack');
 
   // Data
+  const [currentFromPlanet, setCurrentFromPlanet] = useState<Planet | null>(fromPlanet);
   const [availableUnits, setAvailableUnits] = useState<Record<string, number>>({});
 
   // State for flat fleet (Support/Scout)
@@ -30,6 +31,7 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
 
   useEffect(() => {
     if (fromPlanet) {
+      setCurrentFromPlanet(fromPlanet); // Reset to prop first
       loadPlanetUnits();
     }
   }, [fromPlanet]);
@@ -38,6 +40,7 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
     if (!fromPlanet) return;
     try {
       const planet = await api.getPlanet(fromPlanet.id);
+      setCurrentFromPlanet(planet); // Update with fresh data (including tools)
       setAvailableUnits(planet.units || {});
       // Init flat units
       const initial: Record<string, number> = {};
@@ -56,13 +59,13 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
   };
 
   const handleFlatDispatch = async () => {
-    if (!fromPlanet || !toPlanet) return;
+    if (!currentFromPlanet || !toPlanet) return;
     setLoading(true);
     try {
       const total = Object.values(flatUnits).reduce((a, b) => a + b, 0);
       if (total === 0) throw new Error("Must select at least one unit");
 
-      await api.createFleet(fromPlanet.id, toPlanet.id, fleetType, flatUnits);
+      await api.createFleet(currentFromPlanet.id, toPlanet.id, fleetType, flatUnits);
       onFleetCreated();
       onClose();
     } catch (err: any) {
@@ -72,12 +75,12 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
   };
 
   const handleAttackCommit = async (finalUnits: Record<string, number>, laneAssignments: any) => {
-    if (!fromPlanet || !toPlanet) return;
+    if (!currentFromPlanet || !toPlanet) return;
     setLoading(true);
     try {
       // We only use the `laneAssignments` JSON for the complex attack logic
       // But `finalUnits` is needed for aggregation in DB (if needed) or simple checks
-      await api.createFleet(fromPlanet.id, toPlanet.id, 'attack', finalUnits, laneAssignments);
+      await api.createFleet(currentFromPlanet.id, toPlanet.id, 'attack', finalUnits, laneAssignments);
       onFleetCreated();
       onClose();
     } catch (err: any) {
@@ -86,7 +89,7 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
     }
   };
 
-  if (!fromPlanet || !toPlanet) return null;
+  if (!currentFromPlanet || !toPlanet) return null;
 
   // If Attack Mode is selected, we render the AttackPlanner instead of the simple panel!
   // Or we show a "Open Tactical Map" button?
@@ -95,7 +98,7 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
   if (fleetType === 'attack') {
     return (
       <AttackPlanner
-        fromPlanet={fromPlanet}
+        fromPlanet={currentFromPlanet}
         toPlanet={toPlanet}
         availableUnits={availableUnits}
         onCommit={handleAttackCommit}

@@ -13,6 +13,8 @@ export interface Planet {
   buildings?: { id: string; type: string; level: number; x: number; y: number; status: string }[];
   construction?: { isBuilding: boolean; activeBuildId: string | null; buildFinishTime: string | null };
   recruitmentQueue?: any[];
+  manufacturingQueue?: any[];
+  tools?: { toolType: string; count: number }[];
   defense?: { defensiveGrid: number; perimeterField: number; starport: number };
   isNpc?: boolean;
   npcLevel?: number;
@@ -203,6 +205,19 @@ export const api = {
     return response.json();
   },
 
+  async manufacture(planetId: string, toolType: string, count: number) {
+    const response = await fetch(`${API_BASE_URL}/actions/manufacture`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId, toolType, count }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Production failed');
+    }
+    return response.json();
+  },
+
   async getFleets(): Promise<FleetsResponse> {
     const response = await fetch(`${API_BASE_URL}/actions/fleets`, {
       headers: getHeaders(true),
@@ -230,6 +245,17 @@ export const api = {
     if (!response.ok) {
       const err = await response.json();
       throw new Error(err.error || 'Failed to update defense layout');
+    }
+    return response.json();
+  },
+  async getMe() {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      method: 'GET',
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      // Silent fail or throw? Throw allows app to logout.
+      throw new Error('Failed to fetch user');
     }
     return response.json();
   }

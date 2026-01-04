@@ -75,6 +75,7 @@ interface SectorResult {
   winner: 'attacker' | 'defender';
   survivingAttackers: FlankUnits;
   survivingDefenders: FlankUnits;
+  survivingDefenderTools?: { type: string; count: number }[]; // NEW
   initialAttackerUnits: FlankUnits;
   initialDefenderUnits: FlankUnits;
   attackerToolsByWave: Record<string, number>[];
@@ -118,9 +119,10 @@ function getUnitStats(unitType: string) {
 export function resolveWaveCollision(
   attackerUnits: FlankUnits,
   defenderUnits: FlankUnits,
-  tools: Record<string, number>,
+  attackerTools: Record<string, number>,
   defenseBuildings: { shield: number; starport: number; perimeter: number },
-  isCenter: boolean
+  isCenter: boolean,
+  defenderTools: Record<string, number> = {} // New argument for defender tools specifically
 ): {
   attackerWon: boolean;
   attackerLosses: FlankUnits;
@@ -138,11 +140,9 @@ export function resolveWaveCollision(
     attRanged += s.rangedAtk * count;
   }
 
-  // Tool Modifiers
-  // Plasma Grenades (+Ranged Dmg?)
-  if (tools.plasmaGrenade) {
-    attRanged *= (1 + (tools.plasmaGrenade * 0.05)); // 5% per grenade?
-  }
+  // ATTACKER TOOL MODIFIERS
+  // Plasma Grenades (+Ranged Dmg?) -> Placeholder name? GGE uses specific tools.
+  // We use: signal_jammer (vs Shield), breach_cutter (vs Gate), holo_decoy (vs Ranged)
 
   const totalAttackerPower = attMelee + attRanged;
 
@@ -152,79 +152,103 @@ export function resolveWaveCollision(
 
   for (const [u, count] of Object.entries(defenderUnits)) {
     const s = getUnitStats(u);
-    // Defenders use stats relevant to what is hitting them?
-    // GGE Logic: Defense is composite.
-    // We calculate "Melee Defense" and "Ranged Defense" pools.
     defMelee += s.meleeDef * count;
     defRanged += s.rangedDef * count;
   }
 
-  // Apply Defense Tool/Building Bonuses
+  // DEFENDER TOOL MODIFIERS (Applied to Base Unit Stats directly? Or Composite?)
+  // Targeting Array: Increases Ranged Defense Power
+  if (defenderTools.targeting_array) {
+    // GGE: Flaming Arrows (+25% Ranged Def)
+    defRanged *= 1.25;
+  }
+
+
+  // --- WALL & GATE BONUSES (Shield & Starport) ---
 
   // Shield Generator (Wall)
-  let shieldBonus = defenseBuildings.shield * SHIELD_GENERATOR_BONUS;
-  if (tools.shieldJammer) {
-    const reduction = Math.min(1.0, tools.shieldJammer * SHIELD_JAMMER_REDUCTION);
-    shieldBonus *= (1 - reduction);
-  }
+  // Bonus: +50% per level (simplified to +50 power per level in constants, let's stick to power or switch to %?)
+  // GGE: Wall gives % bonus to troops. E.g. +80% defense bonus.
+  // Our code previously used flat power. Let's switch to Percentage Bonus for scaling proper GGE logic.
+  // Current: const SHIELD_GENERATOR_BONUS = 50;
+  // Let's define Base Wall Bonus: Level 1 = 20%, Level 2 = 40%...
+  // For compatibility with previous code, let's calculate a "Base Bonus %" derived from buildings.shield.
 
-  // Starport (Gate) - Center only
-  let starportBonus = 0;
+  let wallBonusPct = defenseBuildings.shield * 0.20; // 20% per level
+  let gateBonusPct = 0;
   if (isCenter) {
-    starportBonus = defenseBuildings.starport * STARPORT_BONUS;
-    if (tools.hangarBreach) {
-      const reduction = Math.min(1.0, tools.hangarBreach * HANGAR_BREACH_REDUCTION);
-      starportBonus *= (1 - reduction);
-    }
+    gateBonusPct = defenseBuildings.starport * 0.35; // 35% per level
+  }
+  // Moat/Perimeter?
+  let moatBonusPct = defenseBuildings.perimeter * 0.10;
+
+  // --- DEFENDER TOOLS (Boosts) ---
+  // Auto Turret: +25% Wall (Shield)
+  if (defenderTools.auto_turret) {
+    wallBonusPct += 0.25;
+  }
+  // Blast Door: +35% Gate (Starport)
+  if (defenderTools.blast_door && isCenter) {
+    gateBonusPct += 0.35;
+  }
+  // Swamp Snapper / Moat tool? Not implemented yet.
+
+  // --- ATTACKER TOOLS (Reductions) ---
+  // Signal Jammer: -10% Wall per tool
+  if (attackerTools.signal_jammer) {
+    const reduction = attackerTools.signal_jammer * 0.10;
+    wallBonusPct = Math.max(0, wallBonusPct - reduction);
   }
 
-  // Auto Turrets (Add raw defense)
-  let turretBonus = (tools.autoTurret || 0) * 20; // +20 per turret
+  // Breach Cutter: -10% Gate per tool
+  if (attackerTools.breach_cutter && isCenter) {
+    const reduction = attackerTools.breach_cutter * 0.10;
+    gateBonusPct = Math.max(0, gateBonusPct - reduction);
+  }
 
-  // ECM Pods (Reduce Defender Ranged Power)
-  if (tools.ecmPod) {
-    const reduction = Math.min(1.0, tools.ecmPod * ECM_POD_REDUCTION);
+  // Holo Decoy: Reduces Defender Ranged Strength (aka Shielding from Range?)
+  // GGE: Mantlet reduces Enemy Ranged Strength (Bowmen).
+  // Effectively reduces `defRanged`?
+  if (attackerTools.holo_decoy) {
+    // 10% per tool? Capped?
+    // GGE: Cast iron mantlet = -15% arrow strength.
+    // Holo Decoy = -10%. (10 tools = -100%).
+    const reduction = Math.min(1.0, attackerTools.holo_decoy * 0.10);
     defRanged *= (1 - reduction);
   }
 
-  // Total Defense Calculation
-  // In GGE, Melee units attack melee defense, Ranged attack ranged defense.
-  // We need the RATIO of attacker damage types.
+  // --- APPLY COMPOSITE DEFENSE ---
+  // Defense Power = (MeleeDef + RangedDef) * (1 + WallBonus + GateBonus + MoatBonus + ...)
+  // Note: Usually Wall applies to ALL units on wall.
+  // We need to calculate Total Base Def first.
 
   let totalDefPower = 0;
   if (totalAttackerPower > 0) {
     const meleeRatio = attMelee / totalAttackerPower;
     const rangedRatio = attRanged / totalAttackerPower;
-
+    // Weighted defense based on what's attacking
     totalDefPower = (defMelee * meleeRatio) + (defRanged * rangedRatio);
   } else {
-    totalDefPower = 0.1; // Minimal logic to avoid div by 0
+    totalDefPower = 0.1;
   }
 
-  // Add Bonuses
-  totalDefPower += shieldBonus + starportBonus + turretBonus;
+  const totalBonusPct = wallBonusPct + gateBonusPct + moatBonusPct;
+  totalDefPower *= (1 + totalBonusPct);
+
 
   // 3. Resolve Winner
   const attackerWon = totalAttackerPower > totalDefPower;
 
   // 4. Calculate Casualties
-  // Loser is wiped out (or takes massive casualties). Winner takes proportional casualties.
-
   const totalPower = totalAttackerPower + totalDefPower;
   const casualtyRate = attackerWon
     ? (totalDefPower / totalPower) // Attacker losses
     : (totalAttackerPower / totalPower); // Defender losses
 
-  // Winner usually takes less damage in GGE, but linear for now.
-  // Actually, standard GGE:
-  // If Attacker Power = 200, Defender = 100. Attacker wins.
-  // Attacker loses 100/200 = 50%? No, that's high.
-  // Let's use a "Victory Dampener".
+  const victoryDampener = 0.5;
 
-  const victoryDampener = 0.5; // Winner takes 50% of calculated stress.
-
-  const attLossRate = attackerWon ? (casualtyRate * victoryDampener) : 1.0; // Loser dies
-  const defLossRate = !attackerWon ? (casualtyRate * victoryDampener) : 1.0; // Loser dies
+  const attLossRate = attackerWon ? (casualtyRate * victoryDampener) : 1.0;
+  const defLossRate = !attackerWon ? (casualtyRate * victoryDampener) : 1.0;
 
   const attLosses: FlankUnits = {};
   const remAtt: FlankUnits = {};
@@ -254,9 +278,12 @@ export function resolveWaveCollision(
 /**
  * Resolve a whole Sector (up to 4-6 waves)
  */
+/**
+ * Resolve a whole Sector (up to 4-6 waves)
+ */
 export function resolveSector(
   attackWaves: Wave[],
-  initialDefenders: FlankUnits,
+  initialDefenderLane: { units: FlankUnits, tools: { type: string, count: number }[] },
   defenseBuildings: { shield: number; starport: number; perimeter: number },
   isCenter: boolean
 ): SectorResult {
@@ -272,7 +299,11 @@ export function resolveSector(
     attackerToolsByWave.push({ ...wave.tools });
   }
 
-  let currentDefenders = { ...initialDefenders };
+  // Clone defender state
+  let currentDefenders = { ...initialDefenderLane.units };
+  // Clone defender tools (Deep copy array of objects)
+  const currentDefenderTools = initialDefenderLane.tools ? initialDefenderLane.tools.map(t => ({ ...t })) : [];
+
   let totalAttackerLosses: FlankUnits = {};
   let totalDefenderLosses: FlankUnits = {};
 
@@ -286,7 +317,7 @@ export function resolveSector(
     const wave = attackWaves[i];
 
     // Snapshot state before collision
-    const defenderSnapshot = { ...currentDefenders };
+    const defenderSnapshot = { ...currentDefenders }; // Units
     const defCount = Object.values(currentDefenders).reduce((a, b) => a + b, 0);
 
     // If defenders already wiped, just pass through (but log it if we want detailed "Unopposed Wave" logs)
@@ -310,12 +341,25 @@ export function resolveSector(
 
     wavesFought++;
 
+    // --- CALCULATE ACTIVE DEFENDER TOOLS FOR THIS WAVE ---
+    // Rule: Each slot with count > 0 provides +1 Tool Power for this wave.
+    // Rule: Decrement 1 from each active slot.
+    const activeDefenderTools: Record<string, number> = {};
+
+    currentDefenderTools.forEach(slot => {
+      if (slot.count > 0) {
+        activeDefenderTools[slot.type] = (activeDefenderTools[slot.type] || 0) + 1;
+        slot.count--; // Consume tool
+      }
+    });
+
     const result = resolveWaveCollision(
       wave.units,
       currentDefenders,
-      wave.tools,
+      wave.tools, // Attacker Tools
       defenseBuildings,
-      isCenter
+      isCenter,
+      activeDefenderTools // Defender Tools
     );
 
     // Record Wave Result
@@ -355,12 +399,17 @@ export function resolveSector(
     winner = 'defender';
   }
 
+  // Re-map currentDefenderTools (internal tracking) back to output format
+  // currentDefenderTools has decremented counts
+  const survivingDefenderTools = currentDefenderTools.filter(t => t.count > 0);
+
   return {
     winner,
     survivingAttackers,
     survivingDefenders: currentDefenders,
+    survivingDefenderTools, // NEW
     initialAttackerUnits,
-    initialDefenderUnits: { ...initialDefenders },
+    initialDefenderUnits: { ...initialDefenderLane.units },
     attackerToolsByWave,
     waveResults,
     defenderTools: { ...defenseBuildings },
@@ -402,9 +451,29 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   }
 
   const defenseLayout = fleet.toPlanet.defenseLayout;
-  const defLeft = defenseLayout ? JSON.parse(defenseLayout.leftLaneJson) : {};
-  const defCenter = defenseLayout ? JSON.parse(defenseLayout.frontLaneJson) : {};
-  const defRight = defenseLayout ? JSON.parse(defenseLayout.rightLaneJson) : {};
+
+  // Helper to parse/normalize Defender Lane JSON
+  const parseDefLane = (json: string | null): { units: FlankUnits, tools: { type: string, count: number }[] } => {
+    if (!json) return { units: {}, tools: [] };
+    try {
+      const data = JSON.parse(json);
+      // New format: { units: {...}, tools: [...] }
+      if (data.units || data.tools) {
+        return {
+          units: data.units || {},
+          tools: Array.isArray(data.tools) ? data.tools : []
+        };
+      }
+      // Legacy format: { marine: 10, ... } (Just units)
+      return { units: data, tools: [] };
+    } catch {
+      return { units: {}, tools: [] };
+    }
+  };
+
+  const defLeft = parseDefLane(defenseLayout?.leftLaneJson || null);
+  const defCenter = parseDefLane(defenseLayout?.frontLaneJson || null);
+  const defRight = parseDefLane(defenseLayout?.rightLaneJson || null);
 
   const buildings = {
     shield: fleet.toPlanet.defensiveGridLevel,
@@ -440,7 +509,7 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   addUnits(surfAtt, centerResult.survivingAttackers);
   addUnits(surfAtt, rightResult.survivingAttackers);
 
-  // Courtyard Defense (Empty for now until Courtyard Units exist in DB)
+  // Courtyard Defense (Empty)
   const surfDef: FlankUnits = {};
 
   let surfaceResult = null;
@@ -502,23 +571,117 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   agg(totalDefLosses, rightResult.defenderLosses);
   if (surfaceResult) agg(totalDefLosses, surfaceResult.defenderLosses);
 
-  // Calculate Final Survivors for Looting
-  if (finalWinner === 'attacker' && surfaceResult) {
-    for (const [u, c] of Object.entries(surfaceResult.initialAttackerUnits)) {
-      const loss = surfaceResult.attackerLosses[u] || 0;
-      survivingUnitsFinal[u] = Math.max(0, c - loss);
-    }
-  }
-
   // Loot
   let lootJson = null;
   if (finalWinner === 'attacker') {
+    // Determine survivors
+    if (surfaceResult) {
+      for (const [u, c] of Object.entries(surfaceResult.initialAttackerUnits)) {
+        const loss = surfaceResult.attackerLosses[u] || 0;
+        survivingUnitsFinal[u] = Math.max(0, c - loss);
+      }
+    }
     const rawLoot = calculateLoot(survivingUnitsFinal, {
       carbon: fleet.toPlanet.carbon,
       titanium: fleet.toPlanet.titanium,
       food: fleet.toPlanet.food
     });
     lootJson = JSON.stringify(rawLoot);
+  }
+
+  // --- PERSIST DEFENDER LOSSES & TOOL CONSUMPTION ---
+  if (defenseLayout) {
+    const updateLaneData = (result: SectorResult) => {
+      return {
+        units: result.survivingDefenders,
+        tools: result.survivingDefenderTools || []
+      };
+    };
+
+    const newLeft = updateLaneData(leftResult);
+    const newCenter = updateLaneData(centerResult);
+    const newRight = updateLaneData(rightResult);
+
+    await prisma.defenseLayout.update({
+      where: { id: defenseLayout.id },
+      data: {
+        leftLaneJson: JSON.stringify(newLeft),
+        frontLaneJson: JSON.stringify(newCenter),
+        rightLaneJson: JSON.stringify(newRight)
+      }
+    });
+
+    // Also, we must update `PlanetUnit` counts? 
+    // Currently `defenseLayout` is just a plan. The ACTUAL units are in `PlanetUnit` table.
+    // In `defense.ts` route, we validate assignments against `PlanetUnit`.
+    // If units die in combat, we MUST decrement `PlanetUnit`.
+    // IF the defender Logic uses `PlanetUnit` as "Available Pool" and `DefenseLayout` as "Assigned", then deaths in layout must reflect in Inventory.
+
+    // For Tools: `ToolInventory` table exists. We must decrement it.
+    // Logic: Calculate delta (Used Tools) and decrement.
+    // Or, simpler: Update `DefenseLayout` (Plan) AND `ToolInventory` (Stock).
+    // Wait, if tools are IN the wall, are they deducted from Inventory? 
+    // GGE: Yes. You assign them. They are "on the wall".
+    // If they are consumed, they are gone.
+    // If they survive, they stay on the wall.
+
+    // ISSUE: The `ToolInventory` was likely checked during assignment but NOT deducted?
+    // Actually, usually in GGE, assignment moves items from "Keep" to "Wall".
+    // My system currently splits them? 
+    // `validateToolsAvailable` checks `ToolInventory`.
+    // If I simply update `DefenseLayout`, the user "loses" them from the wall.
+    // But `ToolInventory` might still show them if they weren't deducted on assignment.
+    // Let's assume for now `ToolInventory` is the "Unassigned" pool? 
+    // Or `ToolInventory` is ALL tools?
+    // Recommendation: `ToolInventory` = Global count. `DefenseLayout` = Allocation.
+    // Updates to `DefenseLayout` means tools are gone from wall.
+    // We MUST also decrement `ToolInventory` by the amount consumed.
+
+    const calcConsumed = (initial: { type: string, count: number }[], final: { type: string, count: number }[]) => {
+      const consumed: Record<string, number> = {};
+      const finalMap = new Map(final.map(t => [t.type, t.count]));
+
+      initial.forEach(t => {
+        const endCount = finalMap.get(t.type) || 0;
+        const diff = t.count - endCount;
+        if (diff > 0) consumed[t.type] = (consumed[t.type] || 0) + diff;
+      });
+      return consumed;
+    };
+
+    const consumedLeft = calcConsumed(defLeft.tools, newLeft.tools);
+    const consumedCenter = calcConsumed(defCenter.tools, newCenter.tools);
+    const consumedRight = calcConsumed(defRight.tools, newRight.tools);
+
+    // Merge
+    const totalConsumedTools: Record<string, number> = {};
+    [consumedLeft, consumedCenter, consumedRight].forEach(c => {
+      for (const [t, n] of Object.entries(c)) totalConsumedTools[t] = (totalConsumedTools[t] || 0) + n;
+    });
+
+    if (Object.keys(totalConsumedTools).length > 0) {
+      // Circular dependency? `deductTools` is in `fleetService`. 
+      // `fleetService` imports `combatService`. 
+      // We might need to copy/move `deductTools` or use prisma directly.
+      for (const [t, n] of Object.entries(totalConsumedTools)) {
+        // Safe decrement
+        await prisma.toolInventory.updateMany({
+          where: { planetId: fleet.toPlanetId, toolType: t },
+          data: { count: { decrement: n } }
+        });
+      }
+    }
+  }
+
+  // Deduct Unit Losses from PlanetUnit (Defender)
+  // This is CRITICAL.
+  if (Object.keys(totalDefLosses).length > 0) {
+    for (const [u, n] of Object.entries(totalDefLosses)) {
+      await prisma.planetUnit.updateMany({
+        where: { planetId: fleet.toPlanetId, unitType: u },
+        data: { count: { decrement: n } }
+      });
+    }
   }
 
   return {

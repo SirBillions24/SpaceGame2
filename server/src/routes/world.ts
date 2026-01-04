@@ -112,6 +112,8 @@ router.get('/planet/:id', async (req: Request, res: Response) => {
         starport: syncedPlanet.starportLevel,
       },
       recruitmentQueue: syncedPlanet.recruitmentQueue ? JSON.parse(syncedPlanet.recruitmentQueue as any) : [],
+      manufacturingQueue: syncedPlanet.manufacturingQueue ? JSON.parse(syncedPlanet.manufacturingQueue as any) : [],
+      tools: (syncedPlanet as any).tools || [],
       createdAt: syncedPlanet.createdAt,
     });
   } catch (error) {

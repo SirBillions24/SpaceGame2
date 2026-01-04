@@ -1,0 +1,163 @@
+.workshop-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    backdrop-filter: blur(4px);
+}
+
+.workshop-panel {
+    width: 600px;
+    background: rgba(10, 20, 30, 0.95);
+    border: 1px solid #00d4ff;
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.workshop-header {
+    background: rgba(0, 212, 255, 0.1);
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #00d4ff;
+}
+
+.workshop-header h2 {
+    margin: 0;
+    color: #00d4ff;
+    font-family: 'Orbitron', sans-serif;
+}
+
+.workshop-content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.tools-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 15px;
+}
+
+.tool-card {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid #444;
+    padding: 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.tool-card:hover {
+    border-color: #00d4ff;
+    background: rgba(0, 212, 255, 0.05);
+}
+
+.tool-card.selected {
+    border-color: #00d4ff;
+    background: rgba(0, 212, 255, 0.15);
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.2);
+}
+
+.tool-card h4 {
+    margin: 0 0 5px 0;
+    color: #fff;
+}
+
+.tool-desc {
+    font-size: 0.8rem;
+    color: #aaa;
+    margin-bottom: 10px;
+}
+
+.tool-cost {
+    font-size: 0.8rem;
+    color: #ffd700;
+    display: flex;
+    justify-content: space-between;
+}
+
+.production-controls {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.amount-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+}
+
+.amount-input input {
+    width: 80px;
+    padding: 8px;
+    background: #000;
+    border: 1px solid #444;
+    color: #fff;
+    border-radius: 4px;
+}
+
+.produce-btn {
+    flex: 1;
+    padding: 10px;
+    background: linear-gradient(45deg, #00d4ff, #0077be);
+    border: none;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.produce-btn:disabled {
+    background: #444;
+    cursor: not-allowed;
+}
+
+.production-queue {
+    margin-top: 10px;
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid #333;
+    padding: 10px;
+}
+
+.production-queue h3 {
+    margin: 0 0 10px 0;
+    color: #aaa;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+}
+
+.queue-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px;
+    border-bottom: 1px solid #333;
+    color: #fff;
+    font-size: 0.9rem;
+}
+
+.queue-item .done {
+    color: #4caf50;
+}
+
+.queue-item .processing {
+    color: #ff9800;
+}

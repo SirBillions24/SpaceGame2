@@ -54,13 +54,13 @@ const UNIT_ICONS: Record<string, string> = {
 };
 
 const TOOL_ICONS: Record<string, string> = {
-    shieldJammer: iconJammer,
-    hangarBreach: iconBreach,
-    ecmPod: iconECM,
+    signal_jammer: iconJammer,
+    breach_cutter: iconBreach,
+    holo_decoy: iconECM,
 };
 
 const ALL_UNITS = ['marine', 'ranger', 'sentinel', 'interceptor'];
-const ALL_TOOLS = ['shieldJammer', 'hangarBreach', 'ecmPod'];
+const ALL_TOOLS = ['signal_jammer', 'breach_cutter', 'holo_decoy'];
 
 // Initial State Generator
 const createInitialState = (): WaveData[] => {
@@ -87,13 +87,29 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
     const [selectedItem, setSelectedItem] = useState<{ type: ItemType, id: string } | null>(null);
     const [placementAmount, setPlacementAmount] = useState<number | 'max'>('max');
 
+    // Calculate available tools from Planet props
+    const availableTools = useMemo(() => {
+        const map: Record<string, number> = {};
+        if (fromPlanet.tools) {
+            fromPlanet.tools.forEach(t => {
+                if (ALL_TOOLS.includes(t.toolType)) {
+                    map[t.toolType] = t.count;
+                }
+            });
+        }
+        return map;
+    }, [fromPlanet]);
+
     // Calculate specific totals used
-    const usedUnits = useMemo(() => {
+    const usedTotals = useMemo(() => {
         const used: Record<string, number> = {};
         waves.forEach(w => {
             ['left', 'front', 'right'].forEach((l: any) => {
                 const lane = w.lanes[l as Lane];
                 lane.unitSlots.forEach(s => {
+                    if (s.itemId) used[s.itemId] = (used[s.itemId] || 0) + s.count;
+                });
+                lane.toolSlots.forEach(s => {
                     if (s.itemId) used[s.itemId] = (used[s.itemId] || 0) + s.count;
                 });
             });
@@ -114,12 +130,12 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
             const next = JSON.parse(JSON.stringify(prev));
             const slot = next[waveIdx].lanes[lane][slotType][slotIdx];
 
-            const currentGlobalUsed = usedUnits[selectedItem.id] || 0;
-            const totalAvailable = availableUnits[selectedItem.id] || 0;
-            const isTool = selectedItem.type === 'tool';
-            const effectiveAvailable = isTool ? 999999 : totalAvailable;
+            const currentGlobalUsed = usedTotals[selectedItem.id] || 0;
+            const totalAvailable = selectedItem.type === 'unit'
+                ? (availableUnits[selectedItem.id] || 0)
+                : (availableTools[selectedItem.id] || 0);
 
-            const remainingGlobal = Math.max(0, effectiveAvailable - currentGlobalUsed);
+            const remainingGlobal = Math.max(0, totalAvailable - currentGlobalUsed);
 
             if (slot.itemId === selectedItem.id) {
                 // Adding to existing slot
@@ -166,14 +182,10 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
 
     const handleLaunch = () => {
         // 1. Compile Final Units Total (Soldiers Only)
-        // We must rebuild `finalUnits` from the *latest* waves state to be sure, 
-        // but `usedUnits` is memoized so it works.
-        // Filter to only soldiers for API compatibility on 'units' field if backend doesn't filter tools.
-
         const finalSoldierUnits: Record<string, number> = {};
-        Object.keys(usedUnits).forEach(k => {
+        Object.keys(usedTotals).forEach(k => {
             if (ALL_UNITS.includes(k)) {
-                finalSoldierUnits[k] = usedUnits[k];
+                finalSoldierUnits[k] = usedTotals[k];
             }
         });
 
@@ -308,7 +320,7 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                         <div className="palette-grid">
                             {ALL_UNITS.map(u => {
                                 const avail = availableUnits[u] || 0;
-                                const used = usedUnits[u] || 0;
+                                const used = usedTotals[u] || 0;
                                 const remaining = Math.max(0, avail - used);
 
                                 return (
@@ -331,19 +343,25 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                     <div className="palette-section">
                         <h3>Tactical Modules</h3>
                         <div className="palette-grid">
-                            {ALL_TOOLS.map(t => (
-                                <div
-                                    key={t}
-                                    className={`palette-item ${selectedItem?.id === t ? 'selected' : ''}`}
-                                    onClick={() => setSelectedItem({ type: 'tool', id: t })}
-                                >
-                                    <img src={TOOL_ICONS[t]} alt={t} />
-                                    <div className="p-info">
-                                        <div className="p-name">{t}</div>
-                                        <div className="p-count">∞</div>
+                            {ALL_TOOLS.map(t => {
+                                const avail = availableTools[t] || 0;
+                                const used = usedTotals[t] || 0;
+                                const remaining = Math.max(0, avail - used);
+
+                                return (
+                                    <div
+                                        key={t}
+                                        className={`palette-item ${selectedItem?.id === t ? 'selected' : ''} ${remaining <= 0 ? 'disabled' : ''}`}
+                                        onClick={() => remaining > 0 && setSelectedItem({ type: 'tool', id: t })}
+                                    >
+                                        <img src={TOOL_ICONS[t]} alt={t} />
+                                        <div className="p-info">
+                                            <div className="p-name">{t.replace('_', ' ')}</div>
+                                            <div className="p-count">{remaining}</div>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
 

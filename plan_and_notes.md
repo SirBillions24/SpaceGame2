@@ -59,7 +59,10 @@ It is built on a modern stack using **React (Vite)** for the frontend and **Node
     2.  **Select Target**: Click ENEMY planet -> Banner opens.
     3.  **Fleet Ops**: Click "Fleet Ops" to open the Attack Window (`FleetPanel`).
     4.  **Launch**: Assign units to lanes and click "Launch Fleet".
-*   **Global HUD**: Always-on display of resources and total troops.
+*   **Global HUD**:
+    *   **Features**: Displays Level (badge), XP Bar, Resources (Carbon, Titanium, Food), Credits, Rubies.
+    *   **Status**: Basic implementation exists (GlobalHUD.tsx), needs backend wiring for real data.
+    *   **Stability**: "System Stability" bar (Public Order) is already visualized.
 *   **Travel Overview**: Track active fleet movements.
 
 ## Roadmap
@@ -75,21 +78,38 @@ It is built on a modern stack using **React (Vite)** for the frontend and **Node
 *   [ ] **Battle Reports**: Generate and display detailed reports after combat.
 *   [ ] **Looting**: Steal resources upon victory.
 
-### Phase 3: Progression
-*   [ ] **Titles & Honor**: Gain Honor from battles to unlock Titles (documented in `design_titles_and_honor.md`).
-*   [ ] **NPC Expansion**: More aggressive Pirate Bases.
+### Phase 3: Core Systems Integration (Data & Economy)
+*   [ ] **Core Data**: Update Schema for XP, Levels, Credits, Stability, Tools.
+*   [ ] **Economy V2**:
+    *   **Stability**: Monitor production modifiers.
+    *   **Food Upkeep**: 4 Food/hr per Unit.
+    *   **Desertion**: Rigid proportional removal of *all* troop types if Food < 0.
 
-### Phase 4: Advanced Economy (GGE Parity)
-*   **Currency Overhaul**:
-    *   Units cost **Credits** (Coins) instead of Carbon/Titanium.
-    *   Carbon/Titanium reserved for Buildings/Construction.
-*   ** Buildings**:
-    *   **Hydroponics**: Dedicated food production (farm).
-    *   **Food Stores**: Increase food storage capacity (Granary).
-*   **NPC Economy**:
-    *   Attacking NPCs yields **Credits** (Gold Farming mechanic).
+### Phase 4: Progression & Command Infrastructure
+*   [ ] **Player Leveling**:
+    *   Backend tracking of XP/Level.
+    *   **HUD**: Real-time display of Level, XP, Credits, Food Delta.
+*   [ ] **Command Infrastructure**:
+    *   **Naval Academy** (Encampment): Unlocks Admirals & increases Fleet Cap. (Ref: `encampment.md`)
+    *   **Intelligence Hub** (Tavern): Unlocks Spies. (Ref: `tavern.md`)
+    *   **Holo-Monument** (Decoration): Boosts Stability.
+
+### Phase 5: Industrial Warfare (Tools & Manufacturing)
+*   [ ] **Workshops**:
+    *   **Systems Workshop** (Defense): Crafts Auto-Turrets, Blast Doors. (Ref: `defense_workshop.md`)
+    *   **Munitions Factory** (Siege): Crafts Signal Jammers, Breach Cutters. (Ref: `siege_workshop.md`)
+*   [ ] **Manufacturing Queue**: Time-based crafting for tools using Carbon/Titanium.
+
+### Phase 6: Combat V2 & PVE Expansion
+*   [ ] **Combat Engine Upgrade**:
+    *   Integrate Real Tools (DB-backed) into `combatService`.
+    *   Apply Tool Effects (Wall/Gate/Range modifications).
+*   [ ] **Raider Bases** (NPCs):
+    *   Scaling Levels 1-80 with "Variations".
+    *   Loot Tables: Credits, Rubies, Resources.
 
 ## Developer Notes
 *   **Resources**: Stored in `Planet` model but lazy-updated based on `lastResourceUpdate`.
-*   **Upgrades**: When an upgrade finishes, the building level increments automatically.
-*   **Defense**: Layout is stored in `DefenseLayout` model as JSON blobs (`frontLaneJson`, etc.).
+*   **Recruitment**: NOW handled by **Training Depot** (formerly Barracks).
+*   **Defense**: Layout is stored in `DefenseLayout` model as JSON blobs.
+*   **Documentation**: Always cross-reference `Mechanics Documetation` for formulas.
