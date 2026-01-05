@@ -19,6 +19,17 @@ export interface Planet {
   isNpc?: boolean;
   npcLevel?: number;
   createdAt: string;
+  stats?: {
+    carbonRate: number;
+    titaniumRate: number;
+    foodRate: number;
+    foodConsumption: number;
+    netFoodRate: number;
+    creditRate: number;
+    population: number;
+    publicOrder: number;
+    productivity: number;
+  };
 }
 
 export interface WorldPlanetsResponse {
@@ -248,6 +259,33 @@ export const api = {
     }
     return response.json();
   },
+
+  async moveBuilding(planetId: string, buildingId: string, x: number, y: number) {
+    const response = await fetch(`${API_BASE_URL}/actions/move`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId, buildingId, x, y }),
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Failed to move building');
+    }
+    return response.json();
+  },
+
+  async updateTaxRate(planetId: string, taxRate: number) {
+    const response = await fetch(`${API_BASE_URL}/actions/tax`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId, taxRate }),
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Failed to update tax rate');
+    }
+    return response.json();
+  },
+
   async getMe() {
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
       method: 'GET',

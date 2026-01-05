@@ -115,6 +115,88 @@ async function generatePlanetPosition(quadrant?: 'NW' | 'NE' | 'SW' | 'SE'): Pro
  * Lazy Resource Evaluation:
  * Syncs resources based on time elapsed since last update.
  */
+import { UNIT_STATS, DWELLING_STATS_GGE, BASE_PRODUCTION } from '../constants/mechanics';
+
+/**
+ * Lazy Resource Evaluation:
+ * Syncs resources based on time elapsed since last update.
+ */
+/**
+ * Calculate resource rates and stats for a planet
+ */
+export function calculatePlanetRates(planet: any) {
+  let carbonLevel = 0;
+  let titaniumLevel = 0;
+  let foodLevel = 0;
+  let population = 0;
+  let dwellingPenalty = 0;
+  let decorationBonus = 0;
+
+  // Process Buildings
+  if (planet.buildings) {
+    for (const b of planet.buildings) {
+      if (b.status === 'active' || b.status === 'upgrading') {
+        if (b.type === 'carbon_processor') carbonLevel += b.level;
+        if (b.type === 'titanium_extractor') titaniumLevel += b.level;
+        if (b.type === 'hydroponics') foodLevel += b.level;
+
+        if (b.type === 'housing_unit') {
+          const stats = DWELLING_STATS_GGE[b.level as keyof typeof DWELLING_STATS_GGE] || DWELLING_STATS_GGE[1];
+          population += stats.pop;
+          dwellingPenalty += stats.poPenalty;
+        }
+
+        if (b.type === 'monument') {
+          decorationBonus += (b.level * 50);
+        }
+      }
+    }
+  }
+
+  // Stability logic
+  const taxPenalty = (planet.taxRate || 10) * 2;
+  const publicOrder = decorationBonus - dwellingPenalty - taxPenalty;
+
+  // Productivity logic
+  let productivity = 100;
+  if (publicOrder >= 0) {
+    productivity = (Math.sqrt(publicOrder) * 2) + 100;
+  } else {
+    productivity = 100 * (100 / (100 + 2 * Math.sqrt(Math.abs(publicOrder))));
+  }
+  const prodMult = productivity / 100;
+
+  // Production Rates
+  const LEVEL_MULTIPLIER = 50;
+  const carbonRate = (BASE_PRODUCTION + (carbonLevel * LEVEL_MULTIPLIER)) * prodMult;
+  const titaniumRate = (BASE_PRODUCTION + (titaniumLevel * LEVEL_MULTIPLIER)) * prodMult;
+  const foodRate = (BASE_PRODUCTION + (foodLevel * LEVEL_MULTIPLIER)) * prodMult;
+
+  // Consumption
+  let foodConsumption = 0;
+  if (planet.units) {
+    planet.units.forEach((u: any) => {
+      const stats = UNIT_STATS[u.unitType];
+      const upkeep = stats ? stats.upkeep : 1;
+      foodConsumption += (u.count * upkeep);
+    });
+  }
+
+  const creditRate = population * ((planet.taxRate || 10) / 100) * 5;
+
+  return {
+    carbonRate,
+    titaniumRate,
+    foodRate,
+    foodConsumption,
+    netFoodRate: foodRate - foodConsumption,
+    creditRate,
+    population,
+    publicOrder,
+    productivity
+  };
+}
+
 export async function syncPlanetResources(planetId: string) {
   const planet = await prisma.planet.findUnique({
     where: { id: planetId },
@@ -133,13 +215,11 @@ export async function syncPlanetResources(planetId: string) {
   const diffHours = diffMs / (1000 * 60 * 60);
 
   // 1. Check Construction Status
-  // If a building is constructing/upgrading, finish it.
+  let activeBuildingFinished = false;
   if (planet.activeBuildId && planet.buildFinishTime && planet.buildFinishTime <= now) {
-    // Check if it was an upgrade or new construction
     const building = planet.buildings.find(b => b.id === planet.activeBuildId);
     if (building) {
       const isUpgrade = building.status === 'upgrading';
-
       await prisma.building.update({
         where: { id: planet.activeBuildId },
         data: {
@@ -147,133 +227,88 @@ export async function syncPlanetResources(planetId: string) {
           level: isUpgrade ? { increment: 1 } : undefined
         }
       });
+      // Handle Shield Generator Unlock Hook
+      if (building.type === 'shield_generator') {
+        await prisma.planet.update({
+          where: { id: planetId },
+          data: { defensiveGridLevel: { increment: 1 } }
+        });
+      }
     }
 
-    // Clear build slot
     await prisma.planet.update({
       where: { id: planetId },
       data: { isBuilding: false, activeBuildId: null, buildFinishTime: null }
     });
-    // Refresh
+
+    // Quick refresh of building list locally for calculations
     const builtBuilding = await prisma.building.findUnique({ where: { id: planet.activeBuildId } });
     if (builtBuilding) {
-      // Update the local building in memory for resource calc?
-      // Easiest to just re-fetch planet lightly or patch local array
+      // Find and update local building
       const bIndex = planet.buildings.findIndex(b => b.id === builtBuilding.id);
-      if (bIndex !== -1) planet.buildings[bIndex] = builtBuilding;
+      if (bIndex !== -1) planet.buildings[bIndex] = builtBuilding as any;
     }
   }
 
-  // Calculate Production Sums
-  let carbonLevel = 0;
-  let titaniumLevel = 0;
-  let foodLevel = 0;
+  // Calculate Rates using helper
+  const stats = calculatePlanetRates(planet);
 
-  for (const b of planet.buildings) {
-    if (b.status === 'active' || b.status === 'upgrading') {
-      if (b.type === 'carbon_processor') carbonLevel += b.level;
-      if (b.type === 'titanium_extractor') titaniumLevel += b.level;
-      if (b.type === 'hydroponics') foodLevel += b.level;
-    }
-  }
+  // 3. Apply Resource Changes
+  let newCarbon = planet.carbon + (stats.carbonRate * diffHours);
+  let newTitanium = planet.titanium + (stats.titaniumRate * diffHours);
+  let newFood = planet.food + (stats.foodRate * diffHours);
 
-  // Add Base (Command Center equiv) or just base 1
-  // If they have no buildings, should they produce? Yes, base rate.
+  // Apply Consumption
+  const consumed = stats.foodConsumption * diffHours;
+  newFood -= consumed;
 
-  // STABILITY MODIFIER
-  // 100 Stability = 100% Production.
-  // 0 Stability = 0% Production? Or just reduced? GGE usually has linear scaling.
-  // Let's assume linear for now: Production * (Stability / 100).
-  const stabilityMult = Math.max(0, planet.stability / 100);
+  // 6. Desertion Logic
+  if (newFood < 0 && stats.foodConsumption > 0) {
+    console.log(`[Desertion] Planet ${planet.name} ran out of food.`);
 
-  const carbonRate = (BASE_PRODUCTION_RATE + (carbonLevel * LEVEL_MULTIPLIER)) * stabilityMult;
-  const titaniumRate = (BASE_PRODUCTION_RATE + (titaniumLevel * LEVEL_MULTIPLIER)) * stabilityMult;
-  const foodRate = (BASE_PRODUCTION_RATE + (foodLevel * LEVEL_MULTIPLIER)) * stabilityMult;
+    const sustainableUpkeep = Math.max(0, stats.foodRate);
 
-  // Calculate Gains
-  let newCarbon = planet.carbon + (carbonRate * diffHours);
-  let newTitanium = planet.titanium + (titaniumRate * diffHours);
-  let newFood = planet.food + (foodRate * diffHours);
+    if (stats.foodConsumption > sustainableUpkeep) {
+      const deficitRatio = sustainableUpkeep / stats.foodConsumption;
 
-  // Apply Unit Upkeep (Food)
-  // New Upkeep: 4 per unit per hour
-  const FOOD_PER_UNIT = 4;
-  const totalUnits = planet.units.reduce((sum, u) => sum + u.count, 0);
-  const upkeep = totalUnits * FOOD_PER_UNIT * diffHours;
-  newFood -= upkeep;
-
-  // DESERTION LOGIC
-  // If Food < 0, troops desert until consumption <= production.
-  if (newFood < 0 && totalUnits > 0) {
-    // Calculate how many units we can feed
-    // Sustainable = FoodRate / 4
-    const sustainableUnits = Math.floor(foodRate / FOOD_PER_UNIT);
-
-    if (sustainableUnits < totalUnits) {
-      const unitsToRemove = totalUnits - sustainableUnits;
-      const removalRatio = unitsToRemove / totalUnits;
-
-      console.log(`[Desertion] Planet ${planet.name}: Food ${newFood.toFixed(0)}, Removing ${unitsToRemove} units (${(removalRatio * 100).toFixed(1)}%)`);
-
-      // Remove proportionally
-      for (const unit of planet.units) {
-        if (unit.count > 0) {
-          const desertingParams = Math.ceil(unit.count * removalRatio);
-          const survivors = Math.max(0, unit.count - desertingParams);
-
-          // Update DB
-          await prisma.planetUnit.update({
-            where: { id: unit.id },
-            data: { count: survivors }
-          });
-
-          // Update local object for return
-          unit.count = survivors;
+      for (const u of planet.units) {
+        if (u.count > 0) {
+          const newCount = Math.floor(u.count * deficitRatio);
+          if (newCount !== u.count) {
+            await prisma.planetUnit.update({
+              where: { id: u.id },
+              data: { count: newCount }
+            });
+            u.count = newCount;
+          }
         }
       }
-
-      // Reset food to 0 (they ate everything and left)
-      newFood = 0;
     }
+    newFood = 0;
   }
 
-  // Process Recruitment Queue (Lazy Eval)
+  // Credits
+  let newCredits = planet.credits + (stats.creditRate * diffHours);
+
+  // 7. Queue Processing
   if (planet.recruitmentQueue) {
     try {
       const queue = JSON.parse(planet.recruitmentQueue);
       if (Array.isArray(queue) && queue.length > 0) {
-        // Simple logic: If finishTime passed, add units.
-        // For MVP, we'll just check the head of the queue.
-        // A robust system would loop through all completed items.
-        // Note: Resources were paid upfront.
-
         const nowMs = now.getTime();
         const pendingQueue = [];
-
         for (const batch of queue) {
           const finishTime = new Date(batch.finishTime).getTime();
           if (finishTime <= nowMs) {
-            // Add units
             await prisma.planetUnit.upsert({
-              where: {
-                planetId_unitType: {
-                  planetId: planet.id,
-                  unitType: batch.unit,
-                }
-              },
+              where: { planetId_unitType: { planetId: planet.id, unitType: batch.unit } },
               update: { count: { increment: batch.count } },
-              create: {
-                planetId: planet.id,
-                unitType: batch.unit,
-                count: batch.count,
-              }
+              create: { planetId: planet.id, unitType: batch.unit, count: batch.count }
             });
           } else {
             pendingQueue.push(batch);
           }
         }
-
-        // Update queue in DB if changed
         if (pendingQueue.length !== queue.length) {
           await prisma.planet.update({
             where: { id: planet.id },
@@ -281,24 +316,24 @@ export async function syncPlanetResources(planetId: string) {
           });
         }
       }
-    } catch (e) {
-      console.error('Failed to process recruitment queue', e);
-    }
+    } catch (e) { console.error(e); }
   }
 
-  // Process Manufacturing Queue
   await processManufacturingQueue(planet);
 
-  // Update Database
+  // 8. Final DB Update
   const updatedPlanet = await prisma.planet.update({
     where: { id: planetId },
     data: {
       carbon: newCarbon,
       titanium: newTitanium,
       food: newFood,
+      credits: newCredits,
+      stability: Math.round(stats.publicOrder),
+      population: stats.population,
       lastResourceUpdate: now,
     },
-    include: { units: true, buildings: true, tools: true }, // Return units for correct reducing in API
+    include: { units: true, buildings: true, tools: true },
   });
 
   return updatedPlanet;
@@ -334,7 +369,9 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
     'tavern': 2,           // Intelligence Hub
     'defense_workshop': 2, // Systems Workshop
     'siege_workshop': 2,   // Munitions Factory
-    'monument': 1          // Holo-Monument
+    'monument': 1,         // Holo-Monument
+    'housing_unit': 2,     // Sci-fi Dwelling
+    'shield_generator': 2, // Defensive Grid
   };
   const size = BUILDING_SIZES[type] || 2;
 
@@ -561,3 +598,63 @@ export async function recruitUnit(planetId: string, unitType: string, count: num
 }
 
 
+
+/**
+ * Move a building to a new location
+ */
+export async function moveBuilding(planetId: string, buildingId: string, newX: number, newY: number) {
+  const planet = await prisma.planet.findUnique({
+    where: { id: planetId },
+    include: { buildings: true }
+  });
+  if (!planet) throw new Error('Planet not found');
+
+  const building = planet.buildings.find(b => b.id === buildingId);
+  if (!building) throw new Error('Building not found');
+
+  if (planet.isBuilding) {
+    // Optional: Does moving require construction slot? GGE usually allows moving freely or with small timer.
+    // User requested "Move Mode ... freely relocate".
+    // So distinct from construction.
+  }
+
+  // Check Bounds
+  if (newX < 0 || newX >= planet.gridSize || newY < 0 || newY >= planet.gridSize) {
+    throw new Error('Position out of bounds');
+  }
+
+  // Define Sizes (Duplicate - should refactor to constant)
+  const BUILDING_SIZES: any = {
+    'carbon_processor': 2,
+    'titanium_extractor': 2,
+    'hydroponics': 2,
+    'academy': 3,
+    'colony_hub': 4,
+    'tavern': 2,
+    'defense_workshop': 2,
+    'siege_workshop': 2,
+    'monument': 1,
+    'housing_unit': 2,
+    'shield_generator': 2
+  };
+  const size = BUILDING_SIZES[building.type] || 2;
+
+  // Check Collision (Exclude self)
+  for (const b of planet.buildings) {
+    if (b.id === building.id) continue; // Skip self
+
+    const bSize = BUILDING_SIZES[b.type] || 2;
+    if (newX < b.x + bSize && newX + size > b.x &&
+      newY < b.y + bSize && newY + size > b.y) {
+      throw new Error(`Space occupied by ${b.type}`);
+    }
+  }
+
+  // Update DB
+  const updated = await prisma.building.update({
+    where: { id: buildingId },
+    data: { x: newX, y: newY }
+  });
+
+  return updated;
+}

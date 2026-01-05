@@ -125,3 +125,4 @@ router.get('/battles/:id', authenticateToken, async (req: AuthRequest, res: Resp
 
 export default router;
 
+

@@ -42,7 +42,8 @@ model Planet {
   titanium    Int      @default(500) // Advanced material
   food        Int      @default(500) // Nutrient Paste (Upkeep)
   credits     Int      @default(100)
-  stability   Int      @default(100) // Public Order (0-200+, 100 is neutral)
+  stability   Int      @default(0) // Public Order (0 is neutral, negative is bad)
+  taxRate     Int      @default(10) // Percentage? Or GGE Index? Let's use % for now.
   population  Int      @default(100)
   
   // NPC / PVE

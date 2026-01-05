@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
-import { syncPlanetResources } from '../services/planetService';
+import { syncPlanetResources, calculatePlanetRates } from '../services/planetService';
 
 const router = Router();
 
@@ -115,6 +115,7 @@ router.get('/planet/:id', async (req: Request, res: Response) => {
       manufacturingQueue: syncedPlanet.manufacturingQueue ? JSON.parse(syncedPlanet.manufacturingQueue as any) : [],
       tools: (syncedPlanet as any).tools || [],
       createdAt: syncedPlanet.createdAt,
+      stats: calculatePlanetRates(syncedPlanet)
     });
   } catch (error) {
     console.error('Error fetching planet:', error);

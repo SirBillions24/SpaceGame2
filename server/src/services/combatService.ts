@@ -697,3 +697,4 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     resourcesJson: lootJson
   };
 }
+

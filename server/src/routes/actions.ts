@@ -8,7 +8,7 @@ import {
   validateUnitsAvailable,
   deductUnits,
 } from '../services/fleetService';
-import { placeBuilding, recruitUnit, spawnPlanet } from '../services/planetService';
+import { placeBuilding, recruitUnit, spawnPlanet, moveBuilding } from '../services/planetService';
 
 const router = Router();
 
@@ -356,6 +356,64 @@ router.post('/manufacture', authenticateToken, async (req: AuthRequest, res: Res
 
   } catch (error) {
     console.error('Manufacture error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// Move a building
+router.post('/move', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { planetId, buildingId, x, y } = req.body;
+
+    if (!planetId || !buildingId || x === undefined || y === undefined) {
+      return res.status(400).json({ error: 'Missing parameters' });
+    }
+
+    const ownsPlanet = await validatePlanetOwnership(userId, planetId);
+    if (!ownsPlanet) {
+      return res.status(403).json({ error: 'You do not own this planet' });
+    }
+
+    const result = await moveBuilding(planetId, buildingId, x, y);
+    res.json({ message: 'Building moved', building: result });
+
+  } catch (err: any) {
+    console.error('Move error:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Update Tax Rate
+router.post('/tax', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { planetId, taxRate } = req.body;
+
+    if (!planetId || taxRate === undefined) {
+      return res.status(400).json({ error: 'Missing parameters' });
+    }
+
+    const rate = parseInt(taxRate);
+    if (isNaN(rate) || rate < 0 || rate > 100) {
+      return res.status(400).json({ error: 'Invalid tax rate (0-100)' });
+    }
+
+    const ownsPlanet = await validatePlanetOwnership(userId, planetId);
+    if (!ownsPlanet) {
+      return res.status(403).json({ error: 'You do not own this planet' });
+    }
+
+    const planet = await prisma.planet.update({
+      where: { id: planetId },
+      data: { taxRate: rate }
+    });
+
+    res.json({ message: 'Tax rate updated', taxRate: planet.taxRate });
+
+  } catch (err: any) {
+    console.error('Tax error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

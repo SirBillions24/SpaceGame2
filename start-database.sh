@@ -19,3 +19,4 @@ echo "✅ Done! Database should be ready."
 echo "Now try registering again in your browser!"
 
 
+

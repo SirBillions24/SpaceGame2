@@ -18,7 +18,9 @@ const BUILDING_SIZES: Record<string, number> = {
   'tavern': 2,
   'defense_workshop': 2,
   'siege_workshop': 2,
-  'monument': 1
+  'monument': 1,
+  'housing_unit': 2,
+  'shield_generator': 2
 };
 
 const BUILDING_LABELS: Record<string, string> = {
@@ -30,7 +32,9 @@ const BUILDING_LABELS: Record<string, string> = {
   'tavern': 'Intelligence Hub',
   'defense_workshop': 'Systems Workshop',
   'siege_workshop': 'Munitions Factory',
-  'monument': 'Holo-Monument'
+  'monument': 'Holo-Monument',
+  'housing_unit': 'Residential Block',
+  'shield_generator': 'Defensive Grid'
 };
 
 const BUILDING_COSTS: Record<string, { c: number, t: number }> = {
@@ -42,7 +46,9 @@ const BUILDING_COSTS: Record<string, { c: number, t: number }> = {
   'tavern': { c: 300, t: 200 },
   'defense_workshop': { c: 400, t: 300 },
   'siege_workshop': { c: 400, t: 300 },
-  'monument': { c: 500, t: 0 } // Costs Carbon only? Should assume some cost.
+  'monument': { c: 500, t: 0 },
+  'housing_unit': { c: 150, t: 0 },
+  'shield_generator': { c: 500, t: 1000 }
 };
 
 const UNIT_COSTS: any = {
@@ -58,6 +64,8 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
   // Interaction State
   const [hoveredTile, setHoveredTile] = useState<{ x: number, y: number } | null>(null);
   const [buildMode, setBuildMode] = useState<string | null>(null); // Building Type
+  const [moveMode, setMoveMode] = useState<boolean>(false);
+  const [movingBuildingId, setMovingBuildingId] = useState<string | null>(null);
   const [showUpgradeMenu, setShowUpgradeMenu] = useState<{ building: any } | null>(null);
   const [recruitSelection, setRecruitSelection] = useState<string>('marine');
   const [recruitCount, setRecruitCount] = useState<number>(10);
@@ -138,14 +146,23 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
   const isOccupied = (x: number, y: number) => occupiedMap.has(`${x},${y}`);
 
   // Placement Check Logic
-  const canPlaceAt = (x: number, y: number, type: string) => {
+  const canPlaceAt = (x: number, y: number, type: string, ignoreId?: string) => {
     const size = BUILDING_SIZES[type] || 2;
     // Bounds
     if (x + size > 10 || y + size > 10) return false;
     // Overlap
     for (let dx = 0; dx < size; dx++) {
       for (let dy = 0; dy < size; dy++) {
-        if (isOccupied(x + dx, y + dy)) return false;
+        // Check collision, but ignore 'ignoreId' if provided
+        // We need to check if the occupied map has something *other* than us.
+        // Simplest: Iterate buildings directly instead of using occupiedMap for complex checks, OR rebuild map excluding us?
+        // Re-iterating is safer for "exclude".
+        const blocking = buildings.find(b => {
+          if (ignoreId && b.id === ignoreId) return false;
+          const bSize = BUILDING_SIZES[b.type] || 2;
+          return (x + dx >= b.x && x + dx < b.x + bSize && y + dy >= b.y && y + dy < b.y + bSize);
+        });
+        if (blocking) return false;
       }
     }
     return true;
@@ -154,6 +171,55 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
   // Handlers
   const handleTileClick = async (x: number, y: number) => {
     if (!isOwner) return;
+
+    // Move Mode Logic
+    if (moveMode) {
+      if (movingBuildingId) {
+        // Attempt place
+        try {
+          // Check validity first (client-side)
+          // We need to know which building type it is to check sizing
+          const movingB = buildings.find(b => b.id === movingBuildingId);
+          if (movingB) {
+            // Temporarily remove moving building from occupied map for check?
+            // "canPlaceAt" checks occupiedMap.
+            // We should check collision excluding self.
+            // Simplified: just try call API, let server valid.
+            // Or precise check:
+            const size = BUILDING_SIZES[movingB.type] || 2;
+            // Validate bounds
+            if (x + size > 10 || y + size > 10) return;
+
+            // Check Collision ignoring self
+            if (!canPlaceAt(x, y, movingB.type, movingB.id)) return;
+
+            await api.moveBuilding(planet.id, movingBuildingId, x, y);
+            setMovingBuildingId(null);
+            setMoveMode(false); // Auto-exit move mode after placement? Or stay? User might want to move multiple.
+            // User said "if I click back on the building it cancels". 
+            // Current logic: "if movingBuildingId ... else setMovingBuildingId".
+            // If I click same building, I am in "else" block? No, I am in "movingBuildingId" block if it's set.
+            // Wait. If I click (x,y) and building is there. "canPlaceAt" usually handles.
+            // Issue is my "canPlaceAt" logic above.
+            // Also, if I click the *same* spot, I am placing it where it is. That's a no-op move.
+
+            loadPlanetData();
+          }
+        } catch (e: any) { alert(e.message); }
+      } else {
+        // Select building to move
+        const building = buildings.find(b => {
+          const size = BUILDING_SIZES[b.type] || 2;
+          return x >= b.x && x < b.x + size && y >= b.y && y < b.y + size;
+        });
+
+        // If we clicked a building, pick it up.
+        if (building) {
+          setMovingBuildingId(building.id);
+        }
+      }
+      return;
+    }
 
     if (buildMode) {
       // Attempt to build
@@ -248,7 +314,22 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
       <div className="planet-interior">
         <div className="planet-header">
           <h2>{planet.name}</h2>
-          <button className="close-btn" onClick={onClose}>×</button>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            {isOwner && (
+              <button
+                className={`recruit-btn ${moveMode ? 'active-mode' : ''}`}
+                style={{ backgroundColor: moveMode ? '#ff9800' : '#555' }}
+                onClick={() => {
+                  setMoveMode(!moveMode);
+                  setBuildMode(null);
+                  setMovingBuildingId(null);
+                }}
+              >
+                {moveMode ? (movingBuildingId ? 'Place Building' : 'Select to Move') : 'Move Buildings'}
+              </button>
+            )}
+            <button className="close-btn" onClick={onClose}>×</button>
+          </div>
         </div>
 
         <div className="planet-content">
@@ -263,6 +344,31 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
                 <span>Titanium: {resources?.titanium.toFixed(0)}</span>
                 <span className="res-rate">+{planetData?.production?.titanium}/h</span>
               </div>
+
+              {isOwner && (
+                <div className="resource-item" style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span>Tax Rate: {planetData?.taxRate ?? 10}%</span>
+                  <input
+                    type="range"
+                    min="0"
+                    type="range"
+                    min="0"
+                    max="50"
+                    value={planetData?.taxRate ?? 10}
+                    onChange={(e) => {
+                      // Optimistic update + debounce could be good, but simple direct for now
+                      const val = parseInt(e.target.value);
+                      // We need local update or debounce. Or just onMouseUp?
+                      // Let's use onMouseUp or just live update with simple api call (rate limit risk if spammed)
+                      // Better: Update state local, then effect or onBlur.
+                      // Implementing simple "Set" button or direct change
+                      api.updateTaxRate(planet.id, val).then(() => {
+                        setPlanetData(prev => prev ? { ...prev, taxRate: val } : null);
+                      });
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -277,7 +383,7 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
           {/* Build Dock */}
           {isOwner && (
             <div className="build-dock">
-              {['carbon_processor', 'titanium_extractor', 'hydroponics', 'academy', 'tavern', 'defense_workshop', 'siege_workshop', 'monument'].map(type => {
+              {['carbon_processor', 'titanium_extractor', 'hydroponics', 'housing_unit', 'academy', 'tavern', 'defense_workshop', 'siege_workshop', 'monument', 'shield_generator'].map(type => {
                 const cost = BUILDING_COSTS[type];
                 const canAfford = resources && resources.carbon >= cost.c && resources.titanium >= cost.t;
                 return (
