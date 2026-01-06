@@ -68,21 +68,7 @@ router.get('/planet/:id', async (req: Request, res: Response) => {
       return acc;
     }, {} as Record<string, number>);
 
-    // Aggregated Production Levels for UI summary
-    const production = {
-      carbon: 0,
-      titanium: 0,
-      food: 0
-    };
-    if ((syncedPlanet as any).buildings) {
-      (syncedPlanet as any).buildings.forEach((b: any) => {
-        if (b.status === 'active' || b.status === 'upgrading') {
-          if (b.type === 'carbon_processor') production.carbon += b.level;
-          if (b.type === 'titanium_extractor') production.titanium += b.level;
-          if (b.type === 'hydroponics') production.food += b.level;
-        }
-      });
-    }
+    const planetStats = calculatePlanetRates(syncedPlanet);
 
     res.json({
       id: syncedPlanet.id,
@@ -98,7 +84,11 @@ router.get('/planet/:id', async (req: Request, res: Response) => {
         food: syncedPlanet.food,
         credits: syncedPlanet.credits,
       },
-      production,
+      production: {
+        carbon: planetStats.carbonRate,
+        titanium: planetStats.titaniumRate,
+        food: planetStats.foodRate
+      },
       buildings: (syncedPlanet as any).buildings || [],
       gridSize: (syncedPlanet as any).gridSizeX || (syncedPlanet as any).gridSize || 10,
       gridSizeX: (syncedPlanet as any).gridSizeX || (syncedPlanet as any).gridSize || 10,
@@ -119,7 +109,7 @@ router.get('/planet/:id', async (req: Request, res: Response) => {
       defenseTurretsJson: (syncedPlanet as any).defenseTurretsJson,
       tools: (syncedPlanet as any).tools || [],
       createdAt: syncedPlanet.createdAt,
-      stats: calculatePlanetRates(syncedPlanet)
+      stats: planetStats
     });
   } catch (error) {
     console.error('Error fetching planet:', error);

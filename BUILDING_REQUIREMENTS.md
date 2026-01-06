@@ -139,3 +139,4 @@ Check building status by clicking on the building in your colony grid.
 
 
 
+

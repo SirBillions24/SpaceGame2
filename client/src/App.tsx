@@ -33,31 +33,42 @@ function App() {
     }
   }, []);
 
-  const checkUserStatus = () => {
+  // Periodic user & planet status check
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    
+    const interval = setInterval(() => {
+      checkUserStatus();
+    }, 10000); // Check every 10 seconds for XP/Level/Planet changes
+    
+    return () => clearInterval(interval);
+  }, [isLoggedIn, hudPlanet?.id]);
+
+  const checkUserStatus = (targetPlanetId?: string) => {
     // Fetch full user profile (with XP/Level)
     api.getMe().then(u => {
       setCurrentUser(u);
 
-      const user = getCurrentUser(); // Keep using token for ID if needed broadly logic
+      const user = getCurrentUser();
       if (user) {
+        // If we have a specific planet we're looking at, refresh that one specifically for the HUD
+        const planetToRefresh = targetPlanetId || hudPlanet?.id;
+        if (planetToRefresh) {
+          api.getPlanet(planetToRefresh).then(setHudPlanet).catch(console.error);
+        }
+
         api.getPlanets().then(data => {
           const myPlanets = data.planets.filter(p => p.ownerId === user.userId && !p.isNpc);
           if (myPlanets.length === 0) {
             setNeedsSpawn(true);
-          } else if (myPlanets.length === 1) {
-            setSourcePlanet(myPlanets[0]);
-            // Also fetch full details for HUD
-            api.getPlanet(myPlanets[0].id).then(setHudPlanet);
-          } else if (myPlanets.length > 0) {
-            // Default HUD to first planet
+          } else if (!hudPlanet) {
+            // Initial load of hud planet if none set
             api.getPlanet(myPlanets[0].id).then(setHudPlanet);
           }
         }).catch(e => console.error(e));
       }
     }).catch(e => {
       console.error("Failed to fetch user profile", e);
-      // Fallback if /me fails but token valid? Or logout?
-      // For now just log error.
     });
   };
 
@@ -171,6 +182,7 @@ function App() {
       {showPlanetInterior && selectedPlanet && (
         <PlanetInterior
           planet={selectedPlanet}
+          onUpdate={checkUserStatus}
           onClose={() => {
             setShowPlanetInterior(false);
             setSelectedPlanet(null);

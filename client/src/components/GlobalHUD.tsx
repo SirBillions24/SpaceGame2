@@ -85,7 +85,7 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                 <div className="res-group">
                     <div className="res-icon carbon-icon"></div>
                     <span className="res-val">{Math.floor(carbon).toLocaleString()}</span>
-                    <span className="res-rate-mini">+{stats?.carbonRate.toFixed(0)}/h</span>
+                    <span className="res-rate-mini">+{stats?.carbonRate.toFixed(2)}/h</span>
 
                     <div className="resource-dropdown carbon-dropdown">
                         <h5>Carbon Production</h5>
@@ -95,18 +95,18 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                         </div>
                         <div className="military-row">
                             <span className="unit-name">Buildings:</span>
-                            <span className="unit-count">+{Math.max(0, (stats?.carbonRate || 0) - (100 * (productivity / 100))).toFixed(0)}/h</span>
+                            <span className="unit-count">+{Math.max(0, (stats?.carbonRate || 0) - (100 * (productivity / 100))).toFixed(2)}/h</span>
                         </div>
                         <div className="military-row" style={{ borderTop: '1px solid #444', marginTop: '5px', paddingTop: '5px' }}>
                             <span className="unit-name">Total:</span>
-                            <span className="unit-count">+{stats?.carbonRate.toFixed(0)}/h</span>
+                            <span className="unit-count">+{stats?.carbonRate.toFixed(2)}/h</span>
                         </div>
                     </div>
                 </div>
                 <div className="res-group">
                     <div className="res-icon titanium-icon"></div>
                     <span className="res-val">{Math.floor(titanium).toLocaleString()}</span>
-                    <span className="res-rate-mini">+{stats?.titaniumRate.toFixed(0)}/h</span>
+                    <span className="res-rate-mini">+{stats?.titaniumRate.toFixed(2)}/h</span>
 
                     <div className="resource-dropdown titanium-dropdown">
                         <h5>Titanium Production</h5>
@@ -116,33 +116,33 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                         </div>
                         <div className="military-row">
                             <span className="unit-name">Buildings:</span>
-                            <span className="unit-count">+{Math.max(0, (stats?.titaniumRate || 0) - (100 * (productivity / 100))).toFixed(0)}/h</span>
+                            <span className="unit-count">+{Math.max(0, (stats?.titaniumRate || 0) - (100 * (productivity / 100))).toFixed(2)}/h</span>
                         </div>
                         <div className="military-row" style={{ borderTop: '1px solid #444', marginTop: '5px', paddingTop: '5px' }}>
                             <span className="unit-name">Total:</span>
-                            <span className="unit-count">+{stats?.titaniumRate.toFixed(0)}/h</span>
+                            <span className="unit-count">+{stats?.titaniumRate.toFixed(2)}/h</span>
                         </div>
                     </div>
                 </div>
                 <div className="res-group">
                     <div className="res-icon food-icon"></div>
                     <span className={`res-val ${foodNet < 0 ? 'warning' : ''}`}>{Math.floor(food).toLocaleString()}</span>
-                    <span className="res-rate-mini">{foodNet > 0 ? '+' : ''}{foodNet.toFixed(0)}/h</span>
+                    <span className="res-rate-mini">{foodNet > 0 ? '+' : ''}{foodNet.toFixed(2)}/h</span>
 
                     <div className="resource-dropdown food-dropdown">
                         <h5>Food Supply</h5>
                         <div className="military-row">
                             <span className="unit-name">Production:</span>
-                            <span className="unit-count">+{foodProd.toFixed(0)}/h</span>
+                            <span className="unit-count">+{foodProd.toFixed(2)}/h</span>
                         </div>
                         <div className="military-row">
                             <span className="unit-name">Consumption:</span>
-                            <span className="unit-count">-{foodCons.toFixed(0)}/h</span>
+                            <span className="unit-count">-{foodCons.toFixed(2)}/h</span>
                         </div>
                         <div className="military-row" style={{ borderTop: '1px solid #444', marginTop: '5px', paddingTop: '5px' }}>
                             <span className="unit-name">Net:</span>
                             <span className={`unit-count ${foodNet < 0 ? 'warning-text' : 'success-text'}`}>
-                                {foodNet > 0 ? '+' : ''}{foodNet.toFixed(0)}/h
+                                {foodNet > 0 ? '+' : ''}{foodNet.toFixed(2)}/h
                             </span>
                         </div>
                     </div>

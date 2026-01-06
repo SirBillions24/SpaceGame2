@@ -2,17 +2,13 @@ import prisma from '../lib/prisma';
 import { spawnPirateBases } from './pveService';
 import { processManufacturingQueue } from './toolService';
 import { processTurretQueue } from './turretService';
+import { UNIT_STATS, BASE_PRODUCTION } from '../constants/mechanics';
+import { BUILDING_DATA } from '../constants/buildingData';
+import { addXp } from './progressionService';
 
 const WORLD_SIZE_X = parseInt(process.env.WORLD_SIZE_X || '5000');
 const WORLD_SIZE_Y = parseInt(process.env.WORLD_SIZE_Y || '5000');
 const MIN_PLANET_DISTANCE = parseInt(process.env.MIN_PLANET_DISTANCE || '120'); // Increased to prevent visual overlap
-
-// Production constants
-const BASE_PRODUCTION_RATE = 100; // Per hour
-const LEVEL_MULTIPLIER = 50; // Extra per hour per level
-const UNIT_UPKEEP = 1; // Food per unit per hour
-const MAX_STORAGE_BASE = 1000;
-const STORAGE_LEVEL_MULTIPLIER = 500;
 
 interface UnitCounts {
   [unitType: string]: number;
@@ -116,39 +112,49 @@ async function generatePlanetPosition(quadrant?: 'NW' | 'NE' | 'SW' | 'SE'): Pro
  * Lazy Resource Evaluation:
  * Syncs resources based on time elapsed since last update.
  */
-import { UNIT_STATS, DWELLING_STATS_GGE, BASE_PRODUCTION } from '../constants/mechanics';
-
-/**
- * Lazy Resource Evaluation:
- * Syncs resources based on time elapsed since last update.
- */
 /**
  * Calculate resource rates and stats for a planet
  */
 export function calculatePlanetRates(planet: any) {
-  let carbonLevel = 0;
-  let titaniumLevel = 0;
-  let foodLevel = 0;
+  let carbonProduction = 0;
+  let titaniumProduction = 0;
+  let foodProduction = 0;
   let population = 0;
   let dwellingPenalty = 0;
   let decorationBonus = 0;
+  let maxStorage = 1000; // Base storage
 
   // Process Buildings
   if (planet.buildings) {
     for (const b of planet.buildings) {
       if (b.status === 'active' || b.status === 'upgrading') {
-        if (b.type === 'carbon_processor') carbonLevel += b.level;
-        if (b.type === 'titanium_extractor') titaniumLevel += b.level;
-        if (b.type === 'hydroponics') foodLevel += b.level;
+        const stats = BUILDING_DATA[b.type]?.levels[b.level];
+        if (stats) {
+          // Attach stats to building object for UI
+          (b as any).stats = stats;
+          
+          // Get next level stats for upgrade cost display
+          const nextLevelStats = BUILDING_DATA[b.type]?.levels[b.level + 1];
+          if (nextLevelStats) {
+            (b as any).nextUpgrade = nextLevelStats;
+          }
 
-        if (b.type === 'housing_unit') {
-          const stats = DWELLING_STATS_GGE[b.level as keyof typeof DWELLING_STATS_GGE] || DWELLING_STATS_GGE[1];
-          population += stats.pop;
-          dwellingPenalty += stats.poPenalty;
-        }
+          if (b.type === 'carbon_processor') carbonProduction += stats.production || 0;
+          if (b.type === 'titanium_extractor') titaniumProduction += stats.production || 0;
+          if (b.type === 'hydroponics') foodProduction += stats.production || 0;
 
-        if (b.type === 'monument') {
-          decorationBonus += (b.level * 50);
+          if (b.type === 'housing_unit') {
+            population += stats.population || 0;
+            dwellingPenalty += Math.abs(stats.stability || 0);
+          }
+
+          if (b.type === 'monument' || b.type === 'colony_hub') {
+            decorationBonus += stats.stability || 0;
+          }
+
+          if (b.type === 'storage_depot') {
+            maxStorage = Math.max(maxStorage, stats.storage || 1000);
+          }
         }
       }
     }
@@ -167,11 +173,10 @@ export function calculatePlanetRates(planet: any) {
   }
   const prodMult = productivity / 100;
 
-  // Production Rates
-  const LEVEL_MULTIPLIER = 50;
-  const carbonRate = (BASE_PRODUCTION + (carbonLevel * LEVEL_MULTIPLIER)) * prodMult;
-  const titaniumRate = (BASE_PRODUCTION + (titaniumLevel * LEVEL_MULTIPLIER)) * prodMult;
-  const foodRate = (BASE_PRODUCTION + (foodLevel * LEVEL_MULTIPLIER)) * prodMult;
+  // Production Rates (Base 100 + building production * productivity)
+  const carbonRate = (BASE_PRODUCTION + carbonProduction) * prodMult;
+  const titaniumRate = (BASE_PRODUCTION + titaniumProduction) * prodMult;
+  const foodRate = (BASE_PRODUCTION + foodProduction) * prodMult;
 
   // Consumption
   let foodConsumption = 0;
@@ -194,7 +199,8 @@ export function calculatePlanetRates(planet: any) {
     creditRate,
     population,
     publicOrder,
-    productivity
+    productivity,
+    maxStorage
   };
 }
 
@@ -216,11 +222,13 @@ export async function syncPlanetResources(planetId: string) {
   const diffHours = diffMs / (1000 * 60 * 60);
 
   // 1. Check Construction Status
-  let activeBuildingFinished = false;
   if (planet.activeBuildId && planet.buildFinishTime && planet.buildFinishTime <= now) {
     const building = planet.buildings.find(b => b.id === planet.activeBuildId);
     if (building) {
       const isUpgrade = building.status === 'upgrading';
+      const nextLevel = isUpgrade ? building.level + 1 : 1;
+      const stats = BUILDING_DATA[building.type]?.levels[nextLevel];
+
       await prisma.building.update({
         where: { id: planet.activeBuildId },
         data: {
@@ -228,6 +236,12 @@ export async function syncPlanetResources(planetId: string) {
           level: isUpgrade ? { increment: 1 } : undefined
         }
       });
+
+      // Award XP
+      if (stats && stats.xp) {
+        await addXp(planet.ownerId, stats.xp);
+      }
+
       // Handle Shield Generator Unlock Hook
       if (building.type === 'shield_generator') {
         await prisma.planet.update({
@@ -259,7 +273,14 @@ export async function syncPlanetResources(planetId: string) {
   let newTitanium = planet.titanium + (stats.titaniumRate * diffHours);
   let newFood = planet.food + (stats.foodRate * diffHours);
 
-  // Apply Consumption
+  // Clamp to Max Storage
+  newCarbon = Math.min(newCarbon, stats.maxStorage);
+  newTitanium = Math.min(newTitanium, stats.maxStorage);
+  newFood = Math.min(newFood, stats.maxStorage);
+
+  // Apply Consumption (Consumption happens AFTER production and clamping? 
+  // No, in GGE food can go to 0 regardless of storage cap. 
+  // Production fills the storage, but consumption takes from it.)
   const consumed = stats.foodConsumption * diffHours;
   newFood -= consumed;
 
@@ -360,29 +381,12 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
   }
 
   // Collision Check
-  // Assuming 2x2 for resource/academy for now (simplified from query plan)
-  // Actually, let's stick to 1x1 for MVP simplicity unless user specifically asked for multi-tile "fit".
-  // The user said "plot of land... fit a certain number... free space".
-  // Let's implement dynamic size check.
-  const BUILDING_SIZES: any = {
-    'carbon_processor': 2,
-    'titanium_extractor': 2,
-    'hydroponics': 2,
-    'academy': 3,
-    'colony_hub': 4,
-    'tavern': 2,           // Intelligence Hub
-    'defense_workshop': 2, // Systems Workshop
-    'siege_workshop': 2,   // Munitions Factory
-    'monument': 1,         // Holo-Monument
-    'housing_unit': 2,     // Sci-fi Dwelling
-    'shield_generator': 2, // Defensive Grid
-  };
-  const size = BUILDING_SIZES[type] || 2;
+  const size = BUILDING_DATA[type]?.size || 2;
 
   // Check collision with all existing buildings
   // Simple AABB
   for (const b of (planet as any).buildings) {
-    const bSize = BUILDING_SIZES[b.type] || 2;
+    const bSize = BUILDING_DATA[b.type]?.size || 2;
     // If rectangles overlap
     if (x < b.x + bSize && x + size > b.x &&
       y < b.y + bSize && y + size > b.y) {
@@ -396,10 +400,14 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
   }
 
   // It's a new building
-  const cost = 100; // Base cost for lvl 1
-  const time = 30; // Seconds
+  const stats = BUILDING_DATA[type]?.levels[1];
+  if (!stats) throw new Error(`Invalid building type: ${type}`);
 
-  if (planet.carbon < cost || planet.titanium < cost) {
+  const carbonCost = stats.cost.carbon;
+  const titaniumCost = stats.cost.titanium;
+  const time = stats.time;
+
+  if (planet.carbon < carbonCost || planet.titanium < titaniumCost) {
     throw new Error('Insufficient resources');
   }
 
@@ -422,8 +430,8 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
   await prisma.planet.update({
     where: { id: planet.id },
     data: {
-      carbon: { decrement: cost },
-      titanium: { decrement: cost },
+      carbon: { decrement: carbonCost },
+      titanium: { decrement: titaniumCost },
       isBuilding: true,
       activeBuildId: building.id,
       buildFinishTime: finishTime
@@ -434,13 +442,20 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
 }
 
 async function upgradeBuilding(planet: any, building: any) {
-  // Current Level
-  const level = building.level;
-  const cost = Math.floor(100 * Math.pow(1.5, level));
-  const time = 30 * (level + 1);
+  // Next Level
+  const nextLevel = building.level + 1;
+  const stats = BUILDING_DATA[building.type]?.levels[nextLevel];
+  
+  if (!stats) {
+    throw new Error(`Max level reached for ${building.type}`);
+  }
 
-  if (planet.carbon < cost || planet.titanium < cost) {
-    throw new Error(`Insufficient resources for upgrade to level ${level + 1}`);
+  const carbonCost = stats.cost.carbon;
+  const titaniumCost = stats.cost.titanium;
+  const time = stats.time;
+
+  if (planet.carbon < carbonCost || planet.titanium < titaniumCost) {
+    throw new Error(`Insufficient resources for upgrade to level ${nextLevel}`);
   }
 
   const finishTime = new Date();
@@ -456,8 +471,8 @@ async function upgradeBuilding(planet: any, building: any) {
   await prisma.planet.update({
     where: { id: planet.id },
     data: {
-      carbon: { decrement: cost },
-      titanium: { decrement: cost },
+      carbon: { decrement: carbonCost },
+      titanium: { decrement: titaniumCost },
       isBuilding: true,
       activeBuildId: building.id,
       buildFinishTime: finishTime
@@ -631,27 +646,14 @@ export async function moveBuilding(planetId: string, buildingId: string, newX: n
     throw new Error('Position out of bounds');
   }
 
-  // Define Sizes (Duplicate - should refactor to constant)
-  const BUILDING_SIZES: any = {
-    'carbon_processor': 2,
-    'titanium_extractor': 2,
-    'hydroponics': 2,
-    'academy': 3,
-    'colony_hub': 4,
-    'tavern': 2,
-    'defense_workshop': 2,
-    'siege_workshop': 2,
-    'monument': 1,
-    'housing_unit': 2,
-    'shield_generator': 2
-  };
-  const size = BUILDING_SIZES[building.type] || 2;
+  // Define Sizes
+  const size = BUILDING_DATA[building.type]?.size || 2;
 
   // Check Collision (Exclude self)
   for (const b of planet.buildings) {
     if (b.id === building.id) continue; // Skip self
 
-    const bSize = BUILDING_SIZES[b.type] || 2;
+    const bSize = BUILDING_DATA[b.type]?.size || 2;
     if (newX < b.x + bSize && newX + size > b.x &&
       newY < b.y + bSize && newY + size > b.y) {
       throw new Error(`Space occupied by ${b.type}`);

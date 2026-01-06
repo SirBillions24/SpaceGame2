@@ -233,3 +233,4 @@ export const ALL_GEAR_ITEMS: GearItemDefinition[] = [
 - **How to test?** Use scripts in `server/src/scripts/` to create gear
 - **Balance issues?** Check total bonuses don't exceed caps when all items equipped
 
+
