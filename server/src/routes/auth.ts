@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import { spawnPlanet } from '../services/planetService';
+import { giveStarterGear } from '../services/admiralService';
 
 const router = Router();
 
@@ -53,6 +54,15 @@ router.post('/register', async (req: Request, res: Response) => {
         passwordHash,
       },
     });
+
+    // Give starter gear to new user
+    try {
+      await giveStarterGear(user.id);
+      console.log(`✅ Gave starter gear to new user: ${user.username}`);
+    } catch (error) {
+      console.error('Error giving starter gear:', error);
+      // Don't fail registration if gear creation fails
+    }
 
     // Spawn starting planet REMOVED - Defer to Manual Spawn Selection
     // await spawnPlanet(user.id, username);

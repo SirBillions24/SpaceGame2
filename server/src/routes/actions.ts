@@ -8,7 +8,9 @@ import {
   validateUnitsAvailable,
   deductUnits,
 } from '../services/fleetService';
-import { placeBuilding, recruitUnit, spawnPlanet, moveBuilding } from '../services/planetService';
+import { placeBuilding, recruitUnit, spawnPlanet, moveBuilding, syncPlanetResources } from '../services/planetService';
+import { MAX_GRID_SIZE, EXPANSION_BASE_COST_CARBON, EXPANSION_BASE_COST_TITANIUM, EXPANSION_COST_MULTIPLIER, DEFENSE_TURRET_BUILD_TIME_SECONDS } from '../constants/mechanics';
+import { getDefenseTurrets, calculateDefenseCapacity } from '../services/defenseService';
 
 const router = Router();
 
@@ -31,6 +33,8 @@ interface FleetBody {
     plasmaGrenade?: boolean;
     autoTurret?: boolean;
   };
+  // Admiral assignment (optional)
+  admiralId?: string;
 }
 
 // Create a new fleet movement
@@ -62,6 +66,18 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
     const ownsPlanet = await validatePlanetOwnership(userId, fromPlanetId);
     if (!ownsPlanet) {
       return res.status(403).json({ error: 'You do not own this planet' });
+    }
+
+    // Validate admiral assignment (if provided)
+    let admiralId: string | null = null;
+    if (req.body.admiralId) {
+      const admiral = await prisma.admiral.findUnique({
+        where: { id: req.body.admiralId },
+      });
+      if (!admiral || admiral.userId !== userId) {
+        return res.status(403).json({ error: 'Invalid admiral or admiral does not belong to you' });
+      }
+      admiralId = admiral.id;
     }
 
     // Validate units are available
@@ -143,6 +159,7 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
           ? JSON.stringify(req.body.laneAssignments)
           : null,
         toolsJson: Object.keys(allTools).length > 0 ? JSON.stringify(allTools) : null,
+        admiralId: admiralId,
         departAt,
         arriveAt,
         status: 'enroute',
@@ -153,6 +170,9 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
         },
         toPlanet: {
           select: { id: true, x: true, y: true, name: true },
+        },
+        admiral: {
+          select: { id: true, name: true, attackBonus: true, defenseBonus: true },
         },
       },
     });
@@ -169,6 +189,7 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
           ? JSON.parse(fleet.laneAssignmentsJson)
           : null,
         tools: fleet.toolsJson ? JSON.parse(fleet.toolsJson) : null,
+        admiral: fleet.admiral,
         departAt: fleet.departAt,
         arriveAt: fleet.arriveAt,
         status: fleet.status,
@@ -382,6 +403,188 @@ router.post('/move', authenticateToken, async (req: AuthRequest, res: Response) 
   } catch (err: any) {
     console.error('Move error:', err);
     res.status(400).json({ error: err.message });
+  }
+});
+
+// Expand Planet Grid
+router.post('/expand', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { planetId, direction } = req.body; // direction: 'x' or 'y'
+
+    if (!planetId || !direction) {
+      return res.status(400).json({ error: 'Missing parameters (planetId, direction)' });
+    }
+
+    if (!['x', 'y'].includes(direction)) {
+      return res.status(400).json({ error: 'Direction must be "x" or "y"' });
+    }
+
+    // Validate ownership
+    const ownsPlanet = await validatePlanetOwnership(userId, planetId);
+    if (!ownsPlanet) {
+      return res.status(403).json({ error: 'You do not own this planet' });
+    }
+
+    // Sync resources first
+    const planet = await syncPlanetResources(planetId);
+    if (!planet) {
+      return res.status(404).json({ error: 'Planet not found' });
+    }
+
+    const currentX = (planet as any).gridSizeX || 10;
+    const currentY = (planet as any).gridSizeY || 10;
+
+    // Check if already at max
+    if (direction === 'x' && currentX >= MAX_GRID_SIZE) {
+      return res.status(400).json({ error: `Grid X already at maximum (${MAX_GRID_SIZE})` });
+    }
+    if (direction === 'y' && currentY >= MAX_GRID_SIZE) {
+      return res.status(400).json({ error: `Grid Y already at maximum (${MAX_GRID_SIZE})` });
+    }
+
+    // Calculate expansion cost (scaling with current size)
+    const currentSize = direction === 'x' ? currentX : currentY;
+    const expansionNumber = Math.floor((currentSize - 10) / 10); // How many expansions so far
+    const costCarbon = Math.floor(EXPANSION_BASE_COST_CARBON * Math.pow(EXPANSION_COST_MULTIPLIER, expansionNumber));
+    const costTitanium = Math.floor(EXPANSION_BASE_COST_TITANIUM * Math.pow(EXPANSION_COST_MULTIPLIER, expansionNumber));
+
+    // Check resources
+    if (planet.carbon < costCarbon || planet.titanium < costTitanium) {
+      return res.status(400).json({
+        error: `Insufficient resources. Required: ${costCarbon} Carbon, ${costTitanium} Titanium`,
+        required: { carbon: costCarbon, titanium: costTitanium }
+      });
+    }
+
+    // Calculate new size (increment by 10)
+    const newX = direction === 'x' ? Math.min(currentX + 10, MAX_GRID_SIZE) : currentX;
+    const newY = direction === 'y' ? Math.min(currentY + 10, MAX_GRID_SIZE) : currentY;
+
+    // Update planet
+    const updated = await prisma.planet.update({
+      where: { id: planetId },
+      data: {
+        gridSizeX: newX,
+        gridSizeY: newY,
+        carbon: { decrement: costCarbon },
+        titanium: { decrement: costTitanium }
+      }
+    });
+
+    res.json({
+      message: `Planet expanded to ${newX}x${newY}`,
+      gridSizeX: newX,
+      gridSizeY: newY,
+      cost: { carbon: costCarbon, titanium: costTitanium }
+    });
+
+  } catch (err: any) {
+    console.error('Expand error:', err);
+    res.status(400).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// Add/Upgrade Defense Turret
+router.post('/defense-turret', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { planetId, level } = req.body;
+
+    if (!planetId || !level) {
+      return res.status(400).json({ error: 'Missing parameters (planetId, level)' });
+    }
+
+    if (![1, 2, 3, 4].includes(level)) {
+      return res.status(400).json({ error: 'Level must be 1, 2, 3, or 4' });
+    }
+
+    // Validate ownership
+    const ownsPlanet = await validatePlanetOwnership(userId, planetId);
+    if (!ownsPlanet) {
+      return res.status(403).json({ error: 'You do not own this planet' });
+    }
+
+    const planet = await syncPlanetResources(planetId);
+    if (!planet) {
+      return res.status(404).json({ error: 'Planet not found' });
+    }
+
+    // Get current turrets
+    const turrets = getDefenseTurrets((planet as any).defenseTurretsJson);
+
+    // Get construction queue
+    let turretQueue: any[] = [];
+    if ((planet as any).turretConstructionQueue) {
+      try {
+        turretQueue = JSON.parse((planet as any).turretConstructionQueue);
+      } catch (e) {
+        turretQueue = [];
+      }
+    }
+
+    // Check if can add (max 20, including queued turrets)
+    const totalTurrets = turrets.length + turretQueue.length;
+    if (totalTurrets >= 20) {
+      return res.status(400).json({ error: 'Maximum 20 defense turrets allowed (including those in construction queue)' });
+    }
+
+    // Calculate cost (scaling with level and number of turrets)
+    const baseCostCarbon = 500 * level;
+    const baseCostTitanium = 250 * level;
+    const turretCountMultiplier = 1 + (turrets.length * 0.1); // 10% more per existing turret
+    const costCarbon = Math.floor(baseCostCarbon * turretCountMultiplier);
+    const costTitanium = Math.floor(baseCostTitanium * turretCountMultiplier);
+
+    // Check resources
+    if (planet.carbon < costCarbon || planet.titanium < costTitanium) {
+      return res.status(400).json({
+        error: `Insufficient resources. Required: ${costCarbon} Carbon, ${costTitanium} Titanium`,
+        required: { carbon: costCarbon, titanium: costTitanium }
+      });
+    }
+
+    const now = new Date();
+    let startTime = now;
+    if (turretQueue.length > 0) {
+      const lastItem = turretQueue[turretQueue.length - 1];
+      if (lastItem && lastItem.finishTime) {
+        const lastFinish = new Date(lastItem.finishTime);
+        if (lastFinish > now) {
+          startTime = lastFinish;
+        }
+      }
+    }
+
+    const buildTime = DEFENSE_TURRET_BUILD_TIME_SECONDS * 1000; // Convert to milliseconds
+    const finishTime = new Date(startTime.getTime() + buildTime);
+
+    const queueItem = {
+      level,
+      finishTime: finishTime.toISOString()
+    };
+    turretQueue.push(queueItem);
+
+    // Update planet with queue (don't add turret yet - it will be added when queue processes)
+    const updated = await prisma.planet.update({
+      where: { id: planetId },
+      data: {
+        turretConstructionQueue: JSON.stringify(turretQueue),
+        carbon: { decrement: costCarbon },
+        titanium: { decrement: costTitanium }
+      }
+    });
+
+    res.json({
+      message: `Defense turret (Level ${level}) queued for construction`,
+      queue: turretQueue,
+      finishTime: finishTime.toISOString(),
+      cost: { carbon: costCarbon, titanium: costTitanium }
+    });
+
+  } catch (err: any) {
+    console.error('Defense turret error:', err);
+    res.status(400).json({ error: err.message || 'Internal server error' });
   }
 });
 

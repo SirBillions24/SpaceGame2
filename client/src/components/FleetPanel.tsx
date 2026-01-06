@@ -10,7 +10,7 @@ interface FleetPanelProps {
   onFleetCreated: () => void;
 }
 
-type Lane = 'front' | 'left' | 'right';
+// type Lane = 'front' | 'left' | 'right'; // Not used in this component
 
 export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreated }: FleetPanelProps) {
   // Mode
@@ -23,16 +23,20 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
   // State for flat fleet (Support/Scout)
   const [flatUnits, setFlatUnits] = useState<Record<string, number>>({});
 
+  // Admiral selection
+  const [admiral, setAdmiral] = useState<{ id: string; name: string; attackBonus: number; defenseBonus: number } | null>(null);
+  const [loadingAdmiral, setLoadingAdmiral] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Attack Planner Toggle
-  const [showAttackPlanner, setShowAttackPlanner] = useState(false);
+  // Attack Planner Toggle - Not needed, AttackPlanner is rendered directly
 
   useEffect(() => {
     if (fromPlanet) {
       setCurrentFromPlanet(fromPlanet); // Reset to prop first
       loadPlanetUnits();
+      loadAdmiral();
     }
   }, [fromPlanet]);
 
@@ -51,6 +55,19 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
     }
   };
 
+  const loadAdmiral = async () => {
+    try {
+      setLoadingAdmiral(true);
+      const admiralData = await api.getAdmiral();
+      setAdmiral(admiralData);
+    } catch (err) {
+      // Admiral might not exist yet, that's okay
+      setAdmiral(null);
+    } finally {
+      setLoadingAdmiral(false);
+    }
+  };
+
   const handleFlatChange = (unitType: string, val: number) => {
     const available = availableUnits[unitType] || 0;
     if (val >= 0 && val <= available) {
@@ -65,7 +82,7 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
       const total = Object.values(flatUnits).reduce((a, b) => a + b, 0);
       if (total === 0) throw new Error("Must select at least one unit");
 
-      await api.createFleet(currentFromPlanet.id, toPlanet.id, fleetType, flatUnits);
+      await api.createFleet(currentFromPlanet.id, toPlanet.id, fleetType, flatUnits, undefined, admiral?.id);
       onFleetCreated();
       onClose();
     } catch (err: any) {
@@ -74,13 +91,13 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
     }
   };
 
-  const handleAttackCommit = async (finalUnits: Record<string, number>, laneAssignments: any) => {
+  const handleAttackCommit = async (finalUnits: Record<string, number>, laneAssignments: any, admiralId?: string) => {
     if (!currentFromPlanet || !toPlanet) return;
     setLoading(true);
     try {
       // We only use the `laneAssignments` JSON for the complex attack logic
       // But `finalUnits` is needed for aggregation in DB (if needed) or simple checks
-      await api.createFleet(currentFromPlanet.id, toPlanet.id, 'attack', finalUnits, laneAssignments);
+      await api.createFleet(currentFromPlanet.id, toPlanet.id, 'attack', finalUnits, laneAssignments, admiralId);
       onFleetCreated();
       onClose();
     } catch (err: any) {
@@ -117,7 +134,7 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
       <div className="fleet-panel-content">
         <div className="fleet-info">
           <div className="route-display">
-            <span className="planet-name">{fromPlanet.name}</span>
+            <span className="planet-name">{currentFromPlanet?.name || fromPlanet?.name || 'Unknown'}</span>
             <span className="arrow">➔</span>
             <span className="planet-name">{toPlanet.name}</span>
           </div>
@@ -131,6 +148,43 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
             </button>
           ))}
         </div>
+
+        {/* Admiral Selection - Note: Attack uses AttackPlanner which has its own dropdown */}
+        {fleetType === 'support' && (
+          <div className="admiral-selector">
+            <label>Admiral Assignment (Optional):</label>
+            {loadingAdmiral ? (
+              <div>Loading admiral...</div>
+            ) : admiral ? (
+              <div className="admiral-info">
+                <span className="admiral-name">{admiral.name}</span>
+                <span className="admiral-bonuses">
+                  {admiral.attackBonus > 0 && `+${admiral.attackBonus}% Attack`}
+                  {admiral.attackBonus > 0 && admiral.defenseBonus > 0 && ' • '}
+                  {admiral.defenseBonus > 0 && `+${admiral.defenseBonus}% Defense`}
+                </span>
+                <button 
+                  className="remove-admiral-btn"
+                  onClick={() => setAdmiral(null)}
+                  title="Remove admiral from fleet"
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div className="no-admiral">
+                <span>No admiral assigned</span>
+                <button 
+                  className="assign-admiral-btn"
+                  onClick={loadAdmiral}
+                  disabled={loadingAdmiral}
+                >
+                  Assign Admiral
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Support/Scout View */}
         <div className="flat-selector">

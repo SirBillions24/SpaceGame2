@@ -105,6 +105,19 @@ interface CombatResult {
   attackerTotalLosses: FlankUnits;
   defenderTotalLosses: FlankUnits;
   resourcesJson: string | null;
+  // Admiral information (attack bonuses only)
+  attackerAdmiral?: {
+    id: string;
+    name: string;
+    meleeStrengthBonus: number;
+    rangedStrengthBonus: number;
+    wallReductionBonus: number;
+  } | null;
+  defenderAdmiral?: {
+    id: string;
+    name: string;
+    // Defender bonuses not used for attack system (separate system later)
+  } | null;
 }
 
 // Stats aggregation helper
@@ -122,7 +135,9 @@ export function resolveWaveCollision(
   attackerTools: Record<string, number>,
   defenseBuildings: { shield: number; starport: number; perimeter: number },
   isCenter: boolean,
-  defenderTools: Record<string, number> = {} // New argument for defender tools specifically
+  defenderTools: Record<string, number> = {}, // New argument for defender tools specifically
+  attackerBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; wallReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 },
+  defenderBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; wallReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 }
 ): {
   attackerWon: boolean;
   attackerLosses: FlankUnits;
@@ -143,6 +158,12 @@ export function resolveWaveCollision(
   // ATTACKER TOOL MODIFIERS
   // Plasma Grenades (+Ranged Dmg?) -> Placeholder name? GGE uses specific tools.
   // We use: signal_jammer (vs Shield), breach_cutter (vs Gate), holo_decoy (vs Ranged)
+
+  // Apply Admiral Attack Bonuses (separate for melee and ranged)
+  const meleeMultiplier = 1 + (attackerBonuses.meleeStrengthBonus / 100);
+  const rangedMultiplier = 1 + (attackerBonuses.rangedStrengthBonus / 100);
+  attMelee *= meleeMultiplier;
+  attRanged *= rangedMultiplier;
 
   const totalAttackerPower = attMelee + attRanged;
 
@@ -199,6 +220,11 @@ export function resolveWaveCollision(
     const reduction = attackerTools.signal_jammer * 0.10;
     wallBonusPct = Math.max(0, wallBonusPct - reduction);
   }
+  
+  // --- APPLY ADMIRAL WALL REDUCTION BONUS ---
+  // Apply wall reduction from admiral gear (capped at -100%)
+  const wallReduction = attackerBonuses.wallReductionBonus / 100; // Negative value (e.g., -0.5 for -50%)
+  wallBonusPct = Math.max(0, wallBonusPct + wallReduction); // Add negative = subtract
 
   // Breach Cutter: -10% Gate per tool
   if (attackerTools.breach_cutter && isCenter) {
@@ -216,6 +242,10 @@ export function resolveWaveCollision(
     const reduction = Math.min(1.0, attackerTools.holo_decoy * 0.10);
     defRanged *= (1 - reduction);
   }
+
+  // --- DEFENDER ADMIRAL BONUSES ---
+  // Note: Defender admiral bonuses are handled separately (defense system)
+  // For now, we don't apply defender bonuses here
 
   // --- APPLY COMPOSITE DEFENSE ---
   // Defense Power = (MeleeDef + RangedDef) * (1 + WallBonus + GateBonus + MoatBonus + ...)
@@ -285,7 +315,9 @@ export function resolveSector(
   attackWaves: Wave[],
   initialDefenderLane: { units: FlankUnits, tools: { type: string, count: number }[] },
   defenseBuildings: { shield: number; starport: number; perimeter: number },
-  isCenter: boolean
+  isCenter: boolean,
+  attackerBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; wallReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 },
+  defenderBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; wallReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 }
 ): SectorResult {
 
   // -- Calculate Initials --
@@ -359,7 +391,9 @@ export function resolveSector(
       wave.tools, // Attacker Tools
       defenseBuildings,
       isCenter,
-      activeDefenderTools // Defender Tools
+      activeDefenderTools, // Defender Tools
+      attackerBonuses, // Attacker Admiral Bonuses
+      defenderBonuses // Defender Admiral Bonuses (not used for attack)
     );
 
     // Record Wave Result
@@ -425,13 +459,29 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     where: { id: fleetId },
     include: {
       owner: { include: { admiral: true } },
-      toPlanet: { include: { defenseLayout: true, owner: true } }
+      admiral: true, // Fleet's assigned admiral
+      toPlanet: { include: { defenseLayout: true, owner: { include: { admiral: true } } } }
     }
   });
 
   if (!fleet || fleet.type !== 'attack' || fleet.status !== 'arrived') {
     throw new Error("Invalid fleet state");
   }
+
+  // Get admiral bonuses (attack bonuses only - defense system separate)
+  const attackerAdmiral = fleet.admiral || fleet.owner.admiral;
+  const attackerBonuses = attackerAdmiral ? {
+    meleeStrengthBonus: (attackerAdmiral as any).meleeStrengthBonus || 0,
+    rangedStrengthBonus: (attackerAdmiral as any).rangedStrengthBonus || 0,
+    wallReductionBonus: (attackerAdmiral as any).wallReductionBonus || 0,
+  } : {
+    meleeStrengthBonus: 0,
+    rangedStrengthBonus: 0,
+    wallReductionBonus: 0,
+  };
+  
+  // Defender admiral not used for attack bonuses (defense system separate)
+  const defenderAdmiral = fleet.toPlanet.owner.admiral;
 
   // 1. Parsing Inputs
   let attStructure: { left: Wave[], front: Wave[], right: Wave[] } = { left: [], front: [], right: [] };
@@ -481,10 +531,10 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     perimeter: fleet.toPlanet.perimeterFieldLevel
   };
 
-  // 2. Resolve Sectors
-  const leftResult = resolveSector(attStructure.left, defLeft, buildings, false);
-  const centerResult = resolveSector(attStructure.front, defCenter, buildings, true);
-  const rightResult = resolveSector(attStructure.right, defRight, buildings, false);
+  // 2. Resolve Sectors (pass attacker bonuses only)
+  const leftResult = resolveSector(attStructure.left, defLeft, buildings, false, attackerBonuses, { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 });
+  const centerResult = resolveSector(attStructure.front, defCenter, buildings, true, attackerBonuses, { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 });
+  const rightResult = resolveSector(attStructure.right, defRight, buildings, false, attackerBonuses, { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 });
 
   // 3. Surface Invasion Logic
   let attackerSectorsWon = 0;
@@ -511,6 +561,9 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
 
   // Courtyard Defense (Empty)
   const surfDef: FlankUnits = {};
+  
+  // Note: Attacker bonuses already applied in sector resolution
+  // No need to re-apply here
 
   let surfaceResult = null;
   if (attackerSectorsWon > 0) {
@@ -531,7 +584,10 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
           surfDef,
           {},
           { shield: 0, starport: 0, perimeter: 0 },
-          false
+          false,
+          {},
+          attackerBonuses, // Attacker bonuses apply to surface battle too
+          { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 } // Defender bonuses not used
         );
         attackerWonSurface = finalBat.attackerWon;
         attLosses = finalBat.attackerLosses;
@@ -694,7 +750,20 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     surfaceResult,
     attackerTotalLosses: totalAttLosses,
     defenderTotalLosses: totalDefLosses,
-    resourcesJson: lootJson
+    resourcesJson: lootJson,
+    // Include admiral information in combat result
+    attackerAdmiral: attackerAdmiral ? {
+      id: attackerAdmiral.id,
+      name: attackerAdmiral.name,
+      meleeStrengthBonus: (attackerAdmiral as any).meleeStrengthBonus || 0,
+      rangedStrengthBonus: (attackerAdmiral as any).rangedStrengthBonus || 0,
+      wallReductionBonus: (attackerAdmiral as any).wallReductionBonus || 0,
+    } : null,
+    defenderAdmiral: defenderAdmiral ? {
+      id: defenderAdmiral.id,
+      name: defenderAdmiral.name
+      // Defender bonuses not used for attack system (separate system later)
+    } : null
   };
 }
 

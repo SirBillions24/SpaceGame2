@@ -99,6 +99,9 @@ router.get('/battles/:id', authenticateToken, async (req: AuthRequest, res: Resp
     const attackerLosses = JSON.parse(report.attackerTotalLossesJson);
     const defenderLosses = JSON.parse(report.defenderTotalLossesJson);
     const loot = report.resourcesJson ? JSON.parse(report.resourcesJson) : null;
+    
+    // Extract admiral information from laneResults (if present)
+    const admirals = laneResults.admirals || { attacker: null, defender: null };
 
     res.json({
       id: report.id,
@@ -115,6 +118,10 @@ router.get('/battles/:id', authenticateToken, async (req: AuthRequest, res: Resp
       loot: isAttacker ? loot : null,
       resourcesStolen: loot,
       resourcesJson: report.resourcesJson, // Required by Mailbox.tsx
+      admirals: {
+        attacker: admirals.attacker,
+        defender: admirals.defender
+      },
       createdAt: report.createdAt,
     });
   } catch (error) {
@@ -124,5 +131,7 @@ router.get('/battles/:id', authenticateToken, async (req: AuthRequest, res: Resp
 });
 
 export default router;
+
+
 
 

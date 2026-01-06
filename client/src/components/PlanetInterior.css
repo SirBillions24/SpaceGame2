@@ -96,23 +96,27 @@
 
 /* Grid System */
 .planet-grid-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
   background: #0d0d15;
   padding: 20px;
   border-radius: 8px;
   border: 1px solid #333;
+  overflow: auto;
+  max-height: 60vh;
+  position: relative;
+  /* Enable smooth scrolling */
+  scroll-behavior: smooth;
 }
 
 .planet-grid {
   display: grid;
-  grid-template-columns: repeat(10, 50px);
-  grid-template-rows: repeat(10, 50px);
   gap: 2px;
   background-color: #222;
   border: 2px solid #444;
   position: relative;
+  /* Grid template is set inline via style prop based on gridSizeX/gridSizeY */
+  /* Cell size is fixed at 50px for consistency */
+  grid-auto-columns: 50px;
+  grid-auto-rows: 50px;
 }
 
 .grid-cell {

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { calculateDefenseCapacity, countLaneUnits } from '../services/defenseService';
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.get('/planets/:id/defense-profile', authenticateToken, async (req: AuthRe
       : {};
 
     const admiralBonus = planet.owner.admiral?.defenseBonus || 0;
+    const defenseCapacity = calculateDefenseCapacity(planet.defenseTurretsJson);
 
     res.json({
       planetId: planet.id,
@@ -42,6 +44,7 @@ router.get('/planets/:id/defense-profile', authenticateToken, async (req: AuthRe
       perimeterFieldLevel: planet.perimeterFieldLevel,
       starportLevel: planet.starportLevel,
       admiralDefenseBonus: admiralBonus,
+      defenseCapacity: defenseCapacity,
       laneDefenses: {
         front: frontDefense,
         left: leftDefense,
@@ -118,6 +121,20 @@ router.post('/planets/:id/defense-layout', authenticateToken, async (req: AuthRe
           error: `Insufficient ${unitType}: assigned ${assignedCount}, available ${available}`,
         });
       }
+    }
+
+    // 1.5. Validate Defense Capacity (Defense Turret System)
+    // Capacity is shared across all lanes (not per-lane)
+    const defenseCapacity = calculateDefenseCapacity(planet.defenseTurretsJson);
+    const frontUnits = countLaneUnits(frontLane);
+    const leftUnits = countLaneUnits(leftLane);
+    const rightUnits = countLaneUnits(rightLane);
+    const totalUnits = frontUnits + leftUnits + rightUnits;
+    
+    if (totalUnits > defenseCapacity) {
+      return res.status(400).json({
+        error: `Total units exceed defense capacity: ${totalUnits} units assigned across all lanes, ${defenseCapacity} total capacity available`,
+      });
     }
 
     // 2. Validate Tools
@@ -202,8 +219,9 @@ router.post('/planets/:id/defense-layout', authenticateToken, async (req: AuthRe
         left: JSON.parse(defenseLayout.leftLaneJson),
         right: JSON.parse(defenseLayout.rightLaneJson),
       },
-      // Return max slots for UI convenience
-      maxSlots
+      // Return max slots and capacity for UI convenience
+      maxSlots,
+      defenseCapacity
     });
   } catch (error) {
     console.error('Error updating defense layout:', error);

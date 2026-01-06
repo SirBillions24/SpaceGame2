@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api, type Planet } from '../lib/api';
+import DefenseTurretModal from './DefenseTurretModal';
 import './DefensePanel.css';
 
 interface DefensePanelProps {
@@ -17,6 +18,7 @@ interface LaneData {
 const UNIT_TYPES = ['marine', 'ranger', 'sentinel'];
 
 export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
+    const [currentPlanet, setCurrentPlanet] = useState<Planet>(planet);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -30,11 +32,13 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
 
     const [maxSlots, setMaxSlots] = useState(1);
     const [caps, setCaps] = useState({ wall: 100 });
+    const [showTurretModal, setShowTurretModal] = useState(false);
 
     // Tool Selection Modal State
     const [showToolSelector, setShowToolSelector] = useState<{ lane: 'front' | 'left' | 'right' | null } | null>(null);
 
     useEffect(() => {
+        setCurrentPlanet(planet);
         loadData();
     }, [planet.id]);
 
@@ -42,7 +46,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
         try {
             setLoading(true);
             // Re-fetch planet to get latest units AND tools
-            const p = await api.getPlanet(planet.id);
+            const p = await api.getPlanet(currentPlanet.id);
             setAvailableUnits(p.units || {});
 
             const toolsMap: Record<string, number> = {};
@@ -52,12 +56,18 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
             setAvailableTools(toolsMap);
 
             // Fetch layout
-            const profile = await api.getDefenseProfile(planet.id);
+            const profile = await api.getDefenseProfile(currentPlanet.id);
 
             // Wall Level determines Max Slots. Level 1 = 1 Slot.
             const wallLevel = profile.defensiveGridLevel || 1;
             setMaxSlots(Math.max(1, wallLevel));
-            setCaps({ wall: wallLevel * 20 }); // Example unit cap
+            
+            // Get defense capacity from API response (if available)
+            const defenseCapacity = profile.defenseCapacity || 0;
+            setCaps({ wall: defenseCapacity || (wallLevel * 20) }); // Fallback to old calculation if not available
+            
+            // Update planet data to get latest turrets
+            setCurrentPlanet(p);
 
             // Normalize incoming data (Backend might send old or new format)
             const normalize = (data: any): LaneData => {
@@ -86,7 +96,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
     const handleSave = async () => {
         try {
             setSaving(true);
-            await api.updateDefenseLayout(planet.id, { front, left, right });
+            await api.updateDefenseLayout(currentPlanet.id, { front, left, right });
             alert('Defense layout saved!');
             onClose();
         } catch (e: any) {
@@ -100,6 +110,21 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
     const updateUnit = (lane: 'front' | 'left' | 'right', unit: string, val: number) => {
         const updater = lane === 'front' ? setFront : lane === 'left' ? setLeft : setRight;
         const current = lane === 'front' ? front : lane === 'left' ? left : right;
+
+        // Calculate what the new total would be
+        const currentTotal = Object.values(front.units).reduce((a, b) => a + b, 0) +
+                            Object.values(left.units).reduce((a, b) => a + b, 0) +
+                            Object.values(right.units).reduce((a, b) => a + b, 0);
+        const currentLaneTotal = Object.values(current.units).reduce((a, b) => a + b, 0);
+        const currentUnitInLane = current.units[unit] || 0;
+        const newLaneTotal = currentLaneTotal - currentUnitInLane + val;
+        const newTotal = currentTotal - currentUnitInLane + val;
+
+        // Check if new total exceeds capacity
+        if (newTotal > caps.wall) {
+            // Allow the change but it will be rejected on save
+            // Could show a warning here if desired
+        }
 
         updater({
             ...current,
@@ -163,7 +188,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
             <div className="defense-lane">
                 <div className="defense-lane-header">
                     <h4>{title}</h4>
-                    <span className="lane-cap">Pop: {totalInLane} / {caps.wall}</span>
+                    <span className="lane-cap">Units: {totalInLane}</span>
                 </div>
 
                 {/* UNITS SECTION */}
@@ -270,12 +295,53 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
 
     if (loading) return <div className="defense-panel modal">Loading Defense System...</div>;
 
+    // Calculate total units across all lanes
+    const totalUnitsAssigned = Object.values(front.units).reduce((a, b) => a + b, 0) +
+                               Object.values(left.units).reduce((a, b) => a + b, 0) +
+                               Object.values(right.units).reduce((a, b) => a + b, 0);
+    const capacityExceeded = totalUnitsAssigned > caps.wall;
+
     return (
         <div className="defense-panel-overlay">
             <div className="defense-panel modal">
                 <div className="defense-header">
-                    <h2>Defensive Structure (Wall Lvl {maxSlots})</h2>
-                    <button className="close-btn" onClick={onClose}>×</button>
+                    <div>
+                        <h2>Defensive Structure (Wall Lvl {maxSlots})</h2>
+                        <div className="defense-stats">
+                            <span style={{ color: capacityExceeded ? '#ff4444' : '#aaa' }}>
+                                Total Capacity: {totalUnitsAssigned} / {caps.wall} troops (shared across all lanes)
+                            </span>
+                            {currentPlanet.defenseTurretsJson && (
+                                <span className="turret-count">
+                                    {(() => {
+                                        try {
+                                            const turrets = JSON.parse(currentPlanet.defenseTurretsJson);
+                                            return `${turrets.length} Turrets`;
+                                        } catch {
+                                            return '';
+                                        }
+                                    })()}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <button 
+                            className="add-turret-btn"
+                            onClick={() => setShowTurretModal(true)}
+                            style={{ 
+                                background: '#4a90e2', 
+                                border: 'none', 
+                                color: 'white', 
+                                padding: '8px 12px', 
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Add Turret
+                        </button>
+                        <button className="close-btn" onClick={onClose}>×</button>
+                    </div>
                 </div>
 
                 <div className="defense-lanes-container">
@@ -292,6 +358,14 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
 
                 {renderToolSelector()}
             </div>
+            
+            {showTurretModal && (
+                <DefenseTurretModal
+                    planet={currentPlanet}
+                    onClose={() => setShowTurretModal(false)}
+                    onAdd={loadData}
+                />
+            )}
         </div>
     );
 }

@@ -10,12 +10,18 @@ export interface Planet {
   units?: Record<string, number>;
   resources?: { carbon: number; titanium: number; food: number; credits: number };
   production?: { carbon: number; titanium: number; food: number };
+  gridSize?: number; // Legacy, use gridSizeX/gridSizeY
+  gridSizeX?: number;
+  gridSizeY?: number;
+  defenseTurretsJson?: string | null;
   buildings?: { id: string; type: string; level: number; x: number; y: number; status: string }[];
   construction?: { isBuilding: boolean; activeBuildId: string | null; buildFinishTime: string | null };
   recruitmentQueue?: any[];
   manufacturingQueue?: any[];
+  turretConstructionQueue?: any[];
   tools?: { toolType: string; count: number }[];
   defense?: { defensiveGrid: number; perimeterField: number; starport: number };
+  taxRate?: number;
   isNpc?: boolean;
   npcLevel?: number;
   createdAt: string;
@@ -163,12 +169,13 @@ export const api = {
     toPlanetId: string,
     type: 'attack' | 'support' | 'scout',
     units: Record<string, number>,
-    laneAssignments?: any
+    laneAssignments?: any,
+    admiralId?: string
   ): Promise<{ message: string; fleet: Fleet }> {
     const response = await fetch(`${API_BASE_URL}/actions/fleet`, {
       method: 'POST',
       headers: getHeaders(true),
-      body: JSON.stringify({ fromPlanetId, toPlanetId, type, units, laneAssignments }),
+      body: JSON.stringify({ fromPlanetId, toPlanetId, type, units, laneAssignments, admiralId }),
     });
     if (!response.ok) {
       const error = await response.json();
@@ -294,6 +301,114 @@ export const api = {
     if (!response.ok) {
       // Silent fail or throw? Throw allows app to logout.
       throw new Error('Failed to fetch user');
+    }
+    return response.json();
+  },
+
+  async expandPlanet(planetId: string, direction: 'x' | 'y') {
+    const response = await fetch(`${API_BASE_URL}/actions/expand`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId, direction }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Expansion failed');
+    }
+    return response.json();
+  },
+
+  async addDefenseTurret(planetId: string, level: number) {
+    const response = await fetch(`${API_BASE_URL}/actions/defense-turret`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId, level }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to add defense turret');
+    }
+    return response.json();
+  },
+
+  // Admiral API
+  async getAdmiral() {
+    const response = await fetch(`${API_BASE_URL}/admiral`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      let errorMessage = 'Failed to fetch admiral';
+      try {
+        const error = await response.json();
+        errorMessage = error.error || errorMessage;
+      } catch (e) {
+        // If response isn't JSON, use status text
+        errorMessage = response.statusText || errorMessage;
+      }
+      throw new Error(errorMessage);
+    }
+    return response.json();
+  },
+
+  async updateAdmiralName(name: string) {
+    const response = await fetch(`${API_BASE_URL}/admiral/name`, {
+      method: 'PUT',
+      headers: getHeaders(true),
+      body: JSON.stringify({ name }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update admiral name');
+    }
+    return response.json();
+  },
+
+  async updateAdmiralGear(gear: Record<string, any>) {
+    const response = await fetch(`${API_BASE_URL}/admiral/gear`, {
+      method: 'PUT',
+      headers: getHeaders(true),
+      body: JSON.stringify({ gear }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update admiral gear');
+    }
+    return response.json();
+  },
+
+  async getGearInventory() {
+    const response = await fetch(`${API_BASE_URL}/admiral/gear/inventory`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch gear inventory');
+    }
+    return response.json();
+  },
+
+  async equipGearPiece(pieceId: string, slotType: string) {
+    const response = await fetch(`${API_BASE_URL}/admiral/gear/equip`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ pieceId, slotType }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to equip gear');
+    }
+    return response.json();
+  },
+
+  async unequipGearPiece(slotType: string) {
+    const response = await fetch(`${API_BASE_URL}/admiral/gear/unequip`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ slotType }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to unequip gear');
     }
     return response.json();
   }

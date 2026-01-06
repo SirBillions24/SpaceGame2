@@ -172,8 +172,12 @@ async function processArrivedFleets() {
               winner: combatResult.winner,
               laneResultsJson: JSON.stringify({
                 sectors: combatResult.sectorResults,
-                surface: combatResult.surfaceResult
-              }), // Storing extended result
+                surface: combatResult.surfaceResult,
+                admirals: {
+                  attacker: combatResult.attackerAdmiral,
+                  defender: combatResult.defenderAdmiral
+                }
+              }), // Storing extended result with admiral info
               attackerTotalLossesJson: JSON.stringify(combatResult.attackerTotalLosses),
               defenderTotalLossesJson: JSON.stringify(combatResult.defenderTotalLosses),
               resourcesJson: resourcesJson

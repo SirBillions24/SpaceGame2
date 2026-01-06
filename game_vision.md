@@ -31,10 +31,10 @@ Combat remains the heart of the game. It occurs in Waves across 3 Defensive Sect
 A. The Setup (Space & Orbit)
 Instead of "Walls" and "Moats", we use "Shields" and "Defense Grids".
 
-Wall Level -> Shield Generator: Increases defense bonus for units stationed in the defensive line.
+Wall Level -> Shield Generator: Increases defense bonus for units stationed in the defensive line. Also unlocks tool slots for defensive equipment (1 slot per level).
 Moat -> Perimeter Field: Slows down attackers or reduces their effectiveness before they reach the main line.
-Gate -> Starport: Increases the speed of deployment and sortie capabilities.
-Tower -> Defense Turret: Increases the max number of units that can defend a flank.
+Gate -> Starport: Increases the speed of deployment and sortie capabilities. Provides additional defense bonus to the Center sector.
+Tower -> Defense Turret: Increases the max number of units that can defend each flank. Level 1 = 10 troops, Level 2 = 20, Level 3 = 30, Level 4 = 40. Maximum 20 turrets per planet (after expansions).
 B. The Units (Rock-Paper-Scissors)
 We map the classic interactions to unit classes.
 

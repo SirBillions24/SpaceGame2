@@ -645,3 +645,89 @@
     margin-top: 4px;
     margin-bottom: 4px;
 }
+
+/* Admiral Section in Battle Reports */
+.admiral-section {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: rgba(0, 243, 255, 0.05);
+    border: 1px solid rgba(0, 243, 255, 0.2);
+    border-radius: 4px;
+}
+
+.admiral-section h4 {
+    color: #00f3ff;
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+}
+
+.admiral-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.admiral-card {
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(0, 243, 255, 0.3);
+    border-radius: 4px;
+}
+
+.admiral-card.attacker {
+    border-color: rgba(211, 47, 47, 0.5);
+}
+
+.admiral-card.defender {
+    border-color: rgba(76, 175, 80, 0.5);
+}
+
+.admiral-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.admiral-label {
+    color: #888;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+}
+
+.admiral-name {
+    color: #fff;
+    font-weight: bold;
+    font-size: 1rem;
+}
+
+.admiral-bonuses {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.admiral-bonuses .bonus {
+    font-size: 0.85rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.admiral-bonuses .bonus.attack {
+    background: rgba(211, 47, 47, 0.2);
+    color: #ff6b6b;
+    border: 1px solid rgba(211, 47, 47, 0.4);
+}
+
+.admiral-bonuses .bonus.defense {
+    background: rgba(76, 175, 80, 0.2);
+    color: #66bb6a;
+    border: 1px solid rgba(76, 175, 80, 0.4);
+}
+
+.admiral-bonuses .no-bonus {
+    color: #888;
+    font-size: 0.8rem;
+    font-style: italic;
+}

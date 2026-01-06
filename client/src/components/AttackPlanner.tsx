@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { type Planet } from '../lib/api';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { type Planet, api } from '../lib/api';
 import './AttackPlanner.css';
 
 // Importing SVG placeholders directly as image sources
@@ -17,7 +17,8 @@ interface AttackPlannerProps {
     availableUnits: Record<string, number>;
     onCommit: (
         finalUnits: Record<string, number>,
-        laneAssignments: any
+        laneAssignments: any,
+        admiralId?: string
     ) => void;
     onCancel: () => void;
 }
@@ -86,6 +87,41 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
     const [waves, setWaves] = useState<WaveData[]>(createInitialState());
     const [selectedItem, setSelectedItem] = useState<{ type: ItemType, id: string } | null>(null);
     const [placementAmount, setPlacementAmount] = useState<number | 'max'>('max');
+    const [admiral, setAdmiral] = useState<{ id: string; name: string; attackBonus: number; defenseBonus: number } | null>(null);
+    const [loadingAdmiral, setLoadingAdmiral] = useState(false);
+    const [showAdmiralDropdown, setShowAdmiralDropdown] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Load admiral on mount
+    useEffect(() => {
+        loadAdmiral();
+    }, []);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowAdmiralDropdown(false);
+            }
+        };
+        if (showAdmiralDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [showAdmiralDropdown]);
+
+    const loadAdmiral = async () => {
+        try {
+            setLoadingAdmiral(true);
+            const admiralData = await api.getAdmiral();
+            setAdmiral(admiralData);
+        } catch (err) {
+            // Admiral might not exist yet, that's okay
+            setAdmiral(null);
+        } finally {
+            setLoadingAdmiral(false);
+        }
+    };
 
     // Calculate available tools from Planet props
     const availableTools = useMemo(() => {
@@ -211,18 +247,70 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
             });
         });
 
-        onCommit(finalSoldierUnits, laneAssignments);
+        onCommit(finalSoldierUnits, laneAssignments, admiral?.id);
     };
 
     return (
         <div className="attack-planner">
             <div className="ap-header">
-                <h2>Orbital Assault Planning</h2>
-                <div className="target-info">
-                    Target: <strong>{toPlanet.name}</strong>
-                    {toPlanet.isNpc && <span className="npc-tag"> (Sector {toPlanet.x},{toPlanet.y})</span>}
+                <div className="ap-header-left">
+                    <h2>Orbital Assault Planning</h2>
+                    <div className="target-info">
+                        Target: <strong>{toPlanet.name}</strong>
+                        {toPlanet.isNpc && <span className="npc-tag"> (Sector {toPlanet.x},{toPlanet.y})</span>}
+                    </div>
                 </div>
-                <button className="close-ap" onClick={onCancel}>×</button>
+                <div className="ap-header-right">
+                    <div className="admiral-selector-ap">
+                        <label>Admiral:</label>
+                        <div className="admiral-dropdown-container" ref={dropdownRef}>
+                        <button 
+                            className="admiral-dropdown-btn"
+                            onClick={() => setShowAdmiralDropdown(!showAdmiralDropdown)}
+                        >
+                            {admiral ? (
+                                <>
+                                    <span className="admiral-name">{admiral.name}</span>
+                                    <span className="admiral-bonus">
+                                        {admiral.attackBonus > 0 && `+${admiral.attackBonus}% Atk`}
+                                        {admiral.attackBonus > 0 && admiral.defenseBonus > 0 && ' / '}
+                                        {admiral.defenseBonus > 0 && `+${admiral.defenseBonus}% Def`}
+                                    </span>
+                                </>
+                            ) : (
+                                <span className="no-admiral-text">None Selected</span>
+                            )}
+                            <span className="dropdown-arrow">▼</span>
+                        </button>
+                        {showAdmiralDropdown && (
+                            <div className="admiral-dropdown-menu">
+                                {loadingAdmiral ? (
+                                    <div className="dropdown-item">Loading...</div>
+                                ) : admiral ? (
+                                    <>
+                                        <div className="dropdown-item selected">
+                                            <span>{admiral.name}</span>
+                                            <span className="item-bonus">
+                                                {admiral.attackBonus > 0 && `+${admiral.attackBonus}% Atk`}
+                                                {admiral.attackBonus > 0 && admiral.defenseBonus > 0 && ' / '}
+                                                {admiral.defenseBonus > 0 && `+${admiral.defenseBonus}% Def`}
+                                            </span>
+                                        </div>
+                                        <div className="dropdown-item" onClick={() => { setAdmiral(null); setShowAdmiralDropdown(false); }}>
+                                            <span>None</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="dropdown-item" onClick={loadAdmiral}>
+                                        <span>Load Admiral</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        </div>
+                    </div>
+                    <button className="close-ap" onClick={onCancel}>×</button>
+                </div>
             </div>
 
             <div className="ap-body">

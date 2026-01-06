@@ -172,6 +172,7 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
 
     const sectors = (rawData as any).sectors || rawData;
     const surfaceResult = (rawData as any).surface || null;
+    const admirals = report.admirals || (rawData as any).admirals || { attacker: null, defender: null };
 
     // Helper to get sector by name, handling 'center' vs 'front'
     const getSector = (key: string) => {
@@ -218,6 +219,52 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
 
             {viewMode === 'overview' && (
                 <div className="br-overview">
+                    {/* Admiral Information */}
+                    {(admirals.attacker || admirals.defender) && (
+                        <div className="admiral-section">
+                            <h4>Commanders</h4>
+                            <div className="admiral-grid">
+                                {admirals.attacker && (
+                                    <div className="admiral-card attacker">
+                                        <div className="admiral-header">
+                                            <span className="admiral-label">Attacker</span>
+                                            <span className="admiral-name">{admirals.attacker.name}</span>
+                                        </div>
+                                        <div className="admiral-bonuses">
+                                            {admirals.attacker.attackBonus > 0 && (
+                                                <span className="bonus attack">+{admirals.attacker.attackBonus}% Attack</span>
+                                            )}
+                                            {admirals.attacker.defenseBonus > 0 && (
+                                                <span className="bonus defense">+{admirals.attacker.defenseBonus}% Defense</span>
+                                            )}
+                                            {admirals.attacker.attackBonus === 0 && admirals.attacker.defenseBonus === 0 && (
+                                                <span className="no-bonus">No bonuses</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                                {admirals.defender && (
+                                    <div className="admiral-card defender">
+                                        <div className="admiral-header">
+                                            <span className="admiral-label">Defender</span>
+                                            <span className="admiral-name">{admirals.defender.name}</span>
+                                        </div>
+                                        <div className="admiral-bonuses">
+                                            {admirals.defender.attackBonus > 0 && (
+                                                <span className="bonus attack">+{admirals.defender.attackBonus}% Attack</span>
+                                            )}
+                                            {admirals.defender.defenseBonus > 0 && (
+                                                <span className="bonus defense">+{admirals.defender.defenseBonus}% Defense</span>
+                                            )}
+                                            {admirals.defender.attackBonus === 0 && admirals.defender.defenseBonus === 0 && (
+                                                <span className="no-bonus">No bonuses</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                     <div className="loot-section">
                         <h4>Resources Plundered</h4>
                         {report.resourcesJson ? (

@@ -1,6 +1,7 @@
 import prisma from '../lib/prisma';
 import { spawnPirateBases } from './pveService';
 import { processManufacturingQueue } from './toolService';
+import { processTurretQueue } from './turretService';
 
 const WORLD_SIZE_X = parseInt(process.env.WORLD_SIZE_X || '5000');
 const WORLD_SIZE_Y = parseInt(process.env.WORLD_SIZE_Y || '5000');
@@ -320,6 +321,7 @@ export async function syncPlanetResources(planetId: string) {
   }
 
   await processManufacturingQueue(planet);
+  await processTurretQueue(planet);
 
   // 8. Final DB Update
   const updatedPlanet = await prisma.planet.update({
@@ -350,8 +352,10 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
     throw new Error('Construction slot occupied');
   }
 
-  // Check Grid Bounds
-  if (x < 0 || x >= planet.gridSize || y < 0 || y >= planet.gridSize) {
+  // Check Grid Bounds (using new gridSizeX/gridSizeY)
+  const gridSizeX = (planet as any).gridSizeX || 10;
+  const gridSizeY = (planet as any).gridSizeY || 10;
+  if (x < 0 || x >= gridSizeX || y < 0 || y >= gridSizeY) {
     throw new Error('Position out of bounds');
   }
 
@@ -478,6 +482,8 @@ export async function spawnPlanet(userId: string, username: string, quadrant?: '
       y: position.y,
       name: planetName,
       lastResourceUpdate: new Date(),
+      gridSizeX: 10, // Starting 10x10
+      gridSizeY: 10,
     },
   });
 
@@ -618,8 +624,10 @@ export async function moveBuilding(planetId: string, buildingId: string, newX: n
     // So distinct from construction.
   }
 
-  // Check Bounds
-  if (newX < 0 || newX >= planet.gridSize || newY < 0 || newY >= planet.gridSize) {
+  // Check Bounds (using new gridSizeX/gridSizeY)
+  const gridSizeX = (planet as any).gridSizeX || 10;
+  const gridSizeY = (planet as any).gridSizeY || 10;
+  if (newX < 0 || newX >= gridSizeX || newY < 0 || newY >= gridSizeY) {
     throw new Error('Position out of bounds');
   }
 

@@ -100,7 +100,9 @@ router.get('/planet/:id', async (req: Request, res: Response) => {
       },
       production,
       buildings: (syncedPlanet as any).buildings || [],
-      gridSize: syncedPlanet.gridSize,
+      gridSize: (syncedPlanet as any).gridSizeX || (syncedPlanet as any).gridSize || 10,
+      gridSizeX: (syncedPlanet as any).gridSizeX || (syncedPlanet as any).gridSize || 10,
+      gridSizeY: (syncedPlanet as any).gridSizeY || (syncedPlanet as any).gridSize || 10,
       construction: {
         isBuilding: syncedPlanet.isBuilding,
         activeBuildId: syncedPlanet.activeBuildId,
@@ -113,6 +115,8 @@ router.get('/planet/:id', async (req: Request, res: Response) => {
       },
       recruitmentQueue: syncedPlanet.recruitmentQueue ? JSON.parse(syncedPlanet.recruitmentQueue as any) : [],
       manufacturingQueue: syncedPlanet.manufacturingQueue ? JSON.parse(syncedPlanet.manufacturingQueue as any) : [],
+      turretConstructionQueue: (syncedPlanet as any).turretConstructionQueue ? JSON.parse((syncedPlanet as any).turretConstructionQueue) : [],
+      defenseTurretsJson: (syncedPlanet as any).defenseTurretsJson,
       tools: (syncedPlanet as any).tools || [],
       createdAt: syncedPlanet.createdAt,
       stats: calculatePlanetRates(syncedPlanet)

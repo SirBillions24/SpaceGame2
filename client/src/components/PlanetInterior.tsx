@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { api, type Planet, getCurrentUser } from '../lib/api';
 import DefensePanel from './DefensePanel';
 import WorkshopPanel from './WorkshopPanel';
+import ExpansionModal from './ExpansionModal';
+import DefenseTurretModal from './DefenseTurretModal';
+import AdmiralPanel from './AdmiralPanel';
 import './PlanetInterior.css';
 
 interface PlanetInteriorProps {
@@ -72,6 +75,9 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
   const [showRecruitConsole, setShowRecruitConsole] = useState(false);
   const [showDefensePanel, setShowDefensePanel] = useState(false);
   const [showWorkshop, setShowWorkshop] = useState<'defense_workshop' | 'siege_workshop' | null>(null);
+  const [showExpansionModal, setShowExpansionModal] = useState(false);
+  const [showTurretModal, setShowTurretModal] = useState(false);
+  const [showAdmiralPanel, setShowAdmiralPanel] = useState(false);
 
   const currentUser = getCurrentUser();
   const isOwner = currentUser?.userId === planet.ownerId;
@@ -148,8 +154,10 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
   // Placement Check Logic
   const canPlaceAt = (x: number, y: number, type: string, ignoreId?: string) => {
     const size = BUILDING_SIZES[type] || 2;
-    // Bounds
-    if (x + size > 10 || y + size > 10) return false;
+    // Bounds - use actual grid size
+    const currentGridX = planetData?.gridSizeX || planet.gridSizeX || planet.gridSize || 10;
+    const currentGridY = planetData?.gridSizeY || planet.gridSizeY || planet.gridSize || 10;
+    if (x + size > currentGridX || y + size > currentGridY) return false;
     // Overlap
     for (let dx = 0; dx < size; dx++) {
       for (let dy = 0; dy < size; dy++) {
@@ -187,8 +195,13 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
             // Simplified: just try call API, let server valid.
             // Or precise check:
             const size = BUILDING_SIZES[movingB.type] || 2;
-            // Validate bounds
-            if (x + size > 10 || y + size > 10) return;
+            // Validate bounds using actual grid size
+            const currentGridX = planetData?.gridSizeX || planet.gridSizeX || planet.gridSize || 10;
+            const currentGridY = planetData?.gridSizeY || planet.gridSizeY || planet.gridSize || 10;
+            if (x + size > currentGridX || y + size > currentGridY) {
+              alert(`Cannot move building: position out of bounds (max: ${currentGridX}x${currentGridY})`);
+              return;
+            }
 
             // Check Collision ignoring self
             if (!canPlaceAt(x, y, movingB.type, movingB.id)) return;
@@ -251,12 +264,13 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
     } catch (e: any) { alert(e.message); }
   };
 
-  // Render Grid
-  const gridSize = 10;
+  // Render Grid (use dynamic size from planetData, fallback to planet prop)
+  const gridSizeX = planetData?.gridSizeX || planetData?.gridSize || planet.gridSizeX || planet.gridSize || 10;
+  const gridSizeY = planetData?.gridSizeY || planetData?.gridSize || planet.gridSizeY || planet.gridSize || 10;
   const gridCells = [];
 
-  for (let y = 0; y < gridSize; y++) {
-    for (let x = 0; x < gridSize; x++) {
+  for (let y = 0; y < gridSizeY; y++) {
+    for (let x = 0; x < gridSizeX; x++) {
       // Ghost Logic
       let ghostClass = '';
       if (buildMode && hoveredTile) {
@@ -316,17 +330,26 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
           <h2>{planet.name}</h2>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             {isOwner && (
-              <button
-                className={`recruit-btn ${moveMode ? 'active-mode' : ''}`}
-                style={{ backgroundColor: moveMode ? '#ff9800' : '#555' }}
-                onClick={() => {
-                  setMoveMode(!moveMode);
-                  setBuildMode(null);
-                  setMovingBuildingId(null);
-                }}
-              >
-                {moveMode ? (movingBuildingId ? 'Place Building' : 'Select to Move') : 'Move Buildings'}
-              </button>
+              <>
+                <button
+                  className={`recruit-btn ${moveMode ? 'active-mode' : ''}`}
+                  style={{ backgroundColor: moveMode ? '#ff9800' : '#555' }}
+                  onClick={() => {
+                    setMoveMode(!moveMode);
+                    setBuildMode(null);
+                    setMovingBuildingId(null);
+                  }}
+                >
+                  {moveMode ? (movingBuildingId ? 'Place Building' : 'Select to Move') : 'Move Buildings'}
+                </button>
+                <button
+                  className="recruit-btn"
+                  style={{ backgroundColor: '#4a90e2' }}
+                  onClick={() => setShowExpansionModal(true)}
+                >
+                  Expand Colony
+                </button>
+              </>
             )}
             <button className="close-btn" onClick={onClose}>×</button>
           </div>
@@ -344,13 +367,14 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
                 <span>Titanium: {resources?.titanium.toFixed(0)}</span>
                 <span className="res-rate">+{planetData?.production?.titanium}/h</span>
               </div>
+              <div className="resource-item">
+                <span>Grid: {gridSizeX} × {gridSizeY}</span>
+              </div>
 
               {isOwner && (
                 <div className="resource-item" style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span>Tax Rate: {planetData?.taxRate ?? 10}%</span>
                   <input
-                    type="range"
-                    min="0"
                     type="range"
                     min="0"
                     max="50"
@@ -373,8 +397,19 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
           </div>
 
           {/* Grid */}
-          <div className="planet-grid-container">
-            <div className="planet-grid">
+          <div 
+            className="planet-grid-container"
+            key={`grid-${gridSizeX}-${gridSizeY}`}
+          >
+            <div 
+              className="planet-grid"
+              style={{
+                gridTemplateColumns: `repeat(${gridSizeX}, 50px)`,
+                gridTemplateRows: `repeat(${gridSizeY}, 50px)`,
+                width: `${gridSizeX * 50 + (gridSizeX - 1) * 2}px`,
+                height: `${gridSizeY * 50 + (gridSizeY - 1) * 2}px`
+              }}
+            >
               {gridCells}
               {buildingElements}
             </div>
@@ -430,6 +465,9 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
                   </button>
                   <button className="recruit-btn" style={{ background: '#1976d2' }} onClick={() => setShowDefensePanel(true)}>
                     Defensive Strategy
+                  </button>
+                  <button className="recruit-btn" style={{ background: '#9c27b0' }} onClick={() => setShowAdmiralPanel(true)}>
+                    Admiral Command
                   </button>
                 </>
               )}
@@ -513,6 +551,25 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
             />
           )}
 
+          {showAdmiralPanel && (
+            <AdmiralPanel onClose={() => setShowAdmiralPanel(false)} />
+          )}
+
+          {showExpansionModal && planetData && (
+            <ExpansionModal
+              planet={planetData}
+              onClose={() => setShowExpansionModal(false)}
+              onExpand={loadPlanetData}
+            />
+          )}
+
+          {showTurretModal && planetData && (
+            <DefenseTurretModal
+              planet={planetData}
+              onClose={() => setShowTurretModal(false)}
+              onAdd={loadPlanetData}
+            />
+          )}
         </div>
       </div>
     </div>

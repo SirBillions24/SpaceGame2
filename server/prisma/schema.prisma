@@ -19,60 +19,66 @@ model User {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Progression
-  xp           Int      @default(0)
-  level        Int      @default(1)
+  xp    Int @default(0)
+  level Int @default(1)
 
   planets Planet[]
   fleets  Fleet[]
   admiral Admiral?
+  gearPieces GearPiece[]
 
   @@map("users")
 }
 
 // Formerly Castle
 model Planet {
-  id          String   @id @default(uuid())
-  ownerId     String   @map("owner_user_id")
-  x           Int
-  y           Int
-  name        String
-  
+  id      String @id @default(uuid())
+  ownerId String @map("owner_user_id")
+  x       Int
+  y       Int
+  name    String
+
   // Economy & Resources
-  carbon      Int      @default(500) // Basic building material
-  titanium    Int      @default(500) // Advanced material
-  food        Int      @default(500) // Nutrient Paste (Upkeep)
-  credits     Int      @default(100)
-  stability   Int      @default(0) // Public Order (0 is neutral, negative is bad)
-  taxRate     Int      @default(10) // Percentage? Or GGE Index? Let's use % for now.
-  population  Int      @default(100)
-  
+  carbon     Int @default(500) // Basic building material
+  titanium   Int @default(500) // Advanced material
+  food       Int @default(500) // Nutrient Paste (Upkeep)
+  credits    Int @default(100)
+  stability  Int @default(0) // Public Order (0 is neutral, negative is bad)
+  taxRate    Int @default(10) // Percentage? Or GGE Index? Let's use % for now.
+  population Int @default(100)
+
   // NPC / PVE
-  isNpc       Boolean  @default(false) @map("is_npc")
-  npcLevel    Int      @default(0)     @map("npc_level")
+  isNpc    Boolean @default(false) @map("is_npc")
+  npcLevel Int     @default(0) @map("npc_level")
 
   // Economy State (Lazy Evaluation)
-  lastResourceUpdate        DateTime @default(now()) @map("last_resource_update")
-  lastFoodConsumption       DateTime @default(now()) @map("last_food_consumption")
-  
-  // Agents & Special Units
-  spyCount        Int       @default(0) @map("spy_count")
+  lastResourceUpdate  DateTime @default(now()) @map("last_resource_update")
+  lastFoodConsumption DateTime @default(now()) @map("last_food_consumption")
 
-  // Grid System
-  gridSize        Int       @default(10) @map("grid_size") // 10x10 starting grid
-  buildings       Building[]
+  // Agents & Special Units
+  spyCount Int @default(0) @map("spy_count")
+
+  // Grid System (Expansion Support)
+  gridSizeX Int        @default(10) @map("grid_size_x") // Starting 10x10, expandable to 50x50
+  gridSizeY Int        @default(10) @map("grid_size_y")
+  buildings Building[]
+
+  // Defense Turret System
+  defenseTurretsJson String? @map("defense_turrets_json") // JSON: [{ level: 1 }, { level: 2 }, ...] Max 20 turrets
 
   // Construction Queue (Global/Sequential for now, or per building)
   // For GGE style, usually one construction slot per base.
   // We keep this to track which building is being upgraded if we enforce single slot.
   isBuilding      Boolean   @default(false) @map("is_building")
   // We might store the ID of the building being constructed here
-  activeBuildId   String?   @map("active_build_id") 
+  activeBuildId   String?   @map("active_build_id")
   buildFinishTime DateTime? @map("build_finish_time")
 
   // Recruitment (Military)
   // Academy level is now determined by the building level
-  recruitmentQueue  String? @map("recruitment_queue") // JSON: [{ unit, count, finishTime }]
-  manufacturingQueue String? @map("manufacturing_queue") // JSON: [{ tool, count, finishTime }]
+  recruitmentQueue      String? @map("recruitment_queue") // JSON: [{ unit, count, finishTime }]
+  manufacturingQueue    String? @map("manufacturing_queue") // JSON: [{ tool, count, finishTime }]
+  turretConstructionQueue String? @map("turret_construction_queue") // JSON: [{ level, finishTime }]
 
   // Defense (Sci-Fi equivalents)
   // These also become buildings or stay as "Global Defense"? 
@@ -81,18 +87,18 @@ model Planet {
   // The User said "copy gameplay exactly... plot of land... fit buildings".
   // So defenses should likely be buildings or special slots.
   // Let's keep them as abstract levels for THIS iteration to focus on the Grid Economy first.
-  defensiveGridLevel  Int      @default(0) @map("defensive_grid_level") 
-  perimeterFieldLevel Int      @default(0) @map("perimeter_field_level")
-  starportLevel       Int      @default(0) @map("starport_level")
-  
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  defensiveGridLevel  Int @default(0) @map("defensive_grid_level")
+  perimeterFieldLevel Int @default(0) @map("perimeter_field_level")
+  starportLevel       Int @default(0) @map("starport_level")
 
-  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  owner         User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   units         PlanetUnit[]
   tools         ToolInventory[]
-  fleetsFrom    Fleet[]        @relation("FromPlanet")
-  fleetsTo      Fleet[]        @relation("ToPlanet")
+  fleetsFrom    Fleet[]         @relation("FromPlanet")
+  fleetsTo      Fleet[]         @relation("ToPlanet")
   defenseLayout DefenseLayout?
 
   @@unique([x, y])
@@ -148,17 +154,48 @@ model DefenseLayout {
 model Admiral {
   id           String   @id @default(uuid())
   userId       String   @unique @map("user_id")
-  // Gear (JSON): { "helmet": { "rarity": "rare", "attackBonus": 5 }, ... }
+  name         String   @default("Admiral") // Customizable name
+  // Gear (JSON): { "weapon": { "id": "...", "name": "...", ... }, "helmet": {...}, "spacesuit": {...}, "shield": {...} }
   gearJson     String   @default("{}") @map("gear_json")
-  // Computed bonuses (cached)
-  attackBonus  Int      @default(0) @map("attack_bonus") // Percentage
-  defenseBonus Int      @default(0) @map("defense_bonus") // Percentage
+  // Computed bonuses (cached) - Attack bonuses only (defense system separate)
+  meleeStrengthBonus  Int      @default(0) @map("melee_strength_bonus") // Percentage (capped at 100)
+  rangedStrengthBonus Int      @default(0) @map("ranged_strength_bonus") // Percentage (capped at 100)
+  wallReductionBonus  Int      @default(0) @map("wall_reduction_bonus") // Percentage (capped at -100, negative)
+  // Legacy fields (kept for compatibility)
+  attackBonus  Int      @default(0) @map("attack_bonus") // DEPRECATED
+  defenseBonus Int      @default(0) @map("defense_bonus") // DEPRECATED
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fleets Fleet[]
+
+  @@map("admirals")
+}
+
+// Gear pieces inventory - items that can be equipped to admirals
+model GearPiece {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  slotType     String   @map("slot_type") // "weapon", "helmet", "spacesuit", "shield"
+  name         String   // Display name (e.g., "Plasma Rifle", "Command Helmet")
+  rarity       String   // "common", "uncommon", "rare", "epic", "legendary"
+  level        Int      @default(1)
+  // Attack bonuses (for attacking fleets only)
+  meleeStrengthBonus  Int      @default(0) @map("melee_strength_bonus") // Percentage
+  rangedStrengthBonus Int      @default(0) @map("ranged_strength_bonus") // Percentage
+  wallReductionBonus  Int      @default(0) @map("wall_reduction_bonus") // Percentage (negative)
+  // Legacy fields (kept for compatibility)
+  attackBonus  Int      @default(0) @map("attack_bonus") // DEPRECATED
+  defenseBonus Int      @default(0) @map("defense_bonus") // DEPRECATED
+  setName      String?  @map("set_name") // For set bonuses (e.g., "Vanguard Set")
+  iconName     String?  @map("icon_name") // Icon identifier for UI
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("admirals")
+  @@map("gear_pieces")
 }
 
 // Battle reports: results of combat
@@ -198,7 +235,9 @@ model Fleet {
   // Tools/equipment (Breach Pods = Scaling Ladders, etc.)
   toolsJson           String?  @map("tools_json")
   // Loot carried by the fleet
-  cargoJson           String?  @map("cargo_json") 
+  cargoJson           String?  @map("cargo_json")
+  // Admiral assigned to this fleet (optional)
+  admiralId           String?  @map("admiral_id")
   departAt            DateTime @default(now()) @map("depart_at")
   arriveAt            DateTime @map("arrive_at")
   status              String   @default("enroute") // "enroute", "arrived", "returning", "completed", "resolved"
@@ -208,21 +247,22 @@ model Fleet {
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   fromPlanet   Planet        @relation("FromPlanet", fields: [fromPlanetId], references: [id])
   toPlanet     Planet        @relation("ToPlanet", fields: [toPlanetId], references: [id])
+  admiral      Admiral?      @relation(fields: [admiralId], references: [id], onDelete: SetNull)
   battleReport BattleReport?
 
   @@map("fleets")
 }
 
 model Building {
-  id          String   @id @default(uuid())
-  planetId    String   @map("planet_id")
-  type        String   // "carbon_processor", "titanium_extractor", "hydroponics", "colony_hub", "academy"
-  x           Int
-  y           Int
-  level       Int      @default(1)
-  status      String   @default("active") // "active", "constructing", "busted"?
-  
-  planet      Planet   @relation(fields: [planetId], references: [id], onDelete: Cascade)
+  id       String @id @default(uuid())
+  planetId String @map("planet_id")
+  type     String // "carbon_processor", "titanium_extractor", "hydroponics", "colony_hub", "academy"
+  x        Int
+  y        Int
+  level    Int    @default(1)
+  status   String @default("active") // "active", "constructing", "busted"?
+
+  planet Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
 
   @@map("buildings")
 }

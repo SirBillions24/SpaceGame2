@@ -31,7 +31,10 @@ runTest("Ranger vs Marine (Range Advantage)", () => {
         { marine: 10 },
         {},
         { shield: 0, starport: 0, perimeter: 0 },
-        false
+        false,
+        {},
+        0, // attackerAdmiralBonus
+        0  // defenderAdmiralBonus
     );
 
     assert(result.attackerWon === true, "Rangers should beat Marines");
@@ -49,7 +52,10 @@ runTest("Shield Generator Bonus (Wall)", () => {
         { marine: 10 },
         {},
         { shield: 1, starport: 0, perimeter: 0 },
-        false
+        false,
+        {},
+        0, // attackerAdmiralBonus
+        0  // defenderAdmiralBonus
     );
 
     assert(result.attackerWon === false, "Defenders with Shield should win vs equal force");
@@ -65,9 +71,12 @@ runTest("Shield Jammer Counter", () => {
     const result2 = resolveWaveCollision(
         { marine: 11 },
         { marine: 10 },
-        { shieldJammer: 10 }, // 100% reduction
+        { shield_jammer: 10 }, // Fixed tool name
         { shield: 10, starport: 0, perimeter: 0 },
-        false
+        false,
+        {},
+        0, // attackerAdmiralBonus
+        0  // defenderAdmiralBonus
     );
 
     assert(result2.attackerWon === true, "Attackers should win if Shield is jammed");
@@ -86,9 +95,11 @@ runTest("Multi-Wave Sector Breach", () => {
 
     const result = resolveSector(
         waves,
-        { sentinel: 10 },
+        { units: { sentinel: 10 }, tools: [] },
         { shield: 0, starport: 0, perimeter: 0 },
-        false
+        false,
+        0, // attackerAdmiralBonus
+        0  // defenderAdmiralBonus
     );
 
     assert(result.winner === 'attacker', "Attackers should win sector");
@@ -107,7 +118,10 @@ runTest("Starport Defense (Center Only)", () => {
         { marine: 1 },
         {},
         { shield: 0, starport: 2, perimeter: 0 },
-        true // isCenter
+        true, // isCenter
+        {},
+        0, // attackerAdmiralBonus
+        0  // defenderAdmiralBonus
     );
 
     assert(result.attackerWon === false, "Starport should save the lone marine");

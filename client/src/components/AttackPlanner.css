@@ -25,6 +25,20 @@
     padding: 1rem;
     background: rgba(0, 243, 255, 0.1);
     border-bottom: 1px solid #00f3ff;
+    gap: 1rem;
+}
+
+.ap-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.ap-header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
 }
 
 .ap-header h2 {
@@ -43,6 +57,105 @@
     font-size: 2rem;
     color: #00f3ff;
     cursor: pointer;
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Admiral Selector in Attack Planner */
+.admiral-selector-ap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admiral-selector-ap label {
+    color: #00f3ff;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.admiral-dropdown-container {
+    position: relative;
+}
+
+.admiral-dropdown-btn {
+    background: rgba(0, 243, 255, 0.1);
+    border: 1px solid #00f3ff;
+    color: #fff;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 200px;
+    justify-content: space-between;
+    transition: all 0.2s;
+}
+
+.admiral-dropdown-btn:hover {
+    background: rgba(0, 243, 255, 0.2);
+}
+
+.admiral-dropdown-btn .admiral-name {
+    font-weight: bold;
+    color: #fff;
+}
+
+.admiral-dropdown-btn .admiral-bonus {
+    color: #00ff88;
+    font-size: 0.85rem;
+}
+
+.admiral-dropdown-btn .no-admiral-text {
+    color: #888;
+    font-style: italic;
+}
+
+.dropdown-arrow {
+    color: #00f3ff;
+    font-size: 0.8rem;
+    margin-left: auto;
+}
+
+.admiral-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: rgba(10, 11, 30, 0.98);
+    border: 1px solid #00f3ff;
+    border-radius: 4px;
+    min-width: 250px;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.dropdown-item {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+}
+
+.dropdown-item:hover {
+    background: rgba(0, 243, 255, 0.1);
+}
+
+.dropdown-item.selected {
+    background: rgba(0, 243, 255, 0.15);
+    color: #00f3ff;
+}
+
+.dropdown-item .item-bonus {
+    color: #00ff88;
+    font-size: 0.85rem;
 }
 
 .ap-body {
