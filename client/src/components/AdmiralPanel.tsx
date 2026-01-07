@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '../lib/api';
+import { api, getCurrentUser } from '../lib/api';
 import './AdmiralPanel.css';
 
 interface AdmiralPanelProps {
@@ -18,6 +18,7 @@ interface Admiral {
   meleeStrengthBonus?: number;
   rangedStrengthBonus?: number;
   canopyReductionBonus?: number;
+  stationedPlanetId?: string | null;
   // Legacy fields
   attackBonus?: number;
   defenseBonus?: number;
@@ -46,7 +47,7 @@ const SLOT_LABELS: Record<GearSlot, string> = {
   weapon: 'Weapon',
   helmet: 'Helmet',
   spacesuit: 'Spacesuit',
-  matrix: 'Defense Matrix',
+  shield: 'Defense Matrix',
 };
 
 const RARITY_COLORS: Record<string, string> = {
@@ -60,8 +61,10 @@ const RARITY_COLORS: Record<string, string> = {
 export default function AdmiralPanel({ onClose }: AdmiralPanelProps) {
   const [admiral, setAdmiral] = useState<Admiral | null>(null);
   const [inventory, setInventory] = useState<GearPiece[]>([]);
+  const [planets, setPlanets] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [stationing, setStationing] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -76,12 +79,22 @@ export default function AdmiralPanel({ onClose }: AdmiralPanelProps) {
     try {
       setLoading(true);
       setError(null);
-      const [admiralData, inventoryData] = await Promise.all([
+      
+      const user = getCurrentUser();
+      
+      const [admiralData, inventoryData, planetsData] = await Promise.all([
         api.getAdmiral(),
         api.getGearInventory().catch(() => ({ inventory: [] })),
+        api.getPlanets()
       ]);
+      
       setAdmiral(admiralData);
       setInventory(inventoryData.inventory || []);
+      
+      if (user) {
+        setPlanets(planetsData.planets.filter(p => p.ownerId === user.userId && !p.isNpc));
+      }
+      
       setNameInput(admiralData.name);
       
       if (admiralData.hasNavalAcademy === false) {
@@ -120,6 +133,20 @@ export default function AdmiralPanel({ onClose }: AdmiralPanelProps) {
       setError(err.message || 'Failed to update name');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleStation = async (planetId: string | null) => {
+    try {
+      setStationing(true);
+      setError(null);
+      const updated = await api.stationAdmiral(planetId);
+      setAdmiral(updated);
+    } catch (err: any) {
+      console.error('Failed to station admiral:', err);
+      setError(err.message || 'Failed to station admiral');
+    } finally {
+      setStationing(false);
     }
   };
 
@@ -222,6 +249,24 @@ export default function AdmiralPanel({ onClose }: AdmiralPanelProps) {
                 </button>
               </div>
             )}
+          </div>
+          
+          <div className="admiral-station-section">
+            <label>Stationed for Defense at:</label>
+            <div className="station-controls">
+              <select 
+                value={admiral.stationedPlanetId || ''} 
+                onChange={(e) => handleStation(e.target.value || null)}
+                disabled={stationing}
+              >
+                <option value="">-- Not Stationed --</option>
+                {planets.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              {stationing && <span className="loader-mini">Updating...</span>}
+            </div>
+            <p className="station-hint">Defensive bonuses only apply to the stationed colony.</p>
           </div>
         </div>
 

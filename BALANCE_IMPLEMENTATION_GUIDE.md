@@ -17,6 +17,7 @@ This file is the single source of truth for all building stats. Each building ty
     - `population`: Population provided (for Housing Units).
     - `stability`: Public Order bonus or penalty.
     - `storage`: Resource storage capacity (for Storehouses).
+    - `recruitmentSpeedBonus`: Percentage bonus to unit recruitment speed (e.g., 0.05 for 5%).
     - `time`: Construction/upgrade time in seconds.
     - `xp`: Experience points granted upon completion.
 

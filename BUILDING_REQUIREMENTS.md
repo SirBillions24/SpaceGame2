@@ -5,13 +5,25 @@
 ### Defense System Access
 
 **To Access Defense Panel (Defensive Strategy):**
-- **Required Building:** Naval Academy (`academy`)
-- **Cost:** 500 Carbon, 500 Titanium
-- **Size:** 3×3 tiles
+- **Required Building:** None (Always available)
+- **What it allows:**
+  - Assign units to flanks
+  - Assign defense modules (tools)
+  - Configure defensive distribution
+
+**Note:** To add persistent **Defense Turrets** to your grid, you still require a **Naval Academy** (`naval_academy`).
+
+---
+
+### Unit Recruitment Access
+
+**To Recruit Units (Recruitment Console):**
+- **Required Building:** Orbital Garrison (`orbital_garrison`)
+- **Cost:** 40 Carbon, 20 Titanium
+- **Size:** 4×4 tiles
 - **What it unlocks:**
-  - Defense Panel (Defensive Strategy button)
   - Unit Recruitment (Recruitment Console)
-  - Defense Turret management (Add Turret button in Defense Panel)
+  - Recruitment Speed Bonus (5% per level)
 
 **Note:** The Defensive Grid (`shield_generator`) does NOT unlock the Defense Panel. It only increases your defensive grid level when built/upgraded.
 
@@ -50,13 +62,20 @@
 
 ### Military Buildings
 
-**Naval Academy (`academy`):**
+**Naval Academy (`naval_academy`):**
 - **Required for:**
   - Defense Panel access
-  - Unit Recruitment
+  - Admiral Panel access
   - Defense Turret management
-- **Cost:** 500 Carbon, 500 Titanium
+- **Cost:** 100 Carbon, 100 Titanium
 - **Size:** 3×3 tiles
+
+**Orbital Garrison (`orbital_garrison`):**
+- **Required for:**
+  - Unit Recruitment
+  - Recruitment Speed Bonuses
+- **Cost:** 40 Carbon, 20 Titanium
+- **Size:** 4×4 tiles
 
 **Defensive Grid (`shield_generator`):**
 - **Effect:** Increases defensive grid level (wall level)
@@ -102,23 +121,24 @@
 
 | Feature | Required Building | Building Type |
 |---------|------------------|---------------|
-| **Defense Panel** | Naval Academy | `academy` |
-| **Add Defense Turrets** | Naval Academy | `academy` |
-| **Recruit Units** | Naval Academy | `academy` |
+| **Defense Panel** | None | - |
+| **Add Defense Turrets** | Naval Academy | `naval_academy` |
+| **Recruit Units** | Orbital Garrison | `orbital_garrison` |
+| **Admiral Command** | Naval Academy | `naval_academy` |
 | **Manufacture Defense Tools** | Systems Workshop | `defense_workshop` |
 | **Manufacture Siege Tools** | Munitions Factory | `siege_workshop` |
-| **Increase Wall Level** | Defensive Grid | `shield_generator` |
+| **Increase Wall Level** | Energy Canopy | `canopy_generator` |
 
 ---
 
 ## ⚠️ Common Confusion
 
-**"I built Defensive Grid but can't access Defense Panel"**
-- **Solution:** Build a **Naval Academy** (`academy`)
-- The Defensive Grid only increases your wall level, it doesn't unlock the Defense Panel
+**"I built Energy Canopy but can't see Defense Turret options"**
+- **Solution:** Build a **Naval Academy** (`naval_academy`)
+- The Energy Canopy only increases your wall level. Defense Turret management requires the Academy.
 
 **"I can't recruit units"**
-- **Solution:** Build a **Naval Academy** (`academy`)
+- **Solution:** Build an **Orbital Garrison** (`orbital_garrison`)
 
 **"I can't manufacture tools"**
 - **Solution:** Build the appropriate workshop:

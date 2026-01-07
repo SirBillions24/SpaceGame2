@@ -417,6 +417,19 @@ export const api = {
     return response.json();
   },
 
+  async stationAdmiral(planetId: string | null) {
+    const response = await fetch(`${API_BASE_URL}/admiral/station`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to station admiral');
+    }
+    return response.json();
+  },
+
   async demolish(planetId: string, buildingId: string) {
     const response = await fetch(`${API_BASE_URL}/actions/demolish`, {
       method: 'POST',

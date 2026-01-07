@@ -4,7 +4,7 @@ import { processManufacturingQueue } from './toolService';
 import { processTurretQueue } from './turretService';
 import { UNIT_DATA } from '../constants/unitData';
 import { BASE_PRODUCTION } from '../constants/mechanics';
-import { BUILDING_DATA } from '../constants/buildingData';
+import { BUILDING_DATA, getBuildingStats } from '../constants/buildingData';
 import { addXp } from './progressionService';
 
 const WORLD_SIZE_X = parseInt(process.env.WORLD_SIZE_X || '5000');
@@ -400,7 +400,7 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
   // Building Limits
   if (type === 'colony_hub') throw new Error('Additional Colony Hubs cannot be constructed.');
 
-  const limitedBuildings = ['storage_depot', 'academy', 'tavern', 'defense_workshop', 'siege_workshop'];
+  const limitedBuildings = ['storage_depot', 'naval_academy', 'orbital_garrison', 'tavern', 'defense_workshop', 'siege_workshop'];
   if (limitedBuildings.includes(type)) {
     const existing = (planet as any).buildings?.find((b: any) => b.type === type);
     if (existing) {
@@ -622,21 +622,23 @@ export async function recruitUnit(planetId: string, unitType: string, count: num
   const planet = await syncPlanetResources(planetId);
   if (!planet) throw new Error('Planet not found');
 
-  // Validate Academy
-  const academyLevel = (planet as any).buildings
-    .filter((b: any) => b.type === 'academy' && b.status === 'active')
-    .reduce((max: number, b: any) => Math.max(max, b.level), 0);
+  // Validate Garrison
+  const garrisonBuilding = (planet as any).buildings
+    .filter((b: any) => b.type === 'orbital_garrison' && b.status === 'active')
+    .sort((a: any, b: any) => b.level - a.level)[0];
 
-  if (academyLevel < 1) {
-    throw new Error('Fleet Academy required');
+  const garrisonLevel = garrisonBuilding?.level || 0;
+
+  if (garrisonLevel < 1) {
+    throw new Error('Orbital Garrison required for unit recruitment.');
   }
 
   // Costs
   const unitData = UNIT_DATA[unitType];
   if (!unitData) throw new Error('Invalid unit type');
 
-  if (academyLevel < unitData.requiredAcademyLevel) {
-    throw new Error(`Naval Academy Level ${unitData.requiredAcademyLevel} required for ${unitData.name}`);
+  if (garrisonLevel < unitData.requiredGarrisonLevel) {
+    throw new Error(`Orbital Garrison Level ${unitData.requiredGarrisonLevel} required for ${unitData.name}`);
   }
 
   const totalCarbon = unitData.cost.carbon * count;
@@ -667,13 +669,12 @@ export async function recruitUnit(planetId: string, unitType: string, count: num
     }
   }
 
-  // Calculate Academy Level
-  // Already calculated at start
-  const acLvl = academyLevel;
-
-  // Apply Academy Speedup (5% per level above required)
-  const speedup = 1 - (Math.min(0.5, (acLvl - unitData.requiredAcademyLevel) * 0.05));
-  const durationPerUnit = unitData.time * speedup;
+  // Calculate Speed Bonus from Garrison
+  const garrisonStats = getBuildingStats('orbital_garrison', garrisonLevel);
+  const speedBonus = garrisonStats?.recruitmentSpeedBonus || 0;
+  
+  // Formula: Time / (1 + Bonus)
+  const durationPerUnit = unitData.time / (1 + speedBonus);
   const totalDuration = durationPerUnit * count;
 
   const finishTime = new Date(startTime.getTime() + (totalDuration * 1000));

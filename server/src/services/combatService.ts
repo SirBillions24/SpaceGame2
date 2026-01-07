@@ -117,6 +117,7 @@ interface CombatResult {
     meleeStrengthBonus: number;
     rangedStrengthBonus: number;
     canopyReductionBonus: number;
+    isStationed: boolean;
   } | null;
 }
 
@@ -464,7 +465,9 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   
   // Defender admiral
   const defenderAdmiral = fleet.toPlanet.owner.admiral;
-  const defenderBonuses = defenderAdmiral ? {
+  const isDefenderAdmiralStationed = defenderAdmiral && (defenderAdmiral as any).stationedPlanetId === fleet.toPlanetId;
+  
+  const defenderBonuses = (defenderAdmiral && isDefenderAdmiralStationed) ? {
     meleeStrengthBonus: (defenderAdmiral as any).meleeStrengthBonus || 0,
     rangedStrengthBonus: (defenderAdmiral as any).rangedStrengthBonus || 0,
     canopyReductionBonus: (defenderAdmiral as any).canopyReductionBonus || 0,
@@ -761,27 +764,36 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     });
 
     if (Object.keys(totalConsumedTools).length > 0) {
-      // Circular dependency? `deductTools` is in `fleetService`. 
-      // `fleetService` imports `combatService`. 
-      // We might need to copy/move `deductTools` or use prisma directly.
-      for (const [t, n] of Object.entries(totalConsumedTools)) {
-        // Safe decrement
-        await prisma.toolInventory.updateMany({
-          where: { planetId: fleet.toPlanetId, toolType: t },
-          data: { count: { decrement: n } }
+      for (const [toolType, consumedCount] of Object.entries(totalConsumedTools)) {
+        const currentTool = await prisma.toolInventory.findUnique({
+          where: { planetId_toolType: { planetId: fleet.toPlanetId, toolType } }
         });
+        if (currentTool) {
+          const newCount = Math.max(0, currentTool.count - (consumedCount as number));
+          await prisma.toolInventory.update({
+            where: { id: currentTool.id },
+            data: { count: newCount }
+          });
+        }
       }
     }
   }
 
   // Deduct Unit Losses from PlanetUnit (Defender)
-  // This is CRITICAL.
+  // Ensure we don't go into negative numbers
   if (Object.keys(totalDefLosses).length > 0) {
-    for (const [u, n] of Object.entries(totalDefLosses)) {
-      await prisma.planetUnit.updateMany({
-        where: { planetId: fleet.toPlanetId, unitType: u },
-        data: { count: { decrement: n } }
+    for (const [unitType, lossCount] of Object.entries(totalDefLosses)) {
+      const currentUnit = await prisma.planetUnit.findUnique({
+        where: { planetId_unitType: { planetId: fleet.toPlanetId, unitType } }
       });
+      
+      if (currentUnit) {
+        const newCount = Math.max(0, currentUnit.count - (lossCount as number));
+        await prisma.planetUnit.update({
+          where: { id: currentUnit.id },
+          data: { count: newCount }
+        });
+      }
     }
   }
 
@@ -810,6 +822,7 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
       meleeStrengthBonus: (defenderAdmiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (defenderAdmiral as any).rangedStrengthBonus || 0,
       canopyReductionBonus: (defenderAdmiral as any).canopyReductionBonus || 0,
+      isStationed: isDefenderAdmiralStationed || false,
     } : null
   };
 }

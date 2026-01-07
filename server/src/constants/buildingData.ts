@@ -15,6 +15,7 @@ export interface BuildingLevelStats {
     stability?: number;
     storage?: number;
     defenseBonus?: number; // New: Percentage defense bonus for Defensive Grid
+    recruitmentSpeedBonus?: number; // New: Percentage bonus to recruitment speed
     time: number; // in seconds
     xp: number;
 }
@@ -104,16 +105,26 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
             12: { level: 12, requiredPlayerLevel: 51, cost: { carbon: 54910, titanium: 65840 }, population: 85, stability: -85, time: 86400, xp: 43 },
         }
     },
-    academy: {
-        type: 'academy',
+    naval_academy: {
+        type: 'naval_academy',
         name: 'Naval Academy',
         size: 3,
         category: 'military',
         levels: {
-            1: { level: 1, requiredPlayerLevel: 4, cost: { carbon: 158, titanium: 83 }, time: 9, xp: 10 },
-            2: { level: 2, requiredPlayerLevel: 15, cost: { carbon: 1885, titanium: 1695 }, time: 3600, xp: 35 },
-            3: { level: 3, requiredPlayerLevel: 29, cost: { carbon: 6821, titanium: 9343 }, time: 10800, xp: 65 },
-            4: { level: 4, requiredPlayerLevel: 42, cost: { carbon: 55005, titanium: 51740 }, time: 28800, xp: 100 },
+            1: { level: 1, requiredPlayerLevel: 10, cost: { carbon: 100, titanium: 100 }, time: 10, xp: 50 },
+        }
+    },
+    orbital_garrison: {
+        type: 'orbital_garrison',
+        name: 'Orbital Garrison',
+        size: 4,
+        category: 'military',
+        levels: {
+            1: { level: 1, requiredPlayerLevel: 1, cost: { carbon: 40, titanium: 20 }, time: 30, xp: 20, recruitmentSpeedBonus: 0.05 },
+            2: { level: 2, requiredPlayerLevel: 5, cost: { carbon: 450, titanium: 300 }, time: 120, xp: 50, recruitmentSpeedBonus: 0.10 },
+            3: { level: 3, requiredPlayerLevel: 12, cost: { carbon: 1500, titanium: 1000 }, time: 600, xp: 150, recruitmentSpeedBonus: 0.15 },
+            4: { level: 4, requiredPlayerLevel: 25, cost: { carbon: 2750, titanium: 3000 }, time: 1800, xp: 400, recruitmentSpeedBonus: 0.20 },
+            5: { level: 5, requiredPlayerLevel: 40, cost: { carbon: 4500, titanium: 5500 }, time: 3600, xp: 1000, recruitmentSpeedBonus: 0.25 },
         }
     },
     tavern: {

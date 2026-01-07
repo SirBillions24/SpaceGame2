@@ -19,7 +19,8 @@ const BUILDING_LABELS: Record<string, string> = {
   'carbon_processor': 'Carbon Processor',
   'titanium_extractor': 'Titanium Extractor',
   'hydroponics': 'Hydroponics',
-  'academy': 'Naval Academy',
+  'naval_academy': 'Naval Academy',
+  'orbital_garrison': 'Orbital Garrison',
   'tavern': 'Intelligence Hub',
   'defense_workshop': 'Systems Workshop',
   'siege_workshop': 'Munitions Factory',
@@ -34,7 +35,8 @@ const BUILDING_SIZES: Record<string, number> = {
   'carbon_processor': 3,
   'titanium_extractor': 3,
   'hydroponics': 3,
-  'academy': 3,
+  'naval_academy': 3,
+  'orbital_garrison': 4,
   'tavern': 3,
   'defense_workshop': 3,
   'siege_workshop': 3,
@@ -49,7 +51,8 @@ const BUILDING_COSTS: Record<string, { c: number, t: number }> = {
   'carbon_processor': { c: 13, t: 0 },
   'titanium_extractor': { c: 14, t: 0 },
   'hydroponics': { c: 30, t: 0 },
-  'academy': { c: 158, t: 83 },
+  'naval_academy': { c: 100, t: 100 },
+  'orbital_garrison': { c: 40, t: 20 },
   'tavern': { c: 145, t: 95 },
   'defense_workshop': { c: 61, t: 30 },
   'siege_workshop': { c: 118, t: 63 },
@@ -112,21 +115,36 @@ const BUILDING_INFO: Record<string, {
     size: '2×2 tiles',
     cost: { c: 20, t: 10 }
   },
-  'academy': {
+  'naval_academy': {
     name: 'Naval Academy',
-    description: 'Military training facility for fleet operations and command.',
+    description: 'Military training facility for fleet operations and command leaders.',
     purpose: [
+      'Unlocks Admiral Panel (Command Leaders)',
       'Unlocks Defense Panel (Defensive Strategy)',
-      'Enables Unit Recruitment',
       'Unlocks Defense Turret management'
     ],
     unlocks: [
+      'Admiral Command access',
       'Defense Panel access',
-      'Recruitment Console',
       'Defense Turret system'
     ],
     size: '3×3 tiles',
-    cost: { c: 158, t: 83 }
+    cost: { c: 100, t: 100 }
+  },
+  'orbital_garrison': {
+    name: 'Orbital Garrison',
+    description: 'The primary staging area and barracks for your planetary ground forces.',
+    purpose: [
+      'Enables Unit Recruitment',
+      'Increases recruitment speed (5% per level)',
+      'Required for higher tier soldiers'
+    ],
+    unlocks: [
+      'Recruitment Console',
+      'Ground defense coordination'
+    ],
+    size: '4×4 tiles',
+    cost: { c: 40, t: 20 }
   },
   'tavern': {
     name: 'Intelligence Hub',
@@ -207,7 +225,7 @@ const BUILDING_CATEGORIES = {
     subsections: {
       military: {
         label: 'Military',
-        buildings: ['academy', 'canopy_generator', 'tavern', 'defense_workshop', 'siege_workshop']
+        buildings: ['naval_academy', 'orbital_garrison', 'canopy_generator', 'tavern', 'defense_workshop', 'siege_workshop']
       },
       civil: {
         label: 'Civil',
@@ -769,7 +787,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                             const canAfford = resources && resources.carbon >= cost.c && resources.titanium >= cost.t;
                             
                             // Check if limited building already exists
-                            const limitedBuildings = ['storage_depot', 'academy', 'tavern', 'defense_workshop', 'siege_workshop'];
+                            const limitedBuildings = ['storage_depot', 'naval_academy', 'orbital_garrison', 'tavern', 'defense_workshop', 'siege_workshop'];
                             const isLimited = limitedBuildings.includes(type);
                             const existingB = buildings.find(b => b.type === type);
 
@@ -970,22 +988,26 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                 {expandedSubsections.has('operations') && (
                   <div className="subsection-content">
                     <div className="action-grid">
-                      {buildings.some(b => b.type === 'academy' && b.status === 'active') && (
+                      {/* Base Action: Defensive Strategy is always available */}
+                      <button 
+                        className="action-card"
+                        onClick={() => setShowDefensePanel(true)}
+                      >
+                        <div className="action-icon">🛡️</div>
+                        <div className="action-label">Defensive Strategy</div>
+                      </button>
+
+                      {buildings.some(b => b.type === 'orbital_garrison' && b.status === 'active') && (
+                        <button 
+                          className="action-card"
+                          onClick={() => setShowRecruitmentPanel(true)}
+                        >
+                          <div className="action-icon">👥</div>
+                          <div className="action-label">Recruitment Console</div>
+                        </button>
+                      )}
+                      {buildings.some(b => b.type === 'naval_academy' && b.status === 'active') && (
                         <>
-                          <button 
-                            className="action-card"
-                            onClick={() => setShowRecruitmentPanel(true)}
-                          >
-                            <div className="action-icon">👥</div>
-                            <div className="action-label">Recruitment Console</div>
-                          </button>
-                          <button 
-                            className="action-card"
-                            onClick={() => setShowDefensePanel(true)}
-                          >
-                            <div className="action-icon">🛡️</div>
-                            <div className="action-label">Defensive Strategy</div>
-                          </button>
                           <button 
                             className="action-card"
                             onClick={() => setShowAdmiralPanel(true)}
@@ -1072,6 +1094,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                       {showUpgradeMenu.building.stats?.stability !== undefined && <div>Stability: {showUpgradeMenu.building.stats.stability}</div>}
                       {showUpgradeMenu.building.stats?.storage !== undefined && <div>Storage: {showUpgradeMenu.building.stats.storage.toLocaleString()}</div>}
                       {showUpgradeMenu.building.stats?.defenseBonus !== undefined && <div>Defense Bonus: +{(showUpgradeMenu.building.stats.defenseBonus * 100).toFixed(0)}%</div>}
+                      {showUpgradeMenu.building.stats?.recruitmentSpeedBonus !== undefined && <div>Recruitment Speed: +{(showUpgradeMenu.building.stats.recruitmentSpeedBonus * 100).toFixed(0)}%</div>}
                     </div>
                   </div>
                   {showUpgradeMenu.building.nextUpgrade && (
@@ -1106,6 +1129,12 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                           <div className="stat-diff">
                             Defense Bonus: +{(showUpgradeMenu.building.nextUpgrade.defenseBonus * 100).toFixed(0)}%
                             <span className="diff-val"> (+{((showUpgradeMenu.building.nextUpgrade.defenseBonus - (showUpgradeMenu.building.stats?.defenseBonus || 0)) * 100).toFixed(0)}%)</span>
+                          </div>
+                        )}
+                        {showUpgradeMenu.building.nextUpgrade.recruitmentSpeedBonus !== undefined && (
+                          <div className="stat-diff">
+                            Recruitment Speed: +{(showUpgradeMenu.building.nextUpgrade.recruitmentSpeedBonus * 100).toFixed(0)}%
+                            <span className="diff-val"> (+{((showUpgradeMenu.building.nextUpgrade.recruitmentSpeedBonus - (showUpgradeMenu.building.stats?.recruitmentSpeedBonus || 0)) * 100).toFixed(0)}%)</span>
                           </div>
                         )}
                       </div>

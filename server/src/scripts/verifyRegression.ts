@@ -34,9 +34,9 @@ async function run() {
                 name: 'Regression Test Planet',
                 x: 9996,
                 y: 9996, // Off-map
-                carbon: 10000,
-                titanium: 10000,
-                food: 10000,
+                carbon: 500,
+                titanium: 500,
+                food: 500,
                 credits: 1000,
                 lastResourceUpdate: new Date(),
                 gridSizeX: 10, // New field
@@ -61,7 +61,7 @@ async function run() {
         const synced = await syncPlanetResources(planet.id);
         if (!synced) throw new Error('Sync failed');
 
-        if (synced.carbon <= 10000) {
+        if (synced.carbon <= 500) {
             throw new Error(`FAIL: Carbon should have increased, got ${synced.carbon}`);
         }
         console.log(`   ✓ Resource production works (Carbon: ${synced.carbon})\n`);
@@ -119,7 +119,7 @@ async function run() {
 
         // 7. Test Recruitment Queue
         console.log('7. Testing recruitment queue...');
-        const academy = await placeBuilding(planet.id, 'academy', 3, 3);
+        const academy = await placeBuilding(planet.id, 'naval_academy', 3, 3);
         await prisma.building.update({ where: { id: academy.id }, data: { status: 'active' } });
         await prisma.planet.update({ where: { id: planet.id }, data: { isBuilding: false, activeBuildId: null } });
 

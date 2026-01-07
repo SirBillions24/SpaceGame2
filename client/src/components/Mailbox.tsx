@@ -431,8 +431,12 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                     <div>Deployed: <UnitList units={surfaceResult.initialAttackerUnits} colorClass="neutral" /></div>
                                     <div className="bonus-breakdown">
                                         Sector Bonus: +{(surfaceResult.attackerBonus * 100).toFixed(0)}%
-                                        {admirals.attacker && (admirals.attacker.meleeStrengthBonus > 0 || admirals.attacker.rangedStrengthBonus > 0) && (
-                                            <> | Commander: +{Math.max(admirals.attacker.meleeStrengthBonus, admirals.attacker.rangedStrengthBonus)}%</>
+                                        {admirals.attacker && (
+                                            <>
+                                                {admirals.attacker.meleeStrengthBonus > 0 && ` | M: +${admirals.attacker.meleeStrengthBonus}%`}
+                                                {admirals.attacker.rangedStrengthBonus > 0 && ` | R: +${admirals.attacker.rangedStrengthBonus}%`}
+                                                {admirals.attacker.canopyReductionBonus !== 0 && ` | C: ${admirals.attacker.canopyReductionBonus}%`}
+                                            </>
                                         )}
                                     </div>
                                     <div className="losses">Lost: <UnitList units={surfaceResult.attackerLosses} colorClass="red" /></div>
@@ -443,8 +447,12 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                     <div>Deployed: <UnitList units={surfaceResult.initialDefenderUnits} colorClass="neutral" /></div>
                                     <div className="bonus-breakdown">
                                         Sector Bonus: +{(surfaceResult.defenderBonus * 100).toFixed(0)}%
-                                        {admirals.defender && (admirals.defender.meleeStrengthBonus > 0 || admirals.defender.rangedStrengthBonus > 0) && (
-                                            <> | Commander: +{Math.max(admirals.defender.meleeStrengthBonus, admirals.defender.rangedStrengthBonus)}%</>
+                                        {admirals.defender && (
+                                            <>
+                                                {admirals.defender.meleeStrengthBonus > 0 && ` | M: +${admirals.defender.meleeStrengthBonus}%`}
+                                                {admirals.defender.rangedStrengthBonus > 0 && ` | R: +${admirals.defender.rangedStrengthBonus}%`}
+                                                {admirals.defender.canopyReductionBonus !== 0 && ` | C: ${admirals.defender.canopyReductionBonus}%`}
+                                            </>
                                         )}
                                     </div>
                                     <div className="losses">Lost: <UnitList units={surfaceResult.defenderLosses} colorClass="red" /></div>

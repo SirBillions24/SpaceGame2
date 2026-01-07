@@ -72,7 +72,7 @@ This report documents my understanding of the **Galactic Conquest** codebase aft
 
 #### **Building**
 - Grid-based placement (x, y coordinates)
-- Types: carbon_processor, titanium_extractor, hydroponics, academy, housing_unit, monument, etc.
+  - Types: carbon_processor, titanium_extractor, hydroponics, naval_academy, orbital_garrison, housing_unit, monument, etc.
 - Status: "active", "constructing", "upgrading"
 - Level-based progression
 

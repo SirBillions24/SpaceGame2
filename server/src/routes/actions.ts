@@ -77,6 +77,12 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
       if (!admiral || admiral.userId !== userId) {
         return res.status(403).json({ error: 'Invalid admiral or admiral does not belong to you' });
       }
+      
+      // Prevent sending a stationed admiral on an attack
+      if (admiral.stationedPlanetId) {
+        return res.status(400).json({ error: 'This admiral is currently stationed for planetary defense and cannot lead a fleet.' });
+      }
+
       admiralId = admiral.id;
     }
 

@@ -556,5 +556,66 @@
   color: #666666;
 }
 
+/* Admiral Station Section */
+.admiral-station-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(0, 243, 255, 0.05);
+  border: 1px solid rgba(0, 243, 255, 0.2);
+  border-radius: 4px;
+}
+
+.admiral-station-section label {
+  display: block;
+  color: #00f3ff;
+  font-size: 0.9rem;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+.station-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.station-controls select {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #00f3ff;
+  color: #ffffff;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.station-controls select:focus {
+  outline: none;
+  border-color: #00ffff;
+  box-shadow: 0 0 5px rgba(0, 243, 255, 0.5);
+}
+
+.loader-mini {
+  font-size: 0.8rem;
+  color: #00f3ff;
+  font-style: italic;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.station-hint {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #888888;
+  font-style: italic;
+}
+
 
 

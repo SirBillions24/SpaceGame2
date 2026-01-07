@@ -20,7 +20,7 @@ interface UnitStats {
     darkMatter?: number;
   };
   time: number;
-  requiredAcademyLevel: number;
+  requiredGarrisonLevel: number;
 }
 
 // These should ideally come from an API endpoint, but for now we define them here
@@ -39,7 +39,7 @@ const UNIT_DATA: Record<string, UnitStats> = {
     upkeep: 4,
     cost: { carbon: 0, titanium: 0, credits: 10 },
     time: 20,
-    requiredAcademyLevel: 1
+    requiredGarrisonLevel: 1
   },
   ranger: {
     id: 'ranger',
@@ -54,7 +54,7 @@ const UNIT_DATA: Record<string, UnitStats> = {
     upkeep: 3,
     cost: { carbon: 41, titanium: 0 },
     time: 30,
-    requiredAcademyLevel: 1
+    requiredGarrisonLevel: 2
   },
   sentinel: {
     id: 'sentinel',
@@ -69,7 +69,7 @@ const UNIT_DATA: Record<string, UnitStats> = {
     upkeep: 6,
     cost: { carbon: 200, titanium: 0 },
     time: 40,
-    requiredAcademyLevel: 2
+    requiredGarrisonLevel: 4
   },
   interceptor: {
     id: 'interceptor',
@@ -84,7 +84,7 @@ const UNIT_DATA: Record<string, UnitStats> = {
     upkeep: 10,
     cost: { carbon: 500, titanium: 250 },
     time: 120,
-    requiredAcademyLevel: 3
+    requiredGarrisonLevel: 5
   }
 };
 
@@ -101,8 +101,9 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
 
-  const academy = planet.buildings.find(b => b.type === 'academy' && b.status === 'active');
-  const academyLevel = academy ? academy.level : 0;
+  const garrison = planet.buildings.find(b => b.type === 'orbital_garrison' && b.status === 'active');
+  const garrisonLevel = garrison ? garrison.level : 0;
+  const speedBonus = garrisonLevel * 0.05; // 5% per level
 
   // Ensure recruitment queue is an array (safeguard against string response)
   const recruitmentQueue = Array.isArray(planet.recruitmentQueue)
@@ -155,7 +156,7 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
       <div className="recruitment-panel-content">
         <div className="units-selection-area">
           {Object.values(UNIT_DATA).map((unit) => {
-            const isLocked = academyLevel < unit.requiredAcademyLevel;
+            const isLocked = garrisonLevel < unit.requiredGarrisonLevel;
             return (
               <div
                 key={unit.id}
@@ -197,7 +198,7 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
                 </div>
                 {isLocked && (
                   <div className="locked-badge" style={{ position: 'absolute', top: '5px', right: '5px', background: '#ff4d4d', color: '#fff', fontSize: '0.6rem', padding: '2px 5px', borderRadius: '3px' }}>
-                    ACADEMY LV.{unit.requiredAcademyLevel}
+                    GARRISON LV.{unit.requiredGarrisonLevel}
                   </div>
                 )}
               </div>
@@ -269,7 +270,8 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
                   )}
                   <div className="cost-item">
                     <span>Time:</span>
-                    <strong>{selectedUnit.time * recruitCount}s</strong>
+                    <strong>{Math.ceil((selectedUnit.time / (1 + speedBonus)) * recruitCount)}s</strong>
+                    {speedBonus > 0 && <small style={{ color: '#00ff88', marginLeft: '5px' }}>(-{(speedBonus * 100).toFixed(0)}%)</small>}
                   </div>
                 </div>
 

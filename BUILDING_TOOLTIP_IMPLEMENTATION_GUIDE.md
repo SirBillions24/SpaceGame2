@@ -69,7 +69,7 @@ const BUILDING_INFO: Record<string, {
     size: '2×2 tiles',
     cost: { c: 150, t: 0 }
   },
-  'academy': {
+  'naval_academy': {
     name: 'Naval Academy',
     description: 'Military training facility for fleet operations and command.',
     purpose: [

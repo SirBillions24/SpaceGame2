@@ -101,6 +101,19 @@
     background: rgba(0, 243, 255, 0.2);
 }
 
+.admiral-dropdown-btn.busy {
+    border-color: #ff9800;
+    background: rgba(255, 152, 0, 0.1);
+    cursor: not-allowed;
+}
+
+.admiral-status-busy {
+    color: #ff9800;
+    font-size: 0.75rem;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
 .admiral-dropdown-btn .admiral-name {
     font-weight: bold;
     color: #fff;
@@ -151,6 +164,18 @@
 .dropdown-item.selected {
     background: rgba(0, 243, 255, 0.15);
     color: #00f3ff;
+}
+
+.dropdown-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(255, 0, 0, 0.05);
+}
+
+.item-status-busy {
+    color: #ff9800;
+    font-size: 0.75rem;
+    font-weight: bold;
 }
 
 .dropdown-item .item-bonus {

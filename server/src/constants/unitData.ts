@@ -19,7 +19,7 @@ export interface UnitStats {
         darkMatter?: number;
     };
     time: number; // Recruitment time in seconds
-    requiredAcademyLevel: number;
+    requiredGarrisonLevel: number;
 }
 
 export const UNIT_DATA: Record<string, UnitStats> = {
@@ -36,7 +36,7 @@ export const UNIT_DATA: Record<string, UnitStats> = {
         upkeep: 4,
         cost: { carbon: 0, titanium: 0, credits: 10 },
         time: 20,
-        requiredAcademyLevel: 1
+        requiredGarrisonLevel: 1
     },
     ranger: {
         id: 'ranger',
@@ -51,7 +51,7 @@ export const UNIT_DATA: Record<string, UnitStats> = {
         upkeep: 3,
         cost: { carbon: 41, titanium: 0 },
         time: 30,
-        requiredAcademyLevel: 1
+        requiredGarrisonLevel: 2
     },
     sentinel: {
         id: 'sentinel',
@@ -66,7 +66,7 @@ export const UNIT_DATA: Record<string, UnitStats> = {
         upkeep: 6,
         cost: { carbon: 200, titanium: 0 },
         time: 40,
-        requiredAcademyLevel: 2
+        requiredGarrisonLevel: 4
     },
     interceptor: {
         id: 'interceptor',
@@ -81,7 +81,7 @@ export const UNIT_DATA: Record<string, UnitStats> = {
         upkeep: 10,
         cost: { carbon: 500, titanium: 250 },
         time: 120,
-        requiredAcademyLevel: 3
+        requiredGarrisonLevel: 5
     }
 };
 

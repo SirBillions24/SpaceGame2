@@ -34,6 +34,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
       canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
+      stationedPlanetId: (admiral as any).stationedPlanetId,
       // Legacy fields for compatibility
       attackBonus: admiral.attackBonus,
       defenseBonus: admiral.defenseBonus,
@@ -72,6 +73,7 @@ router.put('/name', authenticateToken, async (req: AuthRequest, res: Response) =
       meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
       canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
+      stationedPlanetId: (admiral as any).stationedPlanetId,
       attackBonus: admiral.attackBonus,
       defenseBonus: admiral.defenseBonus,
     });
@@ -109,6 +111,7 @@ router.put('/gear', authenticateToken, async (req: AuthRequest, res: Response) =
       meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
       canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
+      stationedPlanetId: (admiral as any).stationedPlanetId,
       attackBonus: admiral.attackBonus,
       defenseBonus: admiral.defenseBonus,
     });
@@ -155,6 +158,7 @@ router.post('/gear/equip', authenticateToken, async (req: AuthRequest, res: Resp
       meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
       canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
+      stationedPlanetId: (admiral as any).stationedPlanetId,
       attackBonus: admiral.attackBonus,
       defenseBonus: admiral.defenseBonus,
     });
@@ -189,11 +193,43 @@ router.post('/gear/unequip', authenticateToken, async (req: AuthRequest, res: Re
       meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
       canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
+      stationedPlanetId: (admiral as any).stationedPlanetId,
       attackBonus: admiral.attackBonus,
       defenseBonus: admiral.defenseBonus,
     });
   } catch (error: any) {
     console.error('Error unequipping gear:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Station admiral at a planet
+router.post('/station', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { planetId } = req.body; // can be null to unstation
+
+    // Check if user has Naval Academy
+    const hasAcademy = await hasNavalAcademy(userId);
+    if (!hasAcademy) {
+      return res.status(403).json({ error: 'Naval Academy required to manage admirals' });
+    }
+
+    const admiral = await import('../services/admiralService').then(m => m.stationAdmiral(userId, planetId));
+
+    res.json({
+      id: admiral.id,
+      name: admiral.name,
+      gear: JSON.parse(admiral.gearJson || '{}'),
+      meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
+      rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
+      canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
+      stationedPlanetId: (admiral as any).stationedPlanetId,
+      attackBonus: admiral.attackBonus,
+      defenseBonus: admiral.defenseBonus,
+    });
+  } catch (error: any) {
+    console.error('Error stationing admiral:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });

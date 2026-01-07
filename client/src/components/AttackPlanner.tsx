@@ -87,7 +87,14 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
     const [waves, setWaves] = useState<WaveData[]>(createInitialState());
     const [selectedItem, setSelectedItem] = useState<{ type: ItemType, id: string } | null>(null);
     const [placementAmount, setPlacementAmount] = useState<number | 'max'>('max');
-    const [admiral, setAdmiral] = useState<{ id: string; name: string; attackBonus: number; defenseBonus: number } | null>(null);
+    const [admiral, setAdmiral] = useState<{ 
+        id: string; 
+        name: string; 
+        meleeStrengthBonus: number; 
+        rangedStrengthBonus: number; 
+        canopyReductionBonus: number;
+        stationedPlanetId?: string | null;
+    } | null>(null);
     const [loadingAdmiral, setLoadingAdmiral] = useState(false);
     const [showAdmiralDropdown, setShowAdmiralDropdown] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -265,17 +272,20 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                         <label>Admiral:</label>
                         <div className="admiral-dropdown-container" ref={dropdownRef}>
                         <button 
-                            className="admiral-dropdown-btn"
+                            className={`admiral-dropdown-btn ${admiral?.stationedPlanetId ? 'busy' : ''}`}
                             onClick={() => setShowAdmiralDropdown(!showAdmiralDropdown)}
                         >
                             {admiral ? (
                                 <>
                                     <span className="admiral-name">{admiral.name}</span>
-                                    <span className="admiral-bonus">
-                                        {admiral.attackBonus > 0 && `+${admiral.attackBonus}% Atk`}
-                                        {admiral.attackBonus > 0 && admiral.defenseBonus > 0 && ' / '}
-                                        {admiral.defenseBonus > 0 && `+${admiral.defenseBonus}% Def`}
-                                    </span>
+                                    {admiral.stationedPlanetId ? (
+                                        <span className="admiral-status-busy">(STATIONED FOR DEFENSE)</span>
+                                    ) : (
+                                        <span className="admiral-bonus">
+                                            {admiral.meleeStrengthBonus > 0 && `+${admiral.meleeStrengthBonus}% M`}
+                                            {admiral.rangedStrengthBonus > 0 && ` / +${admiral.rangedStrengthBonus}% R`}
+                                        </span>
+                                    )}
                                 </>
                             ) : (
                                 <span className="no-admiral-text">None Selected</span>
@@ -288,13 +298,16 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                     <div className="dropdown-item">Loading...</div>
                                 ) : admiral ? (
                                     <>
-                                        <div className="dropdown-item selected">
+                                    <div className={`dropdown-item ${admiral.stationedPlanetId ? 'disabled' : 'selected'}`}>
                                             <span>{admiral.name}</span>
-                                            <span className="item-bonus">
-                                                {admiral.attackBonus > 0 && `+${admiral.attackBonus}% Atk`}
-                                                {admiral.attackBonus > 0 && admiral.defenseBonus > 0 && ' / '}
-                                                {admiral.defenseBonus > 0 && `+${admiral.defenseBonus}% Def`}
-                                            </span>
+                                            {admiral.stationedPlanetId ? (
+                                                <span className="item-status-busy">BUSY</span>
+                                            ) : (
+                                                <span className="item-bonus">
+                                                    {admiral.meleeStrengthBonus > 0 && `+${admiral.meleeStrengthBonus}% M`}
+                                                    {admiral.rangedStrengthBonus > 0 && ` / +${admiral.rangedStrengthBonus}% R`}
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="dropdown-item" onClick={() => { setAdmiral(null); setShowAdmiralDropdown(false); }}>
                                             <span>None</span>
@@ -454,7 +467,14 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                     </div>
 
                     <div className="ap-footer">
-                        <button className="attack-btn" onClick={handleLaunch}>INITIATE ASSAULT</button>
+                        <button 
+                            className="attack-btn" 
+                            onClick={handleLaunch}
+                            disabled={!!admiral?.stationedPlanetId}
+                            title={admiral?.stationedPlanetId ? 'Admiral is stationed for defense' : ''}
+                        >
+                            {admiral?.stationedPlanetId ? 'ADMIRAL BUSY' : 'INITIATE ASSAULT'}
+                        </button>
                     </div>
                 </div>
             </div>

@@ -100,6 +100,7 @@ model Planet {
   fleetsFrom    Fleet[]         @relation("FromPlanet")
   fleetsTo      Fleet[]         @relation("ToPlanet")
   defenseLayout DefenseLayout?
+  stationedAdmiral Admiral?      @relation("StationedAdmiral")
 
   @@unique([x, y])
   @@map("planets")
@@ -169,6 +170,9 @@ model Admiral {
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   fleets Fleet[]
+
+  stationedPlanetId String? @unique @map("stationed_planet_id")
+  stationedPlanet   Planet? @relation("StationedAdmiral", fields: [stationedPlanetId], references: [id], onDelete: SetNull)
 
   @@map("admirals")
 }
@@ -256,7 +260,7 @@ model Fleet {
 model Building {
   id       String @id @default(uuid())
   planetId String @map("planet_id")
-  type     String // "carbon_processor", "titanium_extractor", "hydroponics", "colony_hub", "academy"
+  type     String // "carbon_processor", "titanium_extractor", "hydroponics", "colony_hub", "naval_academy", "orbital_garrison"
   x        Int
   y        Int
   level    Int    @default(1)

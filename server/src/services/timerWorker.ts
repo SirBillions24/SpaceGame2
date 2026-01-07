@@ -94,45 +94,6 @@ async function processArrivedFleets() {
           // Resolve combat (This function now handles losses and tool deduction internally)
           const combatResult = await resolveCombat(fleet.id);
 
-          // --- FIX: Remove losses from Defense Layout to prevent ghost troops ---
-          const defenseLayout = await prisma.defenseLayout.findUnique({
-            where: { planetId: fleet.toPlanetId }
-          });
-
-          if (defenseLayout) {
-            const front = JSON.parse(defenseLayout.frontLaneJson);
-            const left = JSON.parse(defenseLayout.leftLaneJson);
-            const right = JSON.parse(defenseLayout.rightLaneJson);
-
-            // Helper to apply losses to a lane
-            const applyLaneLosses = (laneUnits: any, losses: any) => {
-              for (const [u, loss] of Object.entries(losses)) {
-                if (laneUnits[u]) {
-                  laneUnits[u] = Math.max(0, laneUnits[u] - (loss as number));
-                }
-              }
-            };
-
-            applyLaneLosses(front, combatResult.sectorResults.center.defenderLosses);
-            applyLaneLosses(left, combatResult.sectorResults.left.defenderLosses);
-            applyLaneLosses(right, combatResult.sectorResults.right.defenderLosses);
-
-            // What about Courtyard losses?
-            // If we implement Courtney logic fully, we'd deduct here too. 
-            // For now, lane losses are the primary source of defense depletion.
-            // (Courtyard defenders are currently dynamic/unassigned in combatService, so no persistent slot to update yet)
-
-            await prisma.defenseLayout.update({
-              where: { id: defenseLayout.id },
-              data: {
-                frontLaneJson: JSON.stringify(front),
-                leftLaneJson: JSON.stringify(left),
-                rightLaneJson: JSON.stringify(right)
-              }
-            });
-          }
-          // -------------------------------------------------------------------
-
           // Handle Loot
           let resourcesJson = null;
           if (combatResult.resourcesJson) {

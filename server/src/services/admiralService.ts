@@ -212,6 +212,26 @@ export async function unequipGearPiece(userId: string, slotType: GearSlot) {
 }
 
 /**
+ * Station an admiral at a specific planet for defense
+ */
+export async function stationAdmiral(userId: string, planetId: string | null) {
+  const admiral = await getOrCreateAdmiral(userId);
+
+  if (planetId) {
+    // Verify planet ownership
+    const planet = await prisma.planet.findFirst({
+      where: { id: planetId, ownerId: userId }
+    });
+    if (!planet) throw new Error('Planet not found or not owned by you');
+  }
+
+  return await prisma.admiral.update({
+    where: { id: admiral.id },
+    data: { stationedPlanetId: planetId }
+  });
+}
+
+/**
  * Get user's gear inventory
  */
 export async function getGearInventory(userId: string) {
@@ -339,7 +359,7 @@ export async function hasNavalAcademy(userId: string, planetId?: string): Promis
     }
 
     return planet.buildings.some(
-      (b) => b.type === 'academy' && b.status === 'active'
+      (b) => b.type === 'naval_academy' && b.status === 'active'
     );
   } else {
     // Check any planet owned by user
@@ -350,7 +370,7 @@ export async function hasNavalAcademy(userId: string, planetId?: string): Promis
 
     return planets.some((planet) =>
       planet.buildings.some(
-        (b) => b.type === 'academy' && b.status === 'active'
+        (b) => b.type === 'naval_academy' && b.status === 'active'
       )
     );
   }

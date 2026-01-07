@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api, type Planet } from '../lib/api';
 import DefenseTurretModal from './DefenseTurretModal';
 import './DefensePanel.css';
@@ -34,13 +34,52 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
     const [caps, setCaps] = useState({ canopy: 100 });
     const [showTurretModal, setShowTurretModal] = useState(false);
 
+    // Admiral State
+    const [admiral, setAdmiral] = useState<{
+        id: string;
+        name: string;
+        meleeStrengthBonus: number;
+        rangedStrengthBonus: number;
+        canopyReductionBonus: number;
+        stationedPlanetId?: string | null;
+    } | null>(null);
+    const [loadingAdmiral, setLoadingAdmiral] = useState(false);
+    const [showAdmiralDropdown, setShowAdmiralDropdown] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
     // Tool Selection Modal State
     const [showToolSelector, setShowToolSelector] = useState<{ lane: 'front' | 'left' | 'right' | null } | null>(null);
 
     useEffect(() => {
         setCurrentPlanet(planet);
         loadData();
+        loadAdmiral();
     }, [planet.id]);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowAdmiralDropdown(false);
+            }
+        };
+        if (showAdmiralDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [showAdmiralDropdown]);
+
+    const loadAdmiral = async () => {
+        try {
+            setLoadingAdmiral(true);
+            const admiralData = await api.getAdmiral();
+            setAdmiral(admiralData);
+        } catch (err) {
+            setAdmiral(null);
+        } finally {
+            setLoadingAdmiral(false);
+        }
+    };
 
     const loadData = async () => {
         try {
@@ -331,6 +370,60 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        {/* Admiral Selector */}
+                        <div className="admiral-selector-defense" ref={dropdownRef}>
+                            <button 
+                                className={`admiral-dropdown-btn ${admiral?.stationedPlanetId === currentPlanet.id ? 'active' : ''}`}
+                                onClick={() => setShowAdmiralDropdown(!showAdmiralDropdown)}
+                                title={admiral?.stationedPlanetId === currentPlanet.id ? 'Admiral is stationed here for defense' : 'Station an admiral for defense bonuses'}
+                            >
+                                {admiral ? (
+                                    <>
+                                        <div className="admiral-mini-info">
+                                            <span className="admiral-name">{admiral.name}</span>
+                                            {admiral.stationedPlanetId === currentPlanet.id ? (
+                                                <span className="admiral-status-active">STATIONED</span>
+                                            ) : (
+                                                <span className="admiral-status-off">UNASSIGNED</span>
+                                            )}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <span className="no-admiral-text">No Admiral</span>
+                                )}
+                                <span className="dropdown-arrow">▼</span>
+                            </button>
+
+                            {showAdmiralDropdown && (
+                                <div className="admiral-dropdown-menu">
+                                    {loadingAdmiral ? (
+                                        <div className="dropdown-item">Loading...</div>
+                                    ) : admiral ? (
+                                        <div className="admiral-details-popover">
+                                            <h4>{admiral.name}</h4>
+                                            <div className="attribute-row">
+                                                <span>Melee Defense:</span>
+                                                <span className="success-text">+{admiral.meleeStrengthBonus}%</span>
+                                            </div>
+                                            <div className="attribute-row">
+                                                <span>Ranged Defense:</span>
+                                                <span className="success-text">+{admiral.rangedStrengthBonus}%</span>
+                                            </div>
+                                            <div className="attribute-row" style={{ marginTop: '5px', borderTop: '1px solid #444', paddingTop: '5px' }}>
+                                                <span className="status-label">Status:</span>
+                                                <span className={admiral.stationedPlanetId === currentPlanet.id ? 'success-text' : 'warning-text'}>
+                                                    {admiral.stationedPlanetId === currentPlanet.id ? 'Stationed Here' : 'Not Stationed Here'}
+                                                </span>
+                                            </div>
+                                            <p className="note">Admirals only provide bonuses to the planet where they are stationed.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="dropdown-item">No Admiral Available</div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
                         <button 
                             className="add-turret-btn"
                             onClick={() => setShowTurretModal(true)}

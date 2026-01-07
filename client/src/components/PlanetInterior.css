@@ -260,7 +260,8 @@
 .grid-building.carbon_processor { background: #424242; border-color: #bdbdbd; }
 .grid-building.hydroponics { background: #1b5e20; border-color: #66bb6a; }
 .grid-building.titanium_extractor { background: #3e2723; border-color: #8d6e63; }
-.grid-building.academy { background: #bf360c; border-color: #ffab91; }
+.grid-building.naval_academy { background: #bf360c; border-color: #ffab91; }
+.grid-building.orbital_garrison { background: #1a237e; border-color: #8c9eff; }
 
 .grid-building.constructing {
   background: repeating-linear-gradient(45deg, #ff6f00, #ff6f00 10px, #ff8f00 10px, #ff8f00 20px);
