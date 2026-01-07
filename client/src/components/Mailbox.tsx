@@ -12,6 +12,10 @@ interface BattleReportSummary {
     createdAt: string;
     loot?: { carbon: number; titanium: number; food: number };
     resourcesStolen?: { carbon: number; titanium: number; food: number };
+    admirals?: {
+        attacker: { name: string; meleeStrengthBonus: number; rangedStrengthBonus: number; canopyReductionBonus: number } | null;
+        defender: { name: string } | null;
+    };
 }
 
 interface MailboxProps {
@@ -104,6 +108,15 @@ const UnitList = ({ units, colorClass }: { units: Record<string, number>, colorC
 };
 
 // Helper for tools
+const TOOL_LABELS: Record<string, string> = {
+    'sentry_drones': 'Sentry Drones (+25% Energy Canopy)',
+    'hardened_bulkheads': 'Hardened Bulkheads (+35% Docking Hub)',
+    'targeting_uplinks': 'Targeting Uplinks (+25% Ranged accuracy)',
+    'invasion_anchors': 'Invasion Anchors (-10% Energy Canopy)',
+    'plasma_breachers': 'Plasma Breachers (-10% Docking Hub)',
+    'stealth_field_pods': 'Stealth Field Pods (-10% Ranged sensors)'
+};
+
 const ToolList = ({ tools }: { tools: Record<string, number> | Record<string, number>[] }) => {
     // If array (waves), aggregate
     let agg: Record<string, number> = {};
@@ -125,8 +138,8 @@ const ToolList = ({ tools }: { tools: Record<string, number> | Record<string, nu
         <div className="tool-list">
             <span className="tool-label">Tools: </span>
             {filtered.map(([t, c]) => (
-                <div key={t} className="tool-entry" title={t}>
-                    {c} x {t}
+                <div key={t} className="tool-entry" title={TOOL_LABELS[t] || t}>
+                    {c} x {TOOL_LABELS[t] || t}
                 </div>
             ))}
         </div>
@@ -231,13 +244,18 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                             <span className="admiral-name">{admirals.attacker.name}</span>
                                         </div>
                                         <div className="admiral-bonuses">
-                                            {admirals.attacker.attackBonus > 0 && (
-                                                <span className="bonus attack">+{admirals.attacker.attackBonus}% Attack</span>
+                                            {admirals.attacker.meleeStrengthBonus > 0 && (
+                                                <span className="bonus attack">+{admirals.attacker.meleeStrengthBonus}% Melee</span>
                                             )}
-                                            {admirals.attacker.defenseBonus > 0 && (
-                                                <span className="bonus defense">+{admirals.attacker.defenseBonus}% Defense</span>
+                                            {admirals.attacker.rangedStrengthBonus > 0 && (
+                                                <span className="bonus attack">+{admirals.attacker.rangedStrengthBonus}% Ranged</span>
                                             )}
-                                            {admirals.attacker.attackBonus === 0 && admirals.attacker.defenseBonus === 0 && (
+                                            {admirals.attacker.canopyReductionBonus < 0 && (
+                                                <span className="bonus defense">{admirals.attacker.canopyReductionBonus}% Canopy Reduc.</span>
+                                            )}
+                                            {admirals.attacker.meleeStrengthBonus === 0 && 
+                                             admirals.attacker.rangedStrengthBonus === 0 && 
+                                             admirals.attacker.canopyReductionBonus === 0 && (
                                                 <span className="no-bonus">No bonuses</span>
                                             )}
                                         </div>
@@ -250,13 +268,18 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                             <span className="admiral-name">{admirals.defender.name}</span>
                                         </div>
                                         <div className="admiral-bonuses">
-                                            {admirals.defender.attackBonus > 0 && (
-                                                <span className="bonus attack">+{admirals.defender.attackBonus}% Attack</span>
+                                            {admirals.defender.meleeStrengthBonus > 0 && (
+                                                <span className="bonus attack">+{admirals.defender.meleeStrengthBonus}% Melee</span>
                                             )}
-                                            {admirals.defender.defenseBonus > 0 && (
-                                                <span className="bonus defense">+{admirals.defender.defenseBonus}% Defense</span>
+                                            {admirals.defender.rangedStrengthBonus > 0 && (
+                                                <span className="bonus attack">+{admirals.defender.rangedStrengthBonus}% Ranged</span>
                                             )}
-                                            {admirals.defender.attackBonus === 0 && admirals.defender.defenseBonus === 0 && (
+                                            {admirals.defender.canopyReductionBonus < 0 && (
+                                                <span className="bonus defense">{admirals.defender.canopyReductionBonus}% Canopy Reduc.</span>
+                                            )}
+                                            {(!admirals.defender.meleeStrengthBonus && 
+                                              !admirals.defender.rangedStrengthBonus && 
+                                              !admirals.defender.canopyReductionBonus) && (
                                                 <span className="no-bonus">No bonuses</span>
                                             )}
                                         </div>
@@ -300,7 +323,7 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                     <div className="flanks-row">
                         {['left', 'center', 'right'].map(laneKey => {
                             const result = getSector(laneKey);
-                            const label = laneKey === 'left' ? 'Industrial' : laneKey === 'center' ? 'Starport' : 'Military';
+                            const label = laneKey === 'left' ? 'Industrial' : laneKey === 'center' ? 'Central Docking Hub' : 'Military';
 
                             if (!result) return <div key={laneKey} className="flank-col empty">Empty</div>;
 
@@ -406,14 +429,24 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                     {/* We don't have exact initial breakdown of courtyard stored in report root, but `surfaceResult` implies survivors */}
                                     {/* For now show losses */}
                                     <div>Deployed: <UnitList units={surfaceResult.initialAttackerUnits} colorClass="neutral" /></div>
-                                    <div>Bonus: +{(surfaceResult.attackerBonus * 100).toFixed(0)}%</div>
+                                    <div className="bonus-breakdown">
+                                        Sector Bonus: +{(surfaceResult.attackerBonus * 100).toFixed(0)}%
+                                        {admirals.attacker && (admirals.attacker.meleeStrengthBonus > 0 || admirals.attacker.rangedStrengthBonus > 0) && (
+                                            <> | Commander: +{Math.max(admirals.attacker.meleeStrengthBonus, admirals.attacker.rangedStrengthBonus)}%</>
+                                        )}
+                                    </div>
                                     <div className="losses">Lost: <UnitList units={surfaceResult.attackerLosses} colorClass="red" /></div>
                                 </div>
                                 <div className="cy-vs">VS</div>
                                 <div className="cy-side">
                                     <h5>Defender Force</h5>
                                     <div>Deployed: <UnitList units={surfaceResult.initialDefenderUnits} colorClass="neutral" /></div>
-                                    <div>Bonus: +{(surfaceResult.defenderBonus * 100).toFixed(0)}%</div>
+                                    <div className="bonus-breakdown">
+                                        Sector Bonus: +{(surfaceResult.defenderBonus * 100).toFixed(0)}%
+                                        {admirals.defender && (admirals.defender.meleeStrengthBonus > 0 || admirals.defender.rangedStrengthBonus > 0) && (
+                                            <> | Commander: +{Math.max(admirals.defender.meleeStrengthBonus, admirals.defender.rangedStrengthBonus)}%</>
+                                        )}
+                                    </div>
                                     <div className="losses">Lost: <UnitList units={surfaceResult.defenderLosses} colorClass="red" /></div>
                                 </div>
                             </div>

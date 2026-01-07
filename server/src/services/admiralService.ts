@@ -13,7 +13,7 @@ export interface GearPiece {
   level: number;
   meleeStrengthBonus: number;
   rangedStrengthBonus: number;
-  wallReductionBonus: number;
+  canopyReductionBonus: number;
   // Legacy fields
   attackBonus?: number;
   defenseBonus?: number;
@@ -35,13 +35,13 @@ export interface AdmiralGear {
 export function calculateAdmiralBonuses(gearJson: string): {
   meleeStrengthBonus: number;
   rangedStrengthBonus: number;
-  wallReductionBonus: number;
+  canopyReductionBonus: number;
 } {
   try {
     const gear: AdmiralGear = JSON.parse(gearJson || '{}');
     let melee = 0;
     let ranged = 0;
-    let wall = 0;
+    let canopy = 0;
 
     // Sum bonuses from all gear slots (only the 4 valid slots)
     for (const slotType of GEAR_SLOTS) {
@@ -49,7 +49,7 @@ export function calculateAdmiralBonuses(gearJson: string): {
       if (piece) {
         melee += piece.meleeStrengthBonus || 0;
         ranged += piece.rangedStrengthBonus || 0;
-        wall += piece.wallReductionBonus || 0;
+        canopy += piece.canopyReductionBonus || 0;
       }
     }
 
@@ -57,13 +57,13 @@ export function calculateAdmiralBonuses(gearJson: string): {
     return {
       meleeStrengthBonus: Math.min(100, Math.max(0, melee)),
       rangedStrengthBonus: Math.min(100, Math.max(0, ranged)),
-      wallReductionBonus: Math.max(-100, Math.min(0, wall)), // Negative only, capped at -100%
+      canopyReductionBonus: Math.max(-100, Math.min(0, canopy)), // Negative only, capped at -100%
     };
   } catch (e) {
     return {
       meleeStrengthBonus: 0,
       rangedStrengthBonus: 0,
-      wallReductionBonus: 0,
+      canopyReductionBonus: 0,
     };
   }
 }
@@ -142,7 +142,7 @@ export async function updateAdmiralGear(userId: string, gear: Partial<AdmiralGea
       gearJson,
       meleeStrengthBonus: bonuses.meleeStrengthBonus,
       rangedStrengthBonus: bonuses.rangedStrengthBonus,
-      wallReductionBonus: bonuses.wallReductionBonus,
+      canopyReductionBonus: bonuses.canopyReductionBonus,
       // Keep legacy fields for compatibility
       attackBonus: bonuses.meleeStrengthBonus + bonuses.rangedStrengthBonus, // Rough equivalent
       defenseBonus: 0, // Not used for attack bonuses
@@ -185,7 +185,7 @@ export async function equipGearPiece(userId: string, pieceId: string, slotType: 
     level: piece.level,
     meleeStrengthBonus: piece.meleeStrengthBonus,
     rangedStrengthBonus: piece.rangedStrengthBonus,
-    wallReductionBonus: piece.wallReductionBonus,
+    canopyReductionBonus: piece.canopyReductionBonus,
     attackBonus: piece.attackBonus || 0,
     defenseBonus: piece.defenseBonus || 0,
     setName: piece.setName || undefined,
@@ -236,7 +236,7 @@ export async function createGearPiece(
   level: number,
   meleeStrengthBonus: number,
   rangedStrengthBonus: number,
-  wallReductionBonus: number,
+  canopyReductionBonus: number,
   setName?: string,
   iconName?: string
 ) {
@@ -253,7 +253,7 @@ export async function createGearPiece(
       level,
       meleeStrengthBonus,
       rangedStrengthBonus,
-      wallReductionBonus,
+      canopyReductionBonus,
       attackBonus: meleeStrengthBonus + rangedStrengthBonus, // Legacy compatibility
       defenseBonus: 0,
       setName,
@@ -290,7 +290,7 @@ export async function giveStarterGear(userId: string) {
         item.level,
         item.meleeStrengthBonus,
         item.rangedStrengthBonus,
-        item.wallReductionBonus,
+        item.canopyReductionBonus,
         item.setName,
         item.iconName
       );
@@ -317,7 +317,7 @@ export async function createGearFromDefinition(
     gearDef.level,
     gearDef.meleeStrengthBonus,
     gearDef.rangedStrengthBonus,
-    gearDef.wallReductionBonus,
+    gearDef.canopyReductionBonus,
     gearDef.setName,
     gearDef.iconName
   );

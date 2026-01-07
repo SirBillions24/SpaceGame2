@@ -7,7 +7,7 @@
  * All gear bonuses are capped at:
  * - Melee Strength: +100%
  * - Ranged Strength: +100%
- * - Wall Reduction: -100%
+ * - Canopy Reduction: -100%
  */
 
 import { GearSlot } from '../services/admiralService';
@@ -19,7 +19,7 @@ export interface GearItemDefinition {
   level: number;
   meleeStrengthBonus: number;  // Percentage (0-100)
   rangedStrengthBonus: number;  // Percentage (0-100)
-  wallReductionBonus: number;   // Percentage (-100 to 0, negative)
+  canopyReductionBonus: number;   // Percentage (-100 to 0, negative)
   setName?: string;             // Optional set name for set bonuses
   iconName: string;             // Icon identifier (matches image filename)
 }
@@ -37,7 +37,7 @@ export const STARTER_GEAR: GearItemDefinition[] = [
     level: 10,
     meleeStrengthBonus: 50,
     rangedStrengthBonus: 50,
-    wallReductionBonus: -50,
+    canopyReductionBonus: -50,
     iconName: 'weapon',
   },
   {
@@ -47,7 +47,7 @@ export const STARTER_GEAR: GearItemDefinition[] = [
     level: 7,
     meleeStrengthBonus: 25,
     rangedStrengthBonus: 25,
-    wallReductionBonus: -25,
+    canopyReductionBonus: -25,
     iconName: 'helmet',
   },
   {
@@ -57,7 +57,7 @@ export const STARTER_GEAR: GearItemDefinition[] = [
     level: 5,
     meleeStrengthBonus: 15,
     rangedStrengthBonus: 15,
-    wallReductionBonus: -15,
+    canopyReductionBonus: -15,
     iconName: 'spacesuit',
   },
   {
@@ -67,7 +67,7 @@ export const STARTER_GEAR: GearItemDefinition[] = [
     level: 3,
     meleeStrengthBonus: 10,
     rangedStrengthBonus: 10,
-    wallReductionBonus: -10,
+    canopyReductionBonus: -10,
     iconName: 'shield',
   },
 ];

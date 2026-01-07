@@ -17,7 +17,7 @@ interface Admiral {
   };
   meleeStrengthBonus?: number;
   rangedStrengthBonus?: number;
-  wallReductionBonus?: number;
+  canopyReductionBonus?: number;
   // Legacy fields
   attackBonus?: number;
   defenseBonus?: number;
@@ -31,7 +31,7 @@ interface GearPiece {
   level: number;
   meleeStrengthBonus: number;
   rangedStrengthBonus: number;
-  wallReductionBonus: number;
+  canopyReductionBonus: number;
   // Legacy fields
   attackBonus?: number;
   defenseBonus?: number;
@@ -46,7 +46,7 @@ const SLOT_LABELS: Record<GearSlot, string> = {
   weapon: 'Weapon',
   helmet: 'Helmet',
   spacesuit: 'Spacesuit',
-  shield: 'Shield',
+  matrix: 'Defense Matrix',
 };
 
 const RARITY_COLORS: Record<string, string> = {
@@ -241,14 +241,14 @@ export default function AdmiralPanel({ onClose }: AdmiralPanelProps) {
               </span>
             </div>
             <div className="bonus-item">
-              <span className="bonus-label">Wall Reduction:</span>
+              <span className="bonus-label">Canopy Reduction:</span>
               <span className="bonus-value positive">
-                {admiral.wallReductionBonus || 0}%
+                {admiral.canopyReductionBonus || 0}%
               </span>
             </div>
           </div>
           <p className="bonus-note">
-            Bonuses are capped at +100% for melee/ranged and -100% for wall reduction.
+            Bonuses are capped at +100% for melee/ranged and -100% for Canopy reduction.
             These bonuses apply only when attacking. Defense bonuses are handled separately.
           </p>
         </div>
@@ -297,8 +297,8 @@ export default function AdmiralPanel({ onClose }: AdmiralPanelProps) {
                           {equipped.rangedStrengthBonus > 0 && (
                             <span className="stat-attack">+{equipped.rangedStrengthBonus}% Ranged</span>
                           )}
-                          {equipped.wallReductionBonus < 0 && (
-                            <span className="stat-defense">{equipped.wallReductionBonus}% Wall</span>
+                          {equipped.canopyReductionBonus < 0 && (
+                            <span className="stat-defense">{equipped.canopyReductionBonus}% Canopy</span>
                           )}
                         </div>
                         <div className="gear-slot-rarity" style={{ color: RARITY_COLORS[equipped.rarity] || '#9d9d9d' }}>
@@ -400,8 +400,8 @@ export default function AdmiralPanel({ onClose }: AdmiralPanelProps) {
                       {piece.rangedStrengthBonus > 0 && (
                         <span className="stat-attack">+{piece.rangedStrengthBonus}% Ranged</span>
                       )}
-                      {piece.wallReductionBonus < 0 && (
-                        <span className="stat-defense">{piece.wallReductionBonus}% Wall</span>
+                      {piece.canopyReductionBonus < 0 && (
+                        <span className="stat-defense">{piece.canopyReductionBonus}% Canopy</span>
                       )}
                     </div>
                     {isEquipped && (

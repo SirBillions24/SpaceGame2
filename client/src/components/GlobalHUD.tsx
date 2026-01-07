@@ -12,6 +12,9 @@ interface GlobalHUDProps {
 export default function GlobalHUD({ user, currentPlanet: initialPlanet }: GlobalHUDProps) {
     const [planet, setPlanet] = useState<Planet | null>(initialPlanet);
     const [mailboxOpen, setMailboxOpen] = useState(false);
+    const [devToolsOpen, setDevToolsOpen] = useState(false);
+    const [clickCount, setClickCount] = useState(0);
+    const [lastClickTime, setLastClickTime] = useState(0);
 
     // Sync state if prop changes
     useEffect(() => {
@@ -67,10 +70,25 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
     const pop = stats?.population || 0;
     const creditTooltip = `Population: ${pop}\nTax Revenue: ${taxRev.toFixed(1)}/h`;
 
+    const handleBannerClick = () => {
+        const now = Date.now();
+        if (now - lastClickTime < 500) {
+            const newCount = clickCount + 1;
+            setClickCount(newCount);
+            if (newCount >= 3) {
+                setDevToolsOpen(true);
+                setClickCount(0);
+            }
+        } else {
+            setClickCount(1);
+        }
+        setLastClickTime(now);
+    };
+
     return (
         <div className="global-hud">
             {/* Top Left: Level & User */}
-            <div className="hud-profile-section">
+            <div className="hud-profile-section" onClick={handleBannerClick}>
                 <div className="level-badge">{level}</div>
                 <div className="profile-details">
                     <div className="username">{user?.username || 'Commander'}</div>
@@ -280,6 +298,45 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
             {/* Public Order Bar Removed (Integrated) */}
 
             {mailboxOpen && <Mailbox onClose={() => setMailboxOpen(false)} />}
+            {devToolsOpen && planet && (
+                <div className="dev-tools-overlay" onClick={() => setDevToolsOpen(false)}>
+                    <div className="dev-tools-modal" onClick={e => e.stopPropagation()}>
+                        <div className="dev-header">
+                            <h3>COMMANDER DEV TOOLS</h3>
+                            <button className="close-btn" onClick={() => setDevToolsOpen(false)}>×</button>
+                        </div>
+                        <div className="dev-content">
+                            <button onClick={async () => {
+                                try {
+                                    await api.devAddResources(planet.id, 1000);
+                                    api.getPlanet(planet.id).then(setPlanet);
+                                    alert('1,000 resources added');
+                                } catch (e: any) { alert(e.message); }
+                            }}>
+                                Add 1,000 All Currencies
+                            </button>
+                            <button onClick={async () => {
+                                try {
+                                    await api.devAddResources(planet.id, 1000000);
+                                    api.getPlanet(planet.id).then(setPlanet);
+                                    alert('1,000,000 resources added');
+                                } catch (e: any) { alert(e.message); }
+                            }}>
+                                Add 1,000,000 All Currencies
+                            </button>
+                            <button onClick={async () => {
+                                try {
+                                    await api.devFastForward(planet.id);
+                                    api.getPlanet(planet.id).then(setPlanet);
+                                    alert('All crafts completed');
+                                } catch (e: any) { alert(e.message); }
+                            }}>
+                                Instantly Complete All Crafts
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -7,6 +7,7 @@ import actionsRoutes from './routes/actions';
 import defenseRoutes from './routes/defense';
 import reportsRoutes from './routes/reports';
 import admiralRoutes from './routes/admiral';
+import devRoutes from './routes/dev';
 import { startTimerWorker } from './services/timerWorker';
 
 dotenv.config();
@@ -29,6 +30,7 @@ app.use('/actions', actionsRoutes);
 app.use('/defense', defenseRoutes);
 app.use('/reports', reportsRoutes);
 app.use('/admiral', admiralRoutes);
+app.use('/dev', devRoutes);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);

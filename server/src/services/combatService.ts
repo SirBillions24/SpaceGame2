@@ -1,6 +1,8 @@
 import prisma from '../lib/prisma';
 
 import { UNIT_DATA } from '../constants/unitData';
+import { TOOL_DATA, getToolStats } from '../constants/toolData';
+import { BUILDING_DATA, getBuildingStats } from '../constants/buildingData';
 
 // --- CONSTANTS & STATS ---
 
@@ -37,13 +39,13 @@ function calculateLoot(survivingUnits: FlankUnits, planetResources: { carbon: nu
 }
 
 // Defense Building Bonuses (per level)
-const SHIELD_GENERATOR_BONUS = 50; // +50 Defense Power per level (Global or Front?) - Applies to Wall (Shield)
-const PERIMETER_FIELD_BONUS = 30;  // +30 Defense Power per level? Or %? Let's use flat power for MVP stability.
-const STARPORT_BONUS = 100;        // Starport (Gate) gives massive bonus to Center Sector.
+const CANOPY_GENERATOR_BONUS = 50; // +50 Defense Power per level (Global or Front?) - Applies to Canopy (Energy Canopy)
+const MINEFIELD_BONUS = 30;        // +30 Defense Power per level? Or %? Let's use flat power for MVP stability.
+const DOCKING_HUB_BONUS = 100;     // Central Docking Hub gives massive bonus to Center Sector.
 
 // Tool Effects (Max Reductions)
-const SHIELD_JAMMER_REDUCTION = 0.10; // Each jammer reduces Shield Bonus by 10%
-const HANGAR_BREACH_REDUCTION = 0.15; // Each charge reduces Starport Bonus by 15%
+const CANOPY_REDUCTION = 0.10; // Each anchor reduces Canopy Bonus by 10%
+const HUB_BREACH_REDUCTION = 0.15; // Each charge reduces Hub Bonus by 15%
 const ECM_POD_REDUCTION = 0.05;       // Each pod reduces Ranged Defense Power by 5%
 const FIELD_NEUTRALIZER_REDUCTION = 0; // Not fully defined yet, can be moat reduction.
 
@@ -71,12 +73,12 @@ interface SectorResult {
   winner: 'attacker' | 'defender';
   survivingAttackers: FlankUnits;
   survivingDefenders: FlankUnits;
-  survivingDefenderTools?: { type: string; count: number }[]; // NEW
+  survivingDefenderTools?: { type: string; count: number }[];
   initialAttackerUnits: FlankUnits;
   initialDefenderUnits: FlankUnits;
   attackerToolsByWave: Record<string, number>[];
-  waveResults: WaveResult[]; // NEW: Detailed breakdown per wave
-  defenderTools: Record<string, number>;
+  waveResults: WaveResult[];
+  defenderTools: Record<string, number>; // Used for storing the tool counts for UI
   attackerLosses: FlankUnits;
   defenderLosses: FlankUnits;
   wavesFought: number;
@@ -107,12 +109,14 @@ interface CombatResult {
     name: string;
     meleeStrengthBonus: number;
     rangedStrengthBonus: number;
-    wallReductionBonus: number;
+    canopyReductionBonus: number;
   } | null;
   defenderAdmiral?: {
     id: string;
     name: string;
-    // Defender bonuses not used for attack system (separate system later)
+    meleeStrengthBonus: number;
+    rangedStrengthBonus: number;
+    canopyReductionBonus: number;
   } | null;
 }
 
@@ -124,11 +128,11 @@ export function resolveWaveCollision(
   attackerUnits: FlankUnits,
   defenderUnits: FlankUnits,
   attackerTools: Record<string, number>,
-  defenseBuildings: { shield: number; starport: number; perimeter: number },
+  defenseLevels: { canopy: number; hub: number; minefield: number },
   isCenter: boolean,
   defenderTools: Record<string, number> = {}, // New argument for defender tools specifically
-  attackerBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; wallReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 },
-  defenderBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; wallReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 }
+  attackerBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; canopyReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, canopyReductionBonus: 0 },
+  defenderBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; canopyReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, canopyReductionBonus: 0 }
 ): {
   attackerWon: boolean;
   attackerLosses: FlankUnits;
@@ -147,8 +151,7 @@ export function resolveWaveCollision(
   }
 
   // ATTACKER TOOL MODIFIERS
-  // Plasma Grenades (+Ranged Dmg?) -> Placeholder name? GGE uses specific tools.
-  // We use: signal_jammer (vs Shield), breach_cutter (vs Gate), holo_decoy (vs Ranged)
+  // We use: invasion_anchors (vs Canopy), plasma_breachers (vs Hub), stealth_field_pods (vs Ranged)
 
   // Apply Admiral Attack Bonuses (separate for melee and ranged)
   const meleeMultiplier = 1 + (attackerBonuses.meleeStrengthBonus / 100);
@@ -168,79 +171,57 @@ export function resolveWaveCollision(
     defRanged += s.rangedDef * count;
   }
 
-  // DEFENDER TOOL MODIFIERS (Applied to Base Unit Stats directly? Or Composite?)
-  // Targeting Array: Increases Ranged Defense Power
-  if (defenderTools.targeting_array) {
-    // GGE: Flaming Arrows (+25% Ranged Def)
-    defRanged *= 1.25;
+  // --- APPLY DEFENDER ADMIRAL BONUSES ---
+  const defMeleeMultiplier = 1 + (defenderBonuses.meleeStrengthBonus / 100);
+  const defRangedMultiplier = 1 + (defenderBonuses.rangedStrengthBonus / 100);
+  defMelee *= defMeleeMultiplier;
+  defRanged *= defRangedMultiplier;
+
+  // --- CANOPY & HUB BONUSES (Energy Canopy & Docking Hub) ---
+  let canopyBonusPct = 0;
+  const canopyStats = getBuildingStats('canopy_generator', defenseLevels.canopy);
+  if (canopyStats) {
+    canopyBonusPct = canopyStats.defenseBonus || 0;
   }
 
-
-  // --- WALL & GATE BONUSES (Shield & Starport) ---
-
-  // Shield Generator (Wall)
-  // Bonus: +50% per level (simplified to +50 power per level in constants, let's stick to power or switch to %?)
-  // Defensive Grid gives % bonus to troops.
-  // Our code previously used flat power. Let's switch to Percentage Bonus for scaling proper mechanics.
-  // Current: const SHIELD_GENERATOR_BONUS = 50;
-  // Let's define Base Wall Bonus: Level 1 = 20%, Level 2 = 40%...
-  // For compatibility with previous code, let's calculate a "Base Bonus %" derived from buildings.shield.
-
-  let wallBonusPct = defenseBuildings.shield * 0.20; // 20% per level
-  let gateBonusPct = 0;
+  let hubBonusPct = 0;
   if (isCenter) {
-    gateBonusPct = defenseBuildings.starport * 0.35; // 35% per level
-  }
-  // Moat/Perimeter?
-  let moatBonusPct = defenseBuildings.perimeter * 0.10;
-
-  // --- DEFENDER TOOLS (Boosts) ---
-  // Auto Turret: +25% Wall (Shield)
-  if (defenderTools.auto_turret) {
-    wallBonusPct += 0.25;
-  }
-  // Blast Door: +35% Gate (Starport)
-  if (defenderTools.blast_door && isCenter) {
-    gateBonusPct += 0.35;
-  }
-  // Swamp Snapper / Moat tool? Not implemented yet.
-
-  // --- ATTACKER TOOLS (Reductions) ---
-  // Signal Jammer: -10% Wall per tool
-  if (attackerTools.signal_jammer) {
-    const reduction = attackerTools.signal_jammer * 0.10;
-    wallBonusPct = Math.max(0, wallBonusPct - reduction);
+    // Docking Hub bonus - 35% per level
+    hubBonusPct = defenseLevels.hub * 0.35;
   }
   
-  // --- APPLY ADMIRAL WALL REDUCTION BONUS ---
-  // Apply wall reduction from admiral gear (capped at -100%)
-  const wallReduction = attackerBonuses.wallReductionBonus / 100; // Negative value (e.g., -0.5 for -50%)
-  wallBonusPct = Math.max(0, wallBonusPct + wallReduction); // Add negative = subtract
+  // Orbital Minefield/Perimeter
+  let minefieldBonusPct = defenseLevels.minefield * 0.10;
 
-  // Breach Cutter: -10% Gate per tool
-  if (attackerTools.breach_cutter && isCenter) {
-    const reduction = attackerTools.breach_cutter * 0.10;
-    gateBonusPct = Math.max(0, gateBonusPct - reduction);
+  // --- DEFENDER TOOLS (Boosts) ---
+  for (const [tId, count] of Object.entries(defenderTools)) {
+    const s = getToolStats(tId);
+    if (!s || count <= 0) continue;
+    if (s.bonusType === 'canopy') canopyBonusPct += (s.bonusValue * count);
+    if (s.bonusType === 'hub' && isCenter) hubBonusPct += (s.bonusValue * count);
+    if (s.bonusType === 'ranged_def') defRanged *= (1 + (s.bonusValue * count));
   }
 
-  // Holo Decoy: Reduces Defender Ranged Strength (aka Shielding from Range?)
-  // GGE: Mantlet reduces Enemy Ranged Strength (Bowmen).
-  // Effectively reduces `defRanged`?
-  if (attackerTools.holo_decoy) {
-    // 10% per tool? Capped?
-    // GGE: Cast iron mantlet = -15% arrow strength.
-    // Holo Decoy = -10%. (10 tools = -100%).
-    const reduction = Math.min(1.0, attackerTools.holo_decoy * 0.10);
-    defRanged *= (1 - reduction);
+  // --- ATTACKER TOOLS (Reductions) ---
+  for (const [tId, count] of Object.entries(attackerTools)) {
+    const s = getToolStats(tId);
+    if (!s || count <= 0) continue;
+    if (s.bonusType === 'canopy_reduction') canopyBonusPct = Math.max(0, canopyBonusPct - (s.bonusValue * count));
+    if (s.bonusType === 'hub_reduction' && isCenter) hubBonusPct = Math.max(0, hubBonusPct - (s.bonusValue * count));
+    if (s.bonusType === 'ranged_reduction') {
+      const reduction = Math.min(1.0, s.bonusValue * count);
+      defRanged *= (1 - reduction);
+    }
   }
 
-  // --- DEFENDER ADMIRAL BONUSES ---
-  // Note: Defender admiral bonuses are handled separately (defense system)
-  // For now, we don't apply defender bonuses here
+  // --- APPLY ADMIRAL CANOPY REDUCTION BONUS ---
+  // Apply canopy reduction from admiral gear (capped at -100%)
+  const canopyReduction = attackerBonuses.canopyReductionBonus / 100; // Negative value (e.g., -0.5 for -50%)
+  canopyBonusPct = Math.max(0, canopyBonusPct + canopyReduction); // Add negative = subtract
 
   // --- APPLY COMPOSITE DEFENSE ---
-  // Defense Power = (MeleeDef + RangedDef) * (1 + WallBonus + GateBonus + MoatBonus + ...)
-  // Note: Usually Wall applies to ALL units on wall.
+  // Defense Power = (MeleeDef + RangedDef) * (1 + CanopyBonus + HubBonus + MinefieldBonus + ...)
+  // Note: Usually Canopy applies to ALL units on canopy.
   // We need to calculate Total Base Def first.
 
   let totalDefPower = 0;
@@ -253,7 +234,7 @@ export function resolveWaveCollision(
     totalDefPower = 0.1;
   }
 
-  const totalBonusPct = wallBonusPct + gateBonusPct + moatBonusPct;
+  const totalBonusPct = canopyBonusPct + hubBonusPct + minefieldBonusPct;
   totalDefPower *= (1 + totalBonusPct);
 
 
@@ -302,10 +283,10 @@ export function resolveWaveCollision(
 export function resolveSector(
   attackWaves: Wave[],
   initialDefenderLane: { units: FlankUnits, tools: { type: string, count: number }[] },
-  defenseBuildings: { shield: number; starport: number; perimeter: number },
+  defenseLevels: { canopy: number; hub: number; minefield: number },
   isCenter: boolean,
-  attackerBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; wallReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 },
-  defenderBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; wallReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 }
+  attackerBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; canopyReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, canopyReductionBonus: 0 },
+  defenderBonuses: { meleeStrengthBonus: number; rangedStrengthBonus: number; canopyReductionBonus: number } = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, canopyReductionBonus: 0 }
 ): SectorResult {
 
   // -- Calculate Initials --
@@ -323,6 +304,14 @@ export function resolveSector(
   let currentDefenders = { ...initialDefenderLane.units };
   // Clone defender tools (Deep copy array of objects)
   const currentDefenderTools = initialDefenderLane.tools ? initialDefenderLane.tools.map(t => ({ ...t })) : [];
+  
+  // Track initial defender tools for the report UI
+  const initialDefenderTools: Record<string, number> = {};
+  if (initialDefenderLane.tools) {
+    initialDefenderLane.tools.forEach(t => {
+      initialDefenderTools[t.type] = (initialDefenderTools[t.type] || 0) + t.count;
+    });
+  }
 
   let totalAttackerLosses: FlankUnits = {};
   let totalDefenderLosses: FlankUnits = {};
@@ -342,7 +331,10 @@ export function resolveSector(
 
     // If defenders already wiped, just pass through (but log it if we want detailed "Unopposed Wave" logs)
     if (defCount <= 0) {
-      winner = 'attacker';
+      const attCount = Object.values(wave.units).reduce((a, b) => a + b, 0);
+      if (attCount > 0) {
+        winner = 'attacker';
+      }
       for (const [u, c] of Object.entries(wave.units)) {
         survivingAttackers[u] = (survivingAttackers[u] || 0) + c;
       }
@@ -377,7 +369,7 @@ export function resolveSector(
       wave.units,
       currentDefenders,
       wave.tools, // Attacker Tools
-      defenseBuildings,
+      defenseLevels,
       isCenter,
       activeDefenderTools, // Defender Tools
       attackerBonuses, // Attacker Admiral Bonuses
@@ -415,9 +407,11 @@ export function resolveSector(
     }
   }
 
-  // If loop finishes and defenders still alive
+  // If loop finishes and defenders still alive OR no attackers ever sent
   const defCountFinal = Object.values(currentDefenders).reduce((a, b) => a + b, 0);
-  if (defCountFinal > 0) {
+  const attCountInitial = Object.values(initialAttackerUnits).reduce((a, b) => a + b, 0);
+
+  if (defCountFinal > 0 || attCountInitial <= 0) {
     winner = 'defender';
   }
 
@@ -434,7 +428,7 @@ export function resolveSector(
     initialDefenderUnits: { ...initialDefenderLane.units },
     attackerToolsByWave,
     waveResults,
-    defenderTools: { ...defenseBuildings },
+    defenderTools: initialDefenderTools,
     attackerLosses: totalAttackerLosses,
     defenderLosses: totalDefenderLosses,
     wavesFought
@@ -461,15 +455,24 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   const attackerBonuses = attackerAdmiral ? {
     meleeStrengthBonus: (attackerAdmiral as any).meleeStrengthBonus || 0,
     rangedStrengthBonus: (attackerAdmiral as any).rangedStrengthBonus || 0,
-    wallReductionBonus: (attackerAdmiral as any).wallReductionBonus || 0,
+    canopyReductionBonus: (attackerAdmiral as any).canopyReductionBonus || 0,
   } : {
     meleeStrengthBonus: 0,
     rangedStrengthBonus: 0,
-    wallReductionBonus: 0,
+    canopyReductionBonus: 0,
   };
   
-  // Defender admiral not used for attack bonuses (defense system separate)
+  // Defender admiral
   const defenderAdmiral = fleet.toPlanet.owner.admiral;
+  const defenderBonuses = defenderAdmiral ? {
+    meleeStrengthBonus: (defenderAdmiral as any).meleeStrengthBonus || 0,
+    rangedStrengthBonus: (defenderAdmiral as any).rangedStrengthBonus || 0,
+    canopyReductionBonus: (defenderAdmiral as any).canopyReductionBonus || 0,
+  } : {
+    meleeStrengthBonus: 0,
+    rangedStrengthBonus: 0,
+    canopyReductionBonus: 0,
+  };
 
   // 1. Parsing Inputs
   let attStructure: { left: Wave[], front: Wave[], right: Wave[] } = { left: [], front: [], right: [] };
@@ -513,39 +516,60 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   const defCenter = parseDefLane(defenseLayout?.frontLaneJson || null);
   const defRight = parseDefLane(defenseLayout?.rightLaneJson || null);
 
-  const buildings = {
-    shield: fleet.toPlanet.defensiveGridLevel,
-    starport: fleet.toPlanet.starportLevel,
-    perimeter: fleet.toPlanet.perimeterFieldLevel
+  const defenseLevels = {
+    canopy: fleet.toPlanet.energyCanopyLevel,
+    hub: fleet.toPlanet.dockingHubLevel,
+    minefield: fleet.toPlanet.orbitalMinefieldLevel
   };
 
-  // --- COURTYARD PREP ---
-  // Any units on the planet NOT in the defense layout lanes go to the courtyard
+  // --- COURTYARD PREP & LANE CAPPING ---
+  // We need to ensure lane assignments don't exceed actual units on the planet
   const allPlanetUnits = await prisma.planetUnit.findMany({
     where: { planetId: fleet.toPlanetId }
   });
 
-  const courtyardDefenders: FlankUnits = {};
-  allPlanetUnits.forEach(pu => {
-    const assignedLeft = defLeft.units[pu.unitType] || 0;
-    const assignedCenter = defCenter.units[pu.unitType] || 0;
-    const assignedRight = defRight.units[pu.unitType] || 0;
-    const unassigned = Math.max(0, pu.count - (assignedLeft + assignedCenter + assignedRight));
-    if (unassigned > 0) {
-      courtyardDefenders[pu.unitType] = unassigned;
-    }
-  });
+  const availablePool: Record<string, number> = {};
+  allPlanetUnits.forEach(pu => availablePool[pu.unitType] = pu.count);
 
-  // 2. Resolve Sectors (pass attacker bonuses only)
-  const leftResult = resolveSector(attStructure.left, defLeft, buildings, false, attackerBonuses, { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 });
-  const centerResult = resolveSector(attStructure.front, defCenter, buildings, true, attackerBonuses, { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 });
-  const rightResult = resolveSector(attStructure.right, defRight, buildings, false, attackerBonuses, { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 });
+  const capLane = (lane: { units: FlankUnits, tools: { type: string, count: number }[] }) => {
+    const cappedUnits: FlankUnits = {};
+    for (const [unitType, count] of Object.entries(lane.units)) {
+      const available = availablePool[unitType] || 0;
+      const actual = Math.min(available, count);
+      if (actual > 0) {
+        cappedUnits[unitType] = actual;
+        availablePool[unitType] -= actual;
+      }
+    }
+    lane.units = cappedUnits;
+  };
+
+  // Order of priority: Center, then Left, then Right? Or just as defined.
+  capLane(defCenter);
+  capLane(defLeft);
+  capLane(defRight);
+
+  // Remaining units in pool go to the initial courtyard force
+  const initialCourtyardDefenders: FlankUnits = { ...availablePool };
+
+  // 2. Resolve Sectors (pass attacker and defender bonuses)
+  const leftResult = resolveSector(attStructure.left, defLeft, defenseLevels, false, attackerBonuses, defenderBonuses);
+  const centerResult = resolveSector(attStructure.front, defCenter, defenseLevels, true, attackerBonuses, defenderBonuses);
+  const rightResult = resolveSector(attStructure.right, defRight, defenseLevels, false, attackerBonuses, defenderBonuses);
 
   // 3. Courtyard Invasion Logic
   let attackerSectorsWon = 0;
-  if (leftResult.winner === 'attacker') attackerSectorsWon++;
-  if (centerResult.winner === 'attacker') attackerSectorsWon++;
-  if (rightResult.winner === 'attacker') attackerSectorsWon++;
+  
+  // A lane is only breached if the attacker won AND actually sent units there.
+  const checkBreach = (result: SectorResult, waves: Wave[]) => {
+    if (result.winner !== 'attacker') return false;
+    const sentUnits = waves.reduce((sum, wave) => sum + Object.values(wave.units).reduce((a, b) => a + b, 0), 0);
+    return sentUnits > 0;
+  };
+
+  if (checkBreach(leftResult, attStructure.left)) attackerSectorsWon++;
+  if (checkBreach(centerResult, attStructure.front)) attackerSectorsWon++;
+  if (checkBreach(rightResult, attStructure.right)) attackerSectorsWon++;
 
   let attBonus = 0;
   let defBonus = 0;
@@ -566,13 +590,19 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   addUnits(surfAtt, centerResult.survivingAttackers);
   addUnits(surfAtt, rightResult.survivingAttackers);
 
+  // Combine initial courtyard defenders with lane survivors
+  const finalCourtyardDefenders: FlankUnits = { ...initialCourtyardDefenders };
+  addUnits(finalCourtyardDefenders, leftResult.survivingDefenders);
+  addUnits(finalCourtyardDefenders, centerResult.survivingDefenders);
+  addUnits(finalCourtyardDefenders, rightResult.survivingDefenders);
+
   // Courtyard Battle
   let attackerWonSurface = false;
   let attLosses: FlankUnits = {};
   let defLosses: FlankUnits = {};
 
   const attCount = Object.values(surfAtt).reduce((a, b) => a + b, 0);
-  const defCount = Object.values(courtyardDefenders).reduce((a, b) => a + b, 0);
+  const defCount = Object.values(finalCourtyardDefenders).reduce((a, b) => a + b, 0);
 
   if (attCount > 0) {
     if (defCount === 0) {
@@ -581,20 +611,20 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
       // Apply bonuses to stats for the courtyard fight
       const finalBat = resolveWaveCollision(
         surfAtt,
-        courtyardDefenders,
+        finalCourtyardDefenders,
         {}, // No tools in courtyard
-        { shield: 0, starport: 0, perimeter: 0 }, // No walls in courtyard
+        { canopy: 0, hub: 0, minefield: 0 }, // No walls in courtyard
         false,
         {},
         { 
           meleeStrengthBonus: attackerBonuses.meleeStrengthBonus + (attBonus * 100), 
           rangedStrengthBonus: attackerBonuses.rangedStrengthBonus + (attBonus * 100), 
-          wallReductionBonus: 0 
+          canopyReductionBonus: 0 
         },
         { 
-          meleeStrengthBonus: (defBonus * 100), 
-          rangedStrengthBonus: (defBonus * 100), 
-          wallReductionBonus: 0 
+          meleeStrengthBonus: (defBonus * 100) + defenderBonuses.meleeStrengthBonus, 
+          rangedStrengthBonus: (defBonus * 100) + defenderBonuses.rangedStrengthBonus, 
+          canopyReductionBonus: 0 
         }
       );
       attackerWonSurface = finalBat.attackerWon;
@@ -616,7 +646,7 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     attackerBonus: attBonus,
     defenderBonus: defBonus,
     initialAttackerUnits: { ...surfAtt },
-    initialDefenderUnits: { ...courtyardDefenders },
+    initialDefenderUnits: { ...finalCourtyardDefenders },
     attackerLosses: attLosses,
     defenderLosses: defLosses
   };
@@ -772,12 +802,14 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
       name: attackerAdmiral.name,
       meleeStrengthBonus: (attackerAdmiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (attackerAdmiral as any).rangedStrengthBonus || 0,
-      wallReductionBonus: (attackerAdmiral as any).wallReductionBonus || 0,
+      canopyReductionBonus: (attackerAdmiral as any).canopyReductionBonus || 0,
     } : null,
     defenderAdmiral: defenderAdmiral ? {
       id: defenderAdmiral.id,
-      name: defenderAdmiral.name
-      // Defender bonuses not used for attack system (separate system later)
+      name: defenderAdmiral.name,
+      meleeStrengthBonus: (defenderAdmiral as any).meleeStrengthBonus || 0,
+      rangedStrengthBonus: (defenderAdmiral as any).rangedStrengthBonus || 0,
+      canopyReductionBonus: (defenderAdmiral as any).canopyReductionBonus || 0,
     } : null
   };
 }

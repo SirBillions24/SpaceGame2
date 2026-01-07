@@ -1,34 +1,23 @@
 
 import prisma from '../lib/prisma';
 import { syncPlanetResources } from './planetService';
-
-const TOOL_STATS: Record<string, { c: number, t: number, time: number, workshop: string }> = {
-    // Defense (Systems Workshop)
-    'auto_turret': { c: 40, t: 40, time: 30, workshop: 'defense_workshop' },     // Rocks -> +Shield
-    'blast_door': { c: 280, t: 120, time: 60, workshop: 'defense_workshop' },    // Gate Reinf -> +Starport
-    'targeting_array': { c: 525, t: 225, time: 60, workshop: 'defense_workshop' }, // Arrows -> +Ranged
-
-    // Siege (Munitions Factory)
-    'signal_jammer': { c: 28, t: 12, time: 30, workshop: 'siege_workshop' },    // Ladder -> -Shield
-    'breach_cutter': { c: 56, t: 24, time: 60, workshop: 'siege_workshop' },    // Ram -> -Starport
-    'holo_decoy': { c: 105, t: 45, time: 60, workshop: 'siege_workshop' },      // Manlet -> -Ranged
-};
+import { TOOL_DATA } from '../constants/toolData';
 
 export async function produceTool(planetId: string, toolType: string, count: number) {
     const planet = await syncPlanetResources(planetId);
     if (!planet) throw new Error('Planet not found');
 
-    const stats = TOOL_STATS[toolType];
-    if (!stats) throw new Error('Invalid tool type');
+    const stats = TOOL_DATA[toolType];
+    if (!stats) throw new Error(`Invalid tool type: ${toolType}`);
 
     // Validate Workshop
     // Find active workshop
     const workshop = planet.buildings.find(b => b.type === stats.workshop && b.status === 'active');
-    if (!workshop) throw new Error(`${stats.workshop} required`);
+    if (!workshop) throw new Error(`${stats.workshop === 'defense_workshop' ? 'Systems Workshop' : 'Munitions Factory'} required`);
 
     // Check Resources
-    const totalC = stats.c * count;
-    const totalT = stats.t * count;
+    const totalC = stats.cost.carbon * count;
+    const totalT = stats.cost.titanium * count;
 
     if (planet.carbon < totalC || planet.titanium < totalT) {
         throw new Error('Insufficient resources');

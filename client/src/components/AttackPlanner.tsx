@@ -55,13 +55,13 @@ const UNIT_ICONS: Record<string, string> = {
 };
 
 const TOOL_ICONS: Record<string, string> = {
-    signal_jammer: iconJammer,
-    breach_cutter: iconBreach,
-    holo_decoy: iconECM,
+    invasion_anchors: iconJammer,
+    plasma_breachers: iconBreach,
+    stealth_field_pods: iconECM,
 };
 
 const ALL_UNITS = ['marine', 'ranger', 'sentinel', 'interceptor'];
-const ALL_TOOLS = ['signal_jammer', 'breach_cutter', 'holo_decoy'];
+const ALL_TOOLS = ['invasion_anchors', 'plasma_breachers', 'stealth_field_pods'];
 
 // Initial State Generator
 const createInitialState = (): WaveData[] => {
@@ -319,7 +319,7 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
 
                     <div className="sector-visuals">
                         <div className="sector-vis left">Industrial (Left)</div>
-                        <div className="sector-vis center">Starport (Gate)</div>
+                        <div className="sector-vis center">Central Docking Hub</div>
                         <div className="sector-vis right">Military (Right)</div>
                     </div>
 

@@ -23,7 +23,7 @@ async function run() {
             credits: 0,
             taxRate: 10,
             lastResourceUpdate: new Date(),
-            defensiveGridLevel: 0
+            energyCanopyLevel: 0
         }
     });
 
@@ -113,7 +113,7 @@ async function run() {
         synced = await syncPlanetResources(planet.id); // Should process queue
         if (!synced) throw new Error('Sync failed 4');
 
-        if (synced?.defensiveGridLevel !== 1) console.error(`FAIL: Shield Gen did not unlock defensive grid level. Level: ${synced?.defensiveGridLevel}`);
+        if (synced?.energyCanopyLevel !== 1) console.error(`FAIL: Energy Canopy did not unlock canopy level. Level: ${synced?.energyCanopyLevel}`);
         else console.log('PASS: Shield Generator hook worked.');
 
         // 6. Test Building Relocation

@@ -29,7 +29,7 @@ async function createTestGear() {
     for (const item of items) {
       const piece = await createGearFromDefinition(testUser.id, item);
       console.log(`✅ Created ${item.slotType}: ${piece.name}`);
-      console.log(`   Melee: +${item.meleeStrengthBonus}%, Ranged: +${item.rangedStrengthBonus}%, Wall: ${item.wallReductionBonus}%`);
+      console.log(`   Melee: +${item.meleeStrengthBonus}%, Ranged: +${item.rangedStrengthBonus}%, Canopy: ${item.canopyReductionBonus}%`);
     }
 
     console.log('\n📊 Total Bonuses:');

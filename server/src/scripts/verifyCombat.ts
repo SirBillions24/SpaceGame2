@@ -18,6 +18,8 @@ const assert = (condition: boolean, msg: string) => {
     if (!condition) throw new Error(msg);
 };
 
+const emptyAdmiralBonus = { meleeStrengthBonus: 0, rangedStrengthBonus: 0, canopyReductionBonus: 0 };
+
 // SCENARIOS
 
 runTest("Ranger vs Marine (Range Advantage)", () => {
@@ -30,11 +32,11 @@ runTest("Ranger vs Marine (Range Advantage)", () => {
         { ranger: 10 },
         { marine: 10 },
         {},
-        { shield: 0, starport: 0, perimeter: 0 },
+        { canopy: 0, hub: 0, minefield: 0 },
         false,
         {},
-        0, // attackerAdmiralBonus
-        0  // defenderAdmiralBonus
+        emptyAdmiralBonus,
+        emptyAdmiralBonus
     );
 
     assert(result.attackerWon === true, "Rangers should beat Marines");
@@ -42,44 +44,44 @@ runTest("Ranger vs Marine (Range Advantage)", () => {
     assert(rangerLoss <= 2, `Rangers should lose few units (Lost ${rangerLoss})`);
 });
 
-runTest("Shield Generator Bonus (Wall)", () => {
+runTest("Energy Canopy Bonus", () => {
     // 10 Marines (Atk 120) vs 10 Marines (Def 120 base).
-    // Add Shield Lvl 1 (+50 Def). Total Def = 170.
+    // Add Canopy Lvl 1 (+30% Def). Total Def = 156.
     // Defender should win.
 
     const result = resolveWaveCollision(
         { marine: 10 },
         { marine: 10 },
         {},
-        { shield: 1, starport: 0, perimeter: 0 },
+        { canopy: 1, hub: 0, minefield: 0 },
         false,
         {},
-        0, // attackerAdmiralBonus
-        0  // defenderAdmiralBonus
+        emptyAdmiralBonus,
+        emptyAdmiralBonus
     );
 
-    assert(result.attackerWon === false, "Defenders with Shield should win vs equal force");
+    assert(result.attackerWon === false, "Defenders with Canopy should win vs equal force");
 });
 
-runTest("Shield Jammer Counter", () => {
-    // Shield Level 10 (+500 Def). Total Def = 620.
-    // 11 Marines (132 Atk).
-    // 10 Jammers (10% each -> 100% reduction).
-    // Def drops to 120. Atk (132) > Def (120).
-    // Attackers Win.
+runTest("Invasion Anchor Counter", () => {
+    // Canopy Level 1 (+30% Def).
+    // 10 Marines (120 Atk).
+    // 3 Anchors (10% each -> 30% reduction).
+    // Def drops to 120. Atk (120) vs Def (120) - coin toss but usually defender wins on draw in our logic.
+    // Let's use 11 Marines.
 
     const result2 = resolveWaveCollision(
         { marine: 11 },
         { marine: 10 },
-        { shield_jammer: 10 }, // Fixed tool name
-        { shield: 10, starport: 0, perimeter: 0 },
+        { invasion_anchors: 3 }, 
+        { canopy: 1, hub: 0, minefield: 0 },
         false,
         {},
-        0, // attackerAdmiralBonus
-        0  // defenderAdmiralBonus
+        emptyAdmiralBonus,
+        emptyAdmiralBonus
     );
 
-    assert(result2.attackerWon === true, "Attackers should win if Shield is jammed");
+    assert(result2.attackerWon === true, "Attackers should win if Canopy is bypassed");
 });
 
 runTest("Multi-Wave Sector Breach", () => {
@@ -96,10 +98,10 @@ runTest("Multi-Wave Sector Breach", () => {
     const result = resolveSector(
         waves,
         { units: { sentinel: 10 }, tools: [] },
-        { shield: 0, starport: 0, perimeter: 0 },
+        { canopy: 0, hub: 0, minefield: 0 },
         false,
-        0, // attackerAdmiralBonus
-        0  // defenderAdmiralBonus
+        emptyAdmiralBonus,
+        emptyAdmiralBonus
     );
 
     assert(result.winner === 'attacker', "Attackers should win sector");
@@ -107,24 +109,24 @@ runTest("Multi-Wave Sector Breach", () => {
     assert((result.survivingAttackers['ranger'] || 0) === 10, "Wave 2 should preserve all Rangers");
 });
 
-runTest("Starport Defense (Center Only)", () => {
-    // Center Sector gets Starport Bonus (+100 per level).
-    // 10 Marines (120 Atk) vs 1 Marine (12 Def).
-    // Starport Lvl 2 = +200 Def. Total Def = 212.
+runTest("Central Docking Hub Defense (Center Only)", () => {
+    // Center Sector gets Hub Bonus (+35% per level).
+    // 10 Marines (120 Atk) vs 5 Marines (60 Def).
+    // Hub Lvl 3 = +105% Def. Total Def = 60 * 2.05 = 123.
     // Defense Wins.
 
     const result = resolveWaveCollision(
         { marine: 10 },
-        { marine: 1 },
+        { marine: 5 },
         {},
-        { shield: 0, starport: 2, perimeter: 0 },
+        { canopy: 0, hub: 3, minefield: 0 },
         true, // isCenter
         {},
-        0, // attackerAdmiralBonus
-        0  // defenderAdmiralBonus
+        emptyAdmiralBonus,
+        emptyAdmiralBonus
     );
 
-    assert(result.attackerWon === false, "Starport should save the lone marine");
+    assert(result.attackerWon === false, "Hub should save the marines in center");
 });
 
 console.log("All mocked tests passed!");

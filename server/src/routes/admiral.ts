@@ -33,7 +33,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       gear: JSON.parse(admiral.gearJson || '{}'),
       meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
-      wallReductionBonus: (admiral as any).wallReductionBonus || 0,
+      canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
       // Legacy fields for compatibility
       attackBonus: admiral.attackBonus,
       defenseBonus: admiral.defenseBonus,
@@ -71,7 +71,7 @@ router.put('/name', authenticateToken, async (req: AuthRequest, res: Response) =
       gear: JSON.parse(admiral.gearJson || '{}'),
       meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
-      wallReductionBonus: (admiral as any).wallReductionBonus || 0,
+      canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
       attackBonus: admiral.attackBonus,
       defenseBonus: admiral.defenseBonus,
     });
@@ -108,7 +108,7 @@ router.put('/gear', authenticateToken, async (req: AuthRequest, res: Response) =
       gear: JSON.parse(admiral.gearJson || '{}'),
       meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
-      wallReductionBonus: (admiral as any).wallReductionBonus || 0,
+      canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
       attackBonus: admiral.attackBonus,
       defenseBonus: admiral.defenseBonus,
     });
@@ -154,7 +154,7 @@ router.post('/gear/equip', authenticateToken, async (req: AuthRequest, res: Resp
       gear: JSON.parse(admiral.gearJson || '{}'),
       meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
-      wallReductionBonus: (admiral as any).wallReductionBonus || 0,
+      canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
       attackBonus: admiral.attackBonus,
       defenseBonus: admiral.defenseBonus,
     });
@@ -188,7 +188,7 @@ router.post('/gear/unequip', authenticateToken, async (req: AuthRequest, res: Re
       gear: JSON.parse(admiral.gearJson || '{}'),
       meleeStrengthBonus: (admiral as any).meleeStrengthBonus || 0,
       rangedStrengthBonus: (admiral as any).rangedStrengthBonus || 0,
-      wallReductionBonus: (admiral as any).wallReductionBonus || 0,
+      canopyReductionBonus: (admiral as any).canopyReductionBonus || 0,
       attackBonus: admiral.attackBonus,
       defenseBonus: admiral.defenseBonus,
     });

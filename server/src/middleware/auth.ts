@@ -31,6 +31,33 @@ export const authenticateToken = (
   }
 };
 
+export const optionalAuthenticateToken = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return next();
+  }
+
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, jwtSecret) as { userId: string };
+    req.userId = decoded.userId;
+    next();
+  } catch (error) {
+    // If token is invalid, just proceed without userId
+    next();
+  }
+};
+
 
 
 

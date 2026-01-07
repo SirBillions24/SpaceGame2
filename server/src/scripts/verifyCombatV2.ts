@@ -20,18 +20,18 @@ async function main() {
         console.log('User created:', user.id);
 
         const planetA = await prisma.planet.create({
-            data: { ownerId: user.id, name: `Attacker${suffix}`, x: 0, y: 0, defensiveGridLevel: 1 }
+            data: { ownerId: user.id, name: `Attacker${suffix}`, x: 0, y: 0, energyCanopyLevel: 1 }
         });
         const planetD = await prisma.planet.create({
-            data: { ownerId: user.id, name: `Defender${suffix}`, x: 100, y: 0, defensiveGridLevel: 1 }
+            data: { ownerId: user.id, name: `Defender${suffix}`, x: 100, y: 0, energyCanopyLevel: 1 }
         }); // Same owner for simplicity, or different? Combat usually requires different owners? Logic doesn't enforce widely yet.
 
         // Stockpile Tools
         await prisma.toolInventory.create({
-            data: { planetId: planetA.id, toolType: 'signal_jammer', count: 50 }
+            data: { planetId: planetA.id, toolType: 'invasion_anchors', count: 50 }
         });
         await prisma.toolInventory.create({
-            data: { planetId: planetD.id, toolType: 'auto_turret', count: 50 }
+            data: { planetId: planetD.id, toolType: 'sentry_drones', count: 50 }
         });
 
         // Stockpile Units
@@ -45,10 +45,10 @@ async function main() {
         console.log('Planets & Inventory set up.');
 
         // 2. Setup Defense Layout (Planet D)
-        // Front Lane: 10 Sentinels + 10 Auto Turrets (Slot)
+        // Front Lane: 10 Sentinels + 10 Sentry Drones (Slot)
         const frontLane = {
             units: { sentinel: 10 },
-            tools: [{ type: 'auto_turret', count: 10 }]
+            tools: [{ type: 'sentry_drones', count: 10 }]
         };
         await prisma.defenseLayout.create({
             data: {
@@ -61,11 +61,11 @@ async function main() {
         console.log('Defense Layout established.');
 
         // 3. Create Attack Fleet
-        // Front Lane: 20 Marines + 5 Signal Jammers (Wave 1)
+        // Front Lane: 20 Marines + 5 Invasion Anchors (Wave 1)
         const attackLane = [
             {
                 units: { marine: 20 },
-                tools: { signal_jammer: 5 }
+                tools: { invasion_anchors: 5 }
             }
         ];
 
@@ -78,7 +78,7 @@ async function main() {
                 status: 'arrived', // Force arrival state for testing
                 unitsJson: JSON.stringify({ marine: 20 }),
                 laneAssignmentsJson: JSON.stringify({ front: attackLane }),
-                toolsJson: JSON.stringify({ signal_jammer: 5 }),
+                toolsJson: JSON.stringify({ invasion_anchors: 5 }),
                 departAt: new Date(),
                 arriveAt: new Date()
             }
@@ -99,7 +99,7 @@ async function main() {
         const updatedFront = JSON.parse(updatedLayout?.frontLaneJson || '{}');
         console.log('Updated Front Lane Tools:', updatedFront.tools);
 
-        // Expected: Auto Turrets should decrease by 1 (per wave fought).
+        // Expected: Sentry Drones should decrease by 1 (per wave fought).
         // If 1 wave fought, count should be 9.
 
         if (updatedFront.tools[0].count === 9) {
@@ -111,7 +111,7 @@ async function main() {
         // 6. Verify Persisted Inventory Deduction (Defender)
         // Original: 50. Consumed: 1. Expected: 49.
         const turrets = await prisma.toolInventory.findFirst({
-            where: { planetId: planetD.id, toolType: 'auto_turret' }
+            where: { planetId: planetD.id, toolType: 'sentry_drones' }
         });
         if (turrets?.count === 49) {
             console.log('PASS: ToolInventory deduction verified.');

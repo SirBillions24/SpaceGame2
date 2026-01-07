@@ -40,7 +40,7 @@ async function run() {
                 lastResourceUpdate: new Date(),
                 gridSizeX: 10,
                 gridSizeY: 10,
-                defensiveGridLevel: 1
+                energyCanopyLevel: 1
             }
         });
         testPlanetId = planet.id;

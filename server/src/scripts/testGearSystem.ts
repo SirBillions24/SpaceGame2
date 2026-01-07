@@ -139,15 +139,15 @@ async function testGearSystem() {
       
       console.log(`✅ Total Melee Bonus: ${bonuses.meleeStrengthBonus}%`);
       console.log(`✅ Total Ranged Bonus: ${bonuses.rangedStrengthBonus}%`);
-      console.log(`✅ Total Wall Reduction: ${bonuses.wallReductionBonus}%`);
+      console.log(`✅ Total Canopy Reduction: ${bonuses.canopyReductionBonus}%`);
       console.log(`✅ Cached Melee Bonus: ${(updatedAdmiral as any).meleeStrengthBonus || 0}%`);
       console.log(`✅ Cached Ranged Bonus: ${(updatedAdmiral as any).rangedStrengthBonus || 0}%`);
-      console.log(`✅ Cached Wall Reduction: ${(updatedAdmiral as any).wallReductionBonus || 0}%`);
+      console.log(`✅ Cached Canopy Reduction: ${(updatedAdmiral as any).canopyReductionBonus || 0}%`);
       
       // Verify bonuses match
       if (bonuses.meleeStrengthBonus === ((updatedAdmiral as any).meleeStrengthBonus || 0) && 
           bonuses.rangedStrengthBonus === ((updatedAdmiral as any).rangedStrengthBonus || 0) &&
-          bonuses.wallReductionBonus === ((updatedAdmiral as any).wallReductionBonus || 0)) {
+          bonuses.canopyReductionBonus === ((updatedAdmiral as any).canopyReductionBonus || 0)) {
         console.log('✅ Bonus calculation matches cached values!');
       } else {
         console.error('❌ Bonus mismatch!');
@@ -166,7 +166,7 @@ async function testGearSystem() {
       const gear = JSON.parse(afterUnequip.gearJson || '{}');
       console.log(`✅ Gear after unequip: ${Object.keys(gear).length} pieces`);
       const bonuses = calculateAdmiralBonuses(afterUnequip.gearJson || '{}');
-      console.log(`✅ Bonuses after unequip: +${bonuses.meleeStrengthBonus}% Melee, +${bonuses.rangedStrengthBonus}% Ranged, ${bonuses.wallReductionBonus}% Wall`);
+      console.log(`✅ Bonuses after unequip: +${bonuses.meleeStrengthBonus}% Melee, +${bonuses.rangedStrengthBonus}% Ranged, ${bonuses.canopyReductionBonus}% Canopy`);
     }
 
     // Test 7: Test invalid slot

@@ -14,6 +14,7 @@ export interface BuildingLevelStats {
     population?: number;
     stability?: number;
     storage?: number;
+    defenseBonus?: number; // New: Percentage defense bonus for Defensive Grid
     time: number; // in seconds
     xp: number;
 }
@@ -193,16 +194,16 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
             5: { level: 5, requiredPlayerLevel: 35, cost: { carbon: 10000, titanium: 5000 }, stability: 400, time: 14400, xp: 300 },
         }
     },
-    shield_generator: {
-        type: 'shield_generator',
-        name: 'Shield Generator',
+    canopy_generator: {
+        type: 'canopy_generator',
+        name: 'Energy Canopy',
         size: 3,
         category: 'military',
         levels: {
-            1: { level: 1, requiredPlayerLevel: 11, cost: { carbon: 1000, titanium: 1000 }, time: 1800, xp: 50 },
-            2: { level: 2, requiredPlayerLevel: 24, cost: { carbon: 5000, titanium: 5000 }, time: 7200, xp: 150 },
-            3: { level: 3, requiredPlayerLevel: 50, cost: { carbon: 20000, titanium: 20000 }, time: 28800, xp: 400 },
-            4: { level: 4, requiredPlayerLevel: 69, cost: { carbon: 100000, titanium: 100000 }, time: 86400, xp: 1000 },
+            1: { level: 1, requiredPlayerLevel: 11, cost: { carbon: 1000, titanium: 1000 }, defenseBonus: 0.30, time: 1800, xp: 50 },
+            2: { level: 2, requiredPlayerLevel: 24, cost: { carbon: 5000, titanium: 5000 }, defenseBonus: 0.50, time: 7200, xp: 150 },
+            3: { level: 3, requiredPlayerLevel: 50, cost: { carbon: 20000, titanium: 20000 }, defenseBonus: 0.70, time: 28800, xp: 400 },
+            4: { level: 4, requiredPlayerLevel: 69, cost: { carbon: 100000, titanium: 100000 }, defenseBonus: 0.90, time: 86400, xp: 1000 },
         }
     }
 };

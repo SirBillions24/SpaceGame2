@@ -25,7 +25,7 @@ const BUILDING_LABELS: Record<string, string> = {
   'siege_workshop': 'Munitions Factory',
   'monument': 'Holo-Monument',
   'housing_unit': 'Residential Block',
-  'shield_generator': 'Defensive Grid',
+  'canopy_generator': 'Energy Canopy',
   'storage_depot': 'Automated Storage Depot'
 };
 
@@ -40,7 +40,7 @@ const BUILDING_SIZES: Record<string, number> = {
   'siege_workshop': 3,
   'monument': 1,
   'housing_unit': 3,
-  'shield_generator': 3,
+  'canopy_generator': 3,
   'storage_depot': 3
 };
 
@@ -55,7 +55,7 @@ const BUILDING_COSTS: Record<string, { c: number, t: number }> = {
   'siege_workshop': { c: 118, t: 63 },
   'monument': { c: 50, t: 20 },
   'housing_unit': { c: 20, t: 10 },
-  'shield_generator': { c: 1000, t: 1000 },
+  'canopy_generator': { c: 1000, t: 1000 },
   'storage_depot': { c: 79, t: 42 }
 };
 
@@ -168,14 +168,14 @@ const BUILDING_INFO: Record<string, {
     size: '1×1 tile',
     cost: { c: 50, t: 20 }
   },
-  'shield_generator': {
-    name: 'Defensive Grid',
-    description: 'Planetary shield generator providing defensive bonuses.',
+  'canopy_generator': {
+    name: 'Energy Canopy',
+    description: 'Centralized shield generator that projects a defensive Energy Canopy over the colony.',
     purpose: [
-      'Increases defensive grid level (wall level)',
-      'Unlocks defensive tool slots'
+      'Provides base defensive power (Lvl 1: +30%, Lvl 2: +50%, Lvl 3: +70%, Lvl 4: +90%)',
+      'Reinforced by Sentry Drones'
     ],
-    size: '2×2 tiles',
+    size: '3×3 tiles',
     cost: { c: 1000, t: 1000 }
   },
   'storage_depot': {
@@ -207,7 +207,7 @@ const BUILDING_CATEGORIES = {
     subsections: {
       military: {
         label: 'Military',
-        buildings: ['academy', 'shield_generator', 'tavern', 'defense_workshop', 'siege_workshop']
+        buildings: ['academy', 'canopy_generator', 'tavern', 'defense_workshop', 'siege_workshop']
       },
       civil: {
         label: 'Civil',
@@ -1071,6 +1071,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                       {showUpgradeMenu.building.stats?.population !== undefined && <div>Population: {showUpgradeMenu.building.stats.population}</div>}
                       {showUpgradeMenu.building.stats?.stability !== undefined && <div>Stability: {showUpgradeMenu.building.stats.stability}</div>}
                       {showUpgradeMenu.building.stats?.storage !== undefined && <div>Storage: {showUpgradeMenu.building.stats.storage.toLocaleString()}</div>}
+                      {showUpgradeMenu.building.stats?.defenseBonus !== undefined && <div>Defense Bonus: +{(showUpgradeMenu.building.stats.defenseBonus * 100).toFixed(0)}%</div>}
                     </div>
                   </div>
                   {showUpgradeMenu.building.nextUpgrade && (
@@ -1099,6 +1100,12 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                           <div className="stat-diff">
                             Storage: {showUpgradeMenu.building.nextUpgrade.storage.toLocaleString()}
                             <span className="diff-val"> (+{(showUpgradeMenu.building.nextUpgrade.storage - (showUpgradeMenu.building.stats?.storage || 0)).toLocaleString()})</span>
+                          </div>
+                        )}
+                        {showUpgradeMenu.building.nextUpgrade.defenseBonus !== undefined && (
+                          <div className="stat-diff">
+                            Defense Bonus: +{(showUpgradeMenu.building.nextUpgrade.defenseBonus * 100).toFixed(0)}%
+                            <span className="diff-val"> (+{((showUpgradeMenu.building.nextUpgrade.defenseBonus - (showUpgradeMenu.building.stats?.defenseBonus || 0)) * 100).toFixed(0)}%)</span>
                           </div>
                         )}
                       </div>

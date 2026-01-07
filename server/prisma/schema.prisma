@@ -87,9 +87,9 @@ model Planet {
   // The User said "copy gameplay exactly... plot of land... fit buildings".
   // So defenses should likely be buildings or special slots.
   // Let's keep them as abstract levels for THIS iteration to focus on the Grid Economy first.
-  defensiveGridLevel  Int @default(0) @map("defensive_grid_level")
-  perimeterFieldLevel Int @default(0) @map("perimeter_field_level")
-  starportLevel       Int @default(0) @map("starport_level")
+  energyCanopyLevel     Int @default(0) @map("energy_canopy_level")
+  orbitalMinefieldLevel Int @default(0) @map("orbital_minefield_level")
+  dockingHubLevel       Int @default(0) @map("docking_hub_level")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -160,7 +160,7 @@ model Admiral {
   // Computed bonuses (cached) - Attack bonuses only (defense system separate)
   meleeStrengthBonus  Int      @default(0) @map("melee_strength_bonus") // Percentage (capped at 100)
   rangedStrengthBonus Int      @default(0) @map("ranged_strength_bonus") // Percentage (capped at 100)
-  wallReductionBonus  Int      @default(0) @map("wall_reduction_bonus") // Percentage (capped at -100, negative)
+  canopyReductionBonus Int      @default(0) @map("canopy_reduction_bonus") // Percentage (capped at -100, negative)
   // Legacy fields (kept for compatibility)
   attackBonus  Int      @default(0) @map("attack_bonus") // DEPRECATED
   defenseBonus Int      @default(0) @map("defense_bonus") // DEPRECATED
@@ -184,7 +184,7 @@ model GearPiece {
   // Attack bonuses (for attacking fleets only)
   meleeStrengthBonus  Int      @default(0) @map("melee_strength_bonus") // Percentage
   rangedStrengthBonus Int      @default(0) @map("ranged_strength_bonus") // Percentage
-  wallReductionBonus  Int      @default(0) @map("wall_reduction_bonus") // Percentage (negative)
+  canopyReductionBonus Int      @default(0) @map("canopy_reduction_bonus") // Percentage (negative)
   // Legacy fields (kept for compatibility)
   attackBonus  Int      @default(0) @map("attack_bonus") // DEPRECATED
   defenseBonus Int      @default(0) @map("defense_bonus") // DEPRECATED

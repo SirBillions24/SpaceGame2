@@ -40,9 +40,9 @@ router.get('/planets/:id/defense-profile', authenticateToken, async (req: AuthRe
 
     res.json({
       planetId: planet.id,
-      defensiveGridLevel: planet.defensiveGridLevel,
-      perimeterFieldLevel: planet.perimeterFieldLevel,
-      starportLevel: planet.starportLevel,
+      canopyLevel: planet.energyCanopyLevel,
+      minefieldLevel: planet.orbitalMinefieldLevel,
+      dockingHubLevel: planet.dockingHubLevel,
       admiralDefenseBonus: admiralBonus,
       defenseCapacity: defenseCapacity,
       laneDefenses: {
@@ -139,7 +139,7 @@ router.post('/planets/:id/defense-layout', authenticateToken, async (req: AuthRe
 
     // 2. Validate Tools
     // A. Slot Limits
-    const maxSlots = Math.max(1, planet.defensiveGridLevel); // At least 1 slot, or based on level
+    const maxSlots = Math.max(1, planet.energyCanopyLevel); // At least 1 slot, or based on level
     // GGE: Wall Level 1 = 1 slot. Level 2 = 2 slots? Let's check user request.
     // "At level one shield generator you can only equip 1 tool per flank on defense."
     // Let's assume 1 slot per level for now.
@@ -170,7 +170,7 @@ router.post('/planets/:id/defense-layout', authenticateToken, async (req: AuthRe
     // Let's calculate total tools assigned.
     const allAssignedTools: Record<string, number> = {};
 
-    // Tools structure: [{ type: 'auto_turret', count: 50 }, ...]
+    // Tools structure: [{ type: 'sentry_drones', count: 50 }, ...]
     const tallyTools = (tools: any[]) => {
       tools.forEach(t => {
         if (t.type && t.count > 0) {

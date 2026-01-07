@@ -232,12 +232,12 @@ export async function syncPlanetResources(planetId: string) {
           where: { id: planet.activeBuildId }
         });
 
-        // Also check if it was a shield generator to decrease wall level
-        if (building.type === 'shield_generator') {
-          await prisma.planet.update({
-            where: { id: planetId },
-            data: { defensiveGridLevel: { decrement: 1 } }
-          });
+        // Also check if it was an energy canopy generator to decrease canopy level
+        if (building.type === 'canopy_generator') {
+            await prisma.planet.update({
+                where: { id: planetId },
+                data: { energyCanopyLevel: { decrement: 1 } }
+            });
         }
       } else {
         const isUpgrade = building.status === 'upgrading';
@@ -257,12 +257,12 @@ export async function syncPlanetResources(planetId: string) {
           await addXp(planet.ownerId, stats.xp);
         }
 
-        // Handle Shield Generator Unlock Hook
-        if (building.type === 'shield_generator') {
-          await prisma.planet.update({
-            where: { id: planetId },
-            data: { defensiveGridLevel: { increment: 1 } }
-          });
+        // Handle Energy Canopy Unlock Hook
+        if (building.type === 'canopy_generator') {
+            await prisma.planet.update({
+                where: { id: planetId },
+                data: { energyCanopyLevel: { increment: 1 } }
+            });
         }
       }
     }

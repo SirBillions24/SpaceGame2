@@ -20,7 +20,7 @@ export interface Planet {
   manufacturingQueue?: any[];
   turretConstructionQueue?: any[];
   tools?: { toolType: string; count: number }[];
-  defense?: { defensiveGrid: number; perimeterField: number; starport: number };
+  defense?: { canopy: number; minefield: number; hub: number };
   taxRate?: number;
   isNpc?: boolean;
   npcLevel?: number;
@@ -97,7 +97,9 @@ export const getCurrentUser = (): { userId: string; username: string } | null =>
 
 export const api = {
   async getPlanets(): Promise<WorldPlanetsResponse> {
-    const response = await fetch(`${API_BASE_URL}/world/planets`);
+    const response = await fetch(`${API_BASE_URL}/world/planets`, {
+      headers: getHeaders(true)
+    });
     if (!response.ok) {
       throw new Error('Failed to fetch planets');
     }
@@ -123,7 +125,9 @@ export const api = {
   },
 
   async getPlanet(id: string): Promise<Planet> {
-    const response = await fetch(`${API_BASE_URL}/world/planet/${id}`);
+    const response = await fetch(`${API_BASE_URL}/world/planet/${id}`, {
+      headers: getHeaders(true)
+    });
     if (!response.ok) {
       throw new Error('Failed to fetch planet');
     }
@@ -422,6 +426,33 @@ export const api = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Demolition failed');
+    }
+    return response.json();
+  },
+
+  // Developer Tools
+  async devAddResources(planetId: string, amount: number) {
+    const response = await fetch(`${API_BASE_URL}/dev/add-resources`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId, amount }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Dev tool failed');
+    }
+    return response.json();
+  },
+
+  async devFastForward(planetId: string) {
+    const response = await fetch(`${API_BASE_URL}/dev/fast-forward`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Dev tool failed');
     }
     return response.json();
   }

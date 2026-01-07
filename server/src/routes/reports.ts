@@ -39,6 +39,8 @@ router.get('/battles', authenticateToken, async (req: AuthRequest, res: Response
       const laneResults = JSON.parse(report.laneResultsJson);
       const attackerLosses = JSON.parse(report.attackerTotalLossesJson);
       const defenderLosses = JSON.parse(report.defenderTotalLossesJson);
+      
+      const admirals = laneResults.admirals || { attacker: null, defender: null };
 
       return {
         id: report.id,
@@ -52,6 +54,10 @@ router.get('/battles', authenticateToken, async (req: AuthRequest, res: Response
         defenderLosses,
         myLosses: isAttacker ? attackerLosses : defenderLosses,
         enemyLosses: isAttacker ? defenderLosses : attackerLosses,
+        admirals: {
+          attacker: admirals.attacker,
+          defender: admirals.defender
+        },
         createdAt: report.createdAt,
       };
     });

@@ -12,14 +12,14 @@ interface WorkshopPanelProps {
 
 const TOOLS: Record<string, any> = {
     'defense_workshop': [
-        { id: 'auto_turret', label: 'Auto-Turret', c: 40, t: 40, time: 30, desc: '+Shield Generator Power' },
-        { id: 'blast_door', label: 'Blast Door', c: 280, t: 120, time: 60, desc: '+Starport Integrity' },
-        { id: 'targeting_array', label: 'Targeting Array', c: 525, t: 225, time: 60, desc: '+Ranged Unit Power' }
+        { id: 'sentry_drones', label: 'Sentry Drones', c: 40, t: 40, time: 30, desc: '+Energy Canopy Power' },
+        { id: 'hardened_bulkheads', label: 'Hardened Bulkheads', c: 280, t: 120, time: 60, desc: '+Docking Hub Integrity' },
+        { id: 'targeting_uplinks', label: 'Targeting Uplinks', c: 525, t: 225, time: 60, desc: '+Ranged Accuracy Bonus' }
     ],
     'siege_workshop': [
-        { id: 'signal_jammer', label: 'Signal Jammer', c: 28, t: 12, time: 30, desc: '-Shield Generator Power' },
-        { id: 'breach_cutter', label: 'Breach Cutter', c: 56, t: 24, time: 60, desc: '-Starport Integrity' },
-        { id: 'holo_decoy', label: 'Holo-Decoy', c: 105, t: 45, time: 60, desc: '-Enemy Ranged Power' }
+        { id: 'invasion_anchors', label: 'Invasion Anchors', c: 28, t: 12, time: 30, desc: '-Enemy Energy Canopy' },
+        { id: 'plasma_breachers', label: 'Plasma Breachers', c: 56, t: 24, time: 60, desc: '-Enemy Docking Hub' },
+        { id: 'stealth_field_pods', label: 'Stealth Field Pods', c: 105, t: 45, time: 60, desc: '-Enemy Ranged Power' }
     ]
 };
 

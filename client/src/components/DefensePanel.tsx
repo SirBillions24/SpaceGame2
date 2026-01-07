@@ -31,7 +31,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
     const [availableTools, setAvailableTools] = useState<Record<string, number>>({});
 
     const [maxSlots, setMaxSlots] = useState(1);
-    const [caps, setCaps] = useState({ wall: 100 });
+    const [caps, setCaps] = useState({ canopy: 100 });
     const [showTurretModal, setShowTurretModal] = useState(false);
 
     // Tool Selection Modal State
@@ -58,13 +58,15 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
             // Fetch layout
             const profile = await api.getDefenseProfile(currentPlanet.id);
 
-            // Wall Level determines Max Slots. Level 1 = 1 Slot.
-            const wallLevel = profile.defensiveGridLevel || 1;
-            setMaxSlots(Math.max(1, wallLevel));
+            // Canopy Level determines Max Slots. Level 1 = 1 Slot.
+            const canopyLevel = profile.canopyLevel || 1;
+            const hubLevel = profile.dockingHubLevel || 0;
+            const minefieldLevel = profile.minefieldLevel || 0;
+            setMaxSlots(Math.max(1, canopyLevel));
             
             // Get defense capacity from API response (if available)
             const defenseCapacity = profile.defenseCapacity || 0;
-            setCaps({ wall: defenseCapacity || (wallLevel * 20) }); // Fallback to old calculation if not available
+            setCaps({ canopy: defenseCapacity || (canopyLevel * 20) }); // Fallback to old calculation if not available
             
             // Update planet data to get latest turrets
             setCurrentPlanet(p);
@@ -121,7 +123,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
         const newTotal = currentTotal - currentUnitInLane + val;
 
         // Check if new total exceeds capacity
-        if (newTotal > caps.wall) {
+        if (newTotal > caps.canopy) {
             // Allow the change but it will be rejected on save
             // Could show a warning here if desired
         }
@@ -268,8 +270,8 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
         if (!showToolSelector) return null;
 
         // Filter tools that are defense tools?
-        // Defense Tools: auto_turret, blast_door, targeting_array (plus new GGE ones if any)
-        // Attack Tools: signal_jammer, breach_cutter, holo_decoy
+        // Defense Tools: sentry_drones, hardened_bulkheads, targeting_uplinks
+        // Attack Tools: invasion_anchors, plasma_breachers, stealth_field_pods
         // Ideally we only show relevant ones or show all but mark type.
         // For MVP, show all available in inventory.
 
@@ -283,7 +285,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
                         {inventoryItems.length === 0 && <p>No tools in inventory.</p>}
                         {inventoryItems.map(([type, count]) => (
                             <div key={type} className="tool-option" onClick={() => addToolToLane(showToolSelector.lane!, type)}>
-                                <strong>{type.replace('_', ' ')}</strong>
+                                <strong>{type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</strong>
                                 <small>Owned: {count}</small>
                             </div>
                         ))}
@@ -299,17 +301,20 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
     const totalUnitsAssigned = Object.values(front.units).reduce((a, b) => a + b, 0) +
                                Object.values(left.units).reduce((a, b) => a + b, 0) +
                                Object.values(right.units).reduce((a, b) => a + b, 0);
-    const capacityExceeded = totalUnitsAssigned > caps.wall;
+    const capacityExceeded = totalUnitsAssigned > caps.canopy;
 
     return (
         <div className="defense-panel-overlay">
             <div className="defense-panel modal">
                 <div className="defense-header">
                     <div>
-                        <h2>Defensive Structure (Wall Lvl {maxSlots})</h2>
+                        <h2>Defensive Structure (Canopy Lvl {maxSlots})</h2>
                         <div className="defense-stats">
                             <span style={{ color: capacityExceeded ? '#ff4444' : '#aaa' }}>
-                                Total Capacity: {totalUnitsAssigned} / {caps.wall} troops (shared across all lanes)
+                                Total Capacity: {totalUnitsAssigned} / {caps.canopy} troops (shared across all lanes)
+                            </span>
+                            <span className="defense-bonus-info" style={{ marginLeft: '15px', color: '#00f3ff' }}>
+                                Hub: Lvl {currentPlanet.starportLevel || 0} | Minefield: Lvl {currentPlanet.perimeterFieldLevel || 0}
                             </span>
                             {currentPlanet.defenseTurretsJson && (
                                 <span className="turret-count">
@@ -346,7 +351,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
 
                 <div className="defense-lanes-container">
                     {renderLane("Left Flank", "left", left)}
-                    {renderLane("Front (Center)", "front", front)}
+                    {renderLane("Central Docking Hub", "front", front)}
                     {renderLane("Right Flank", "right", right)}
                 </div>
 

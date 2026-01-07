@@ -23,8 +23,19 @@ This file is the single source of truth for all building stats. Each building ty
 **Example Addition:**
 To add a new unit, simply add a new entry to the `UNIT_DATA` object in `server/src/constants/unitData.ts`.
 
-### Unit Upkeep (`mechanics.ts`)
-General game mechanics like `BASE_PRODUCTION` are defined in `server/src/constants/mechanics.ts`. Unit-specific upkeep has been moved to `unitData.ts`.
+### Tool/Item Data (`toolData.ts`)
+This file stores the statistics for all consumable items (Offensive and Defensive tools). Each tool defines:
+- `id`: Unique identifier (e.g., `sentry_drones`).
+- `name`: Display name.
+- `description`: Flavor text.
+- `cost`: Resources required to manufacture.
+- `time`: Manufacturing time.
+- `workshop`: Which facility produces it (`defense_workshop` or `siege_workshop`).
+- `bonusType`: The mechanic it affects (`canopy`, `hub`, `ranged_def`, `canopy_reduction`, `hub_reduction`, `ranged_reduction`).
+- `bonusValue`: The percentage bonus or reduction applied.
+
+**Example Addition:**
+To add a new tool, simply add a new entry to the `TOOL_DATA` object in `server/src/constants/toolData.ts`.
 
 ---
 
@@ -33,9 +44,9 @@ General game mechanics like `BASE_PRODUCTION` are defined in `server/src/constan
 Resource production is handled via **Lazy Evaluation** in `server/src/services/planetService.ts`.
 
 ### Formulas
-The game uses the following formulas derived from Goodgame Empire:
+The game uses the following formulas:
 
-1.  **System Stability (Public Order)**:
+1.  **System Stability**:
     `Stability = Sum(Decoration Bonuses) - Sum(Housing Penalties) - (Tax Rate * 2)`
 
 2.  **Productivity Modifier**:
@@ -45,8 +56,14 @@ The game uses the following formulas derived from Goodgame Empire:
 3.  **Production Rate**:
     `Resource Rate = (Base Production + Sum(Building Production)) * (Productivity / 100)`
 
+### Defensive Layers (Combat Engine)
+The combat engine calculates defense based on three primary layers:
+- **Energy Canopy** (was Wall): The primary planetary shield. Enhanced by **Energy Canopy Generator** (building) and **Sentry Drones** (tool).
+- **Central Docking Hub** (was Gate): The vulnerable main entry point. Enhanced by **Docking Hub** (building) and **Hardened Bulkheads** (tool).
+- **Orbital Minefield** (was Moat): The outermost defensive perimeter. Enhanced by **Orbital Minefield** (level).
+
 ### Storage Clamping
-All resources are clamped to the planet's `maxStorage` (determined by the highest level Storehouse) during each sync. Food consumption can still take resources below zero if production is insufficient.
+All resources are clamped to the planet's `maxStorage` (determined by the highest level Automated Storage Depot) during each sync. Food consumption can still take resources below zero if production is insufficient.
 
 ---
 
@@ -59,7 +76,25 @@ When adding new features that require balancing:
 3.  **Use Helper Functions**: Utilize `getBuildingStats(type, level)` to safely access data.
 4.  **Sync Resources**: Ensure any action that modifies resources (building, recruitment, combat) first calls `syncPlanetResources(planetId)` to ensure the state is up to date.
 
-## 4. Troubleshooting Production Mismatches
+## 4. Unified Combat Terminology
+
+To maintain consistency, the following sci-fi terminology MUST be used:
+
+| Medieval Concept | Unified Sci-Fi Name | Code Reference |
+| :--- | :--- | :--- |
+| Wall | **Energy Canopy** | `canopy`, `canopy_generator` |
+| Gate | **Central Docking Hub** | `hub`, `dockingHub` |
+| Moat | **Orbital Minefield** | `minefield` |
+| Ladder | **Invasion Anchor** | `invasion_anchors` |
+| Ram | **Plasma Breacher** | `plasma_breachers` |
+| Mantlet | **Stealth Field Pod** | `stealth_field_pods` |
+| Auto-Turret | **Sentry Drones** | `sentry_drones` |
+| Blast Door | **Hardened Bulkheads** | `hardened_bulkheads` |
+| Flaming Arrows | **Targeting Uplinks** | `targeting_uplinks` |
+
+---
+
+## 5. Troubleshooting Production Mismatches
 
 If the HUD production rate does not match the actual resource gain:
 - Check if `BASE_PRODUCTION` is being applied correctly in both `calculatePlanetRates` and `syncPlanetResources`.

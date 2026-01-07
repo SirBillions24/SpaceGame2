@@ -168,6 +168,10 @@ function App() {
           onEnterPlanet={handleEnterPlanet}
           onClose={handleCloseBanner}
           onSendFleet={() => {
+            const user = getCurrentUser();
+            if (!sourcePlanet && user && hudPlanet && hudPlanet.ownerId === user.userId) {
+              setSourcePlanet(hudPlanet);
+            }
             setTargetPlanet(selectedPlanet);
             setShowFleetPanel(true);
           }}
