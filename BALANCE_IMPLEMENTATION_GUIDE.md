@@ -21,12 +21,10 @@ This file is the single source of truth for all building stats. Each building ty
     - `xp`: Experience points granted upon completion.
 
 **Example Addition:**
-To add a new building, simply add a new entry to the `BUILDING_DATA` object in `server/src/constants/buildingData.ts`.
+To add a new unit, simply add a new entry to the `UNIT_DATA` object in `server/src/constants/unitData.ts`.
 
-### Unit Stats (`mechanics.ts`)
-General game mechanics and unit upkeep are defined in `server/src/constants/mechanics.ts`.
-- `UNIT_STATS`: Defines food upkeep per hour for each unit type.
-- `BASE_PRODUCTION`: The inherent resource generation rate for every planet.
+### Unit Upkeep (`mechanics.ts`)
+General game mechanics like `BASE_PRODUCTION` are defined in `server/src/constants/mechanics.ts`. Unit-specific upkeep has been moved to `unitData.ts`.
 
 ---
 

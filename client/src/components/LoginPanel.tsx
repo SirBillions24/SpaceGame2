@@ -24,7 +24,7 @@ export default function LoginPanel({ onLogin }: LoginPanelProps) {
     try {
       if (isRegister) {
         const result = await api.register(username, email, password);
-        setSuccess(`Account created! Welcome, ${result.user.username}. Your castle has been spawned!`);
+        setSuccess(`Account created! Welcome, ${result.user.username}. Your colony has been spawned!`);
         // Auto-login after registration
         setTimeout(() => {
           onLogin();
@@ -110,13 +110,13 @@ export default function LoginPanel({ onLogin }: LoginPanelProps) {
           {success && <div className="success-message">{success}</div>}
 
           <button type="submit" disabled={loading} className="submit-btn">
-            {loading ? 'Please wait...' : isRegister ? 'Create Account & Spawn Castle' : 'Login'}
+            {loading ? 'Please wait...' : isRegister ? 'Create Account & Establish Colony' : 'Login'}
           </button>
         </form>
 
         {isRegister && (
           <p className="info-text">
-            Creating an account will automatically spawn your starting castle on the map!
+            Creating an account will automatically spawn your starting colony on the map!
           </p>
         )}
       </div>

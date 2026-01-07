@@ -1,20 +1,7 @@
 
-// Mechanics Constants for Galactic Conquest (GGE Clone)
+// Mechanics Constants for Galactic Conquest
 
-// 1. UNIT STATS (Upkeep)
-// Upkeep measured in Food per hour.
-export const UNIT_STATS: Record<string, { upkeep: number }> = {
-    // Infantry
-    'marine': { upkeep: 4 },      // Standard
-    'ranger': { upkeep: 3 },      // Light
-    'sentinel': { upkeep: 6 },    // Heavy
-
-    // Fleet / Vehicles (Future)
-    'interceptor': { upkeep: 10 },
-    'cruiser': { upkeep: 50 },
-};
-
-// 2. PUBLIC ORDER
+// 2. SYSTEM STABILITY
 export const BASE_STABILITY = 0; // Neutral
 export const TAX_EFFICIENCY_FACTOR = 1; // Basic multiplier
 

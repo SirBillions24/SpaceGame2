@@ -2,7 +2,8 @@ import prisma from '../lib/prisma';
 import { spawnPirateBases } from './pveService';
 import { processManufacturingQueue } from './toolService';
 import { processTurretQueue } from './turretService';
-import { UNIT_STATS, BASE_PRODUCTION } from '../constants/mechanics';
+import { UNIT_DATA } from '../constants/unitData';
+import { BASE_PRODUCTION } from '../constants/mechanics';
 import { BUILDING_DATA } from '../constants/buildingData';
 import { addXp } from './progressionService';
 
@@ -181,11 +182,11 @@ export function calculatePlanetRates(planet: any) {
   // Consumption
   let foodConsumption = 0;
   if (planet.units) {
-    planet.units.forEach((u: any) => {
-      const stats = UNIT_STATS[u.unitType];
-      const upkeep = stats ? stats.upkeep : 1;
-      foodConsumption += (u.count * upkeep);
-    });
+      planet.units.forEach((u: any) => {
+        const stats = UNIT_DATA[u.unitType];
+        const upkeep = stats ? stats.upkeep : 1;
+        foodConsumption += (u.count * upkeep);
+      });
   }
 
   const creditRate = population * ((planet.taxRate || 10) / 100) * 5;
@@ -225,29 +226,44 @@ export async function syncPlanetResources(planetId: string) {
   if (planet.activeBuildId && planet.buildFinishTime && planet.buildFinishTime <= now) {
     const building = planet.buildings.find(b => b.id === planet.activeBuildId);
     if (building) {
-      const isUpgrade = building.status === 'upgrading';
-      const nextLevel = isUpgrade ? building.level + 1 : 1;
-      const stats = BUILDING_DATA[building.type]?.levels[nextLevel];
-
-      await prisma.building.update({
-        where: { id: planet.activeBuildId },
-        data: {
-          status: 'active',
-          level: isUpgrade ? { increment: 1 } : undefined
-        }
-      });
-
-      // Award XP
-      if (stats && stats.xp) {
-        await addXp(planet.ownerId, stats.xp);
-      }
-
-      // Handle Shield Generator Unlock Hook
-      if (building.type === 'shield_generator') {
-        await prisma.planet.update({
-          where: { id: planetId },
-          data: { defensiveGridLevel: { increment: 1 } }
+      if (building.status === 'demolishing') {
+        // Remove building completely
+        await prisma.building.delete({
+          where: { id: planet.activeBuildId }
         });
+
+        // Also check if it was a shield generator to decrease wall level
+        if (building.type === 'shield_generator') {
+          await prisma.planet.update({
+            where: { id: planetId },
+            data: { defensiveGridLevel: { decrement: 1 } }
+          });
+        }
+      } else {
+        const isUpgrade = building.status === 'upgrading';
+        const nextLevel = isUpgrade ? building.level + 1 : 1;
+        const stats = BUILDING_DATA[building.type]?.levels[nextLevel];
+
+        await prisma.building.update({
+          where: { id: planet.activeBuildId },
+          data: {
+            status: 'active',
+            level: isUpgrade ? { increment: 1 } : undefined
+          }
+        });
+
+        // Award XP
+        if (stats && stats.xp) {
+          await addXp(planet.ownerId, stats.xp);
+        }
+
+        // Handle Shield Generator Unlock Hook
+        if (building.type === 'shield_generator') {
+          await prisma.planet.update({
+            where: { id: planetId },
+            data: { defensiveGridLevel: { increment: 1 } }
+          });
+        }
       }
     }
 
@@ -268,6 +284,11 @@ export async function syncPlanetResources(planetId: string) {
   // Calculate Rates using helper
   const stats = calculatePlanetRates(planet);
 
+  // Skip production/clamping for NPCs to preserve their custom loot pools
+  if (planet.isNpc) {
+    return planet;
+  }
+
   // 3. Apply Resource Changes
   let newCarbon = planet.carbon + (stats.carbonRate * diffHours);
   let newTitanium = planet.titanium + (stats.titaniumRate * diffHours);
@@ -279,7 +300,7 @@ export async function syncPlanetResources(planetId: string) {
   newFood = Math.min(newFood, stats.maxStorage);
 
   // Apply Consumption (Consumption happens AFTER production and clamping? 
-  // No, in GGE food can go to 0 regardless of storage cap. 
+    // Food can go to 0 regardless of storage cap.
   // Production fills the storage, but consumption takes from it.)
   const consumed = stats.foodConsumption * diffHours;
   newFood -= consumed;
@@ -313,12 +334,15 @@ export async function syncPlanetResources(planetId: string) {
   let newCredits = planet.credits + (stats.creditRate * diffHours);
 
   // 7. Queue Processing
+  let updatedRecruitmentQueue = planet.recruitmentQueue;
   if (planet.recruitmentQueue) {
     try {
       const queue = JSON.parse(planet.recruitmentQueue);
       if (Array.isArray(queue) && queue.length > 0) {
         const nowMs = now.getTime();
         const pendingQueue = [];
+        let unitsAdded = false;
+
         for (const batch of queue) {
           const finishTime = new Date(batch.finishTime).getTime();
           if (finishTime <= nowMs) {
@@ -327,18 +351,17 @@ export async function syncPlanetResources(planetId: string) {
               update: { count: { increment: batch.count } },
               create: { planetId: planet.id, unitType: batch.unit, count: batch.count }
             });
+            unitsAdded = true;
           } else {
             pendingQueue.push(batch);
           }
         }
-        if (pendingQueue.length !== queue.length) {
-          await prisma.planet.update({
-            where: { id: planet.id },
-            data: { recruitmentQueue: JSON.stringify(pendingQueue) }
-          });
+
+        if (unitsAdded || pendingQueue.length !== queue.length) {
+          updatedRecruitmentQueue = JSON.stringify(pendingQueue);
         }
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error('Recruitment sync error:', e); }
   }
 
   await processManufacturingQueue(planet);
@@ -355,6 +378,7 @@ export async function syncPlanetResources(planetId: string) {
       stability: Math.round(stats.publicOrder),
       population: stats.population,
       lastResourceUpdate: now,
+      recruitmentQueue: updatedRecruitmentQueue,
     },
     include: { units: true, buildings: true, tools: true },
   });
@@ -373,7 +397,19 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
     throw new Error('Construction slot occupied');
   }
 
-  // Check Grid Bounds (using new gridSizeX/gridSizeY)
+  // Building Limits
+  if (type === 'colony_hub') throw new Error('Additional Colony Hubs cannot be constructed.');
+
+  const limitedBuildings = ['storage_depot', 'academy', 'tavern', 'defense_workshop', 'siege_workshop'];
+  if (limitedBuildings.includes(type)) {
+    const existing = (planet as any).buildings?.find((b: any) => b.type === type);
+    if (existing) {
+      // Redirect to upgrade of existing building
+      return upgradeBuilding(planet, existing);
+    }
+  }
+
+  // Check Grid Bounds
   const gridSizeX = (planet as any).gridSizeX || 10;
   const gridSizeY = (planet as any).gridSizeY || 10;
   if (x < 0 || x >= gridSizeX || y < 0 || y >= gridSizeY) {
@@ -441,6 +477,57 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
   return building;
 }
 
+/**
+ * Demolish a building
+ */
+export async function demolishBuilding(planetId: string, buildingId: string) {
+  const planet = await syncPlanetResources(planetId);
+  if (!planet) throw new Error('Planet not found');
+
+  if (planet.isBuilding) {
+    throw new Error('Construction slot occupied');
+  }
+
+  const building = (planet as any).buildings?.find((b: any) => b.id === buildingId);
+  if (!building) throw new Error('Building not found');
+
+  if (building.type === 'colony_hub') {
+    throw new Error('You cannot demolish the Colony Hub.');
+  }
+
+  // Calculate Refund (10% of current level cost)
+  // And Time (50% of build time)
+  const stats = BUILDING_DATA[building.type]?.levels[building.level];
+  if (!stats) throw new Error('Building stats not found');
+
+  const carbonRefund = Math.floor(stats.cost.carbon * 0.1);
+  const titaniumRefund = Math.floor(stats.cost.titanium * 0.1);
+  const demoTime = Math.ceil(stats.time * 0.5);
+
+  const finishTime = new Date();
+  finishTime.setSeconds(finishTime.getSeconds() + demoTime);
+
+  // Update Building Status
+  await prisma.building.update({
+    where: { id: buildingId },
+    data: { status: 'demolishing' }
+  });
+
+  // Set Planet State
+  await prisma.planet.update({
+    where: { id: planetId },
+    data: {
+      carbon: { increment: carbonRefund },
+      titanium: { increment: titaniumRefund },
+      isBuilding: true,
+      activeBuildId: buildingId,
+      buildFinishTime: finishTime
+    }
+  });
+
+  return { buildingId, finishTime, carbonRefund, titaniumRefund };
+}
+
 async function upgradeBuilding(planet: any, building: any) {
   // Next Level
   const nextLevel = building.level + 1;
@@ -503,15 +590,9 @@ export async function spawnPlanet(userId: string, username: string, quadrant?: '
   });
 
   // Create Starting Buildings
-  // 1. Colony Hub (Command Center) - Center of grid (5,5)
-  // 2. Resource Gen at (2,2), (2,7), (7,2) etc to give them something to upgrade
-  await prisma.building.createMany({
-    data: [
-      { planetId: planet.id, type: 'colony_hub', x: 4, y: 4, level: 1, status: 'active' }, // 4x4, at 4,4 occupies 4,5,6,7
-      { planetId: planet.id, type: 'carbon_processor', x: 1, y: 1, level: 1, status: 'active' },
-      { planetId: planet.id, type: 'titanium_extractor', x: 1, y: 7, level: 1, status: 'active' },
-      { planetId: planet.id, type: 'hydroponics', x: 7, y: 1, level: 1, status: 'active' },
-    ]
+  // 1. Colony Hub (Command Center) - 7x7
+  await prisma.building.create({
+    data: { planetId: planet.id, type: 'colony_hub', x: 1, y: 1, level: 1, status: 'active' }
   });
 
   // Create starting units
@@ -551,19 +632,18 @@ export async function recruitUnit(planetId: string, unitType: string, count: num
   }
 
   // Costs
-  const COSTS: any = {
-    marine: { c: 20, t: 0, time: 20 },
-    ranger: { c: 30, t: 10, time: 30 },
-    sentinel: { c: 10, t: 40, time: 40 },
-  };
+  const unitData = UNIT_DATA[unitType];
+  if (!unitData) throw new Error('Invalid unit type');
 
-  const unitStats = COSTS[unitType];
-  if (!unitStats) throw new Error('Invalid unit type');
+  if (academyLevel < unitData.requiredAcademyLevel) {
+    throw new Error(`Naval Academy Level ${unitData.requiredAcademyLevel} required for ${unitData.name}`);
+  }
 
-  const totalCarbon = unitStats.c * count;
-  const totalTitanium = unitStats.t * count;
+  const totalCarbon = unitData.cost.carbon * count;
+  const totalTitanium = unitData.cost.titanium * count;
+  const totalCredits = (unitData.cost.credits || 0) * count;
 
-  if (planet.carbon < totalCarbon || planet.titanium < totalTitanium) {
+  if (planet.carbon < totalCarbon || planet.titanium < totalTitanium || planet.credits < totalCredits) {
     throw new Error(`Insufficient resources`);
   }
 
@@ -591,9 +671,9 @@ export async function recruitUnit(planetId: string, unitType: string, count: num
   // Already calculated at start
   const acLvl = academyLevel;
 
-  // Apply Academy Speedup (5% per level)
-  const speedup = 1 - (Math.min(0.5, acLvl * 0.05));
-  const durationPerUnit = unitStats.time * speedup;
+  // Apply Academy Speedup (5% per level above required)
+  const speedup = 1 - (Math.min(0.5, (acLvl - unitData.requiredAcademyLevel) * 0.05));
+  const durationPerUnit = unitData.time * speedup;
   const totalDuration = durationPerUnit * count;
 
   const finishTime = new Date(startTime.getTime() + (totalDuration * 1000));
@@ -611,6 +691,7 @@ export async function recruitUnit(planetId: string, unitType: string, count: num
     data: {
       carbon: { decrement: totalCarbon },
       titanium: { decrement: totalTitanium },
+      credits: { decrement: totalCredits },
       recruitmentQueue: JSON.stringify(recruitmentQueue)
     }
   });
@@ -634,7 +715,7 @@ export async function moveBuilding(planetId: string, buildingId: string, newX: n
   if (!building) throw new Error('Building not found');
 
   if (planet.isBuilding) {
-    // Optional: Does moving require construction slot? GGE usually allows moving freely or with small timer.
+    // Moving buildings is allowed freely.
     // User requested "Move Mode ... freely relocate".
     // So distinct from construction.
   }

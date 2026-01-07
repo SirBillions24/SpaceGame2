@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { syncPlanetResources, moveBuilding, placeBuilding, calculatePlanetRates } from '../services/planetService';
-import { UNIT_STATS } from '../constants/mechanics';
+import { UNIT_DATA } from '../constants/unitData';
 
 const prisma = new PrismaClient();
 
@@ -88,7 +88,7 @@ async function run() {
         if (!synced) throw new Error('Sync failed 3');
         const foodRates = calculatePlanetRates(synced);
 
-        const expectedConsumption = 100 * (UNIT_STATS['marine']?.upkeep || 1);
+        const expectedConsumption = 100 * (UNIT_DATA['marine']?.upkeep || 1);
         console.log(`Food Consumption: ${foodRates.foodConsumption}, Expected: ${expectedConsumption}`);
 
         if (foodRates.foodConsumption !== expectedConsumption) console.error(`FAIL: Consumption mismatch`);

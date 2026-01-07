@@ -1,6 +1,6 @@
 # Old School Empire
 
-A browser-based, persistent, multiplayer strategy game inspired by Goodgame Empire.
+A browser-based, persistent, multiplayer strategy game with a deep sci-fi economy and tactical combat.
 
 ## Project Structure
 

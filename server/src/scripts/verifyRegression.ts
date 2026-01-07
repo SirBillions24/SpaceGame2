@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { syncPlanetResources, placeBuilding, moveBuilding, calculatePlanetRates, recruitUnit } from '../services/planetService';
-import { UNIT_STATS } from '../constants/mechanics';
+import { UNIT_DATA } from '../constants/unitData';
 
 const prisma = new PrismaClient();
 
@@ -89,7 +89,7 @@ async function run() {
         if (!synced2) throw new Error('Sync failed 2');
 
         const rates2 = calculatePlanetRates(synced2);
-        const expectedConsumption = 50 * (UNIT_STATS['marine']?.upkeep || 1);
+        const expectedConsumption = 50 * (UNIT_DATA['marine']?.upkeep || 1);
         
         if (rates2.foodConsumption !== expectedConsumption) {
             throw new Error(`FAIL: Food consumption should be ${expectedConsumption}, got ${rates2.foodConsumption}`);

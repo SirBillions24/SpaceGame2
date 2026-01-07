@@ -26,6 +26,15 @@
     align-items: center;
     gap: 10px;
     width: 250px;
+    position: relative;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.hud-profile-section:hover {
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .level-badge {
@@ -228,7 +237,8 @@
 .military-group:hover .military-dropdown,
 .res-group:hover .resource-dropdown,
 .currency-pill:hover .resource-dropdown,
-.order-group:hover .resource-dropdown {
+.order-group:hover .resource-dropdown,
+.hud-profile-section:hover .resource-dropdown {
     display: block;
 }
 
@@ -291,6 +301,10 @@
 
 .titanium-dropdown h5 {
     color: #90a4ae;
+}
+
+.xp-dropdown h5 {
+    color: #00bcd4;
 }
 
 .warning-text {

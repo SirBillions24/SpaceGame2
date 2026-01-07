@@ -5,6 +5,7 @@ import WorkshopPanel from './WorkshopPanel';
 import ExpansionModal from './ExpansionModal';
 import DefenseTurretModal from './DefenseTurretModal';
 import AdmiralPanel from './AdmiralPanel';
+import RecruitmentPanel from './RecruitmentPanel';
 import './PlanetInterior.css';
 
 interface PlanetInteriorProps {
@@ -29,18 +30,18 @@ const BUILDING_LABELS: Record<string, string> = {
 };
 
 const BUILDING_SIZES: Record<string, number> = {
-  'colony_hub': 4,
-  'carbon_processor': 2,
-  'titanium_extractor': 2,
-  'hydroponics': 2,
+  'colony_hub': 7,
+  'carbon_processor': 3,
+  'titanium_extractor': 3,
+  'hydroponics': 3,
   'academy': 3,
-  'tavern': 2,
-  'defense_workshop': 2,
-  'siege_workshop': 2,
+  'tavern': 3,
+  'defense_workshop': 3,
+  'siege_workshop': 3,
   'monument': 1,
-  'housing_unit': 2,
-  'shield_generator': 2,
-  'storage_depot': 2
+  'housing_unit': 3,
+  'shield_generator': 3,
+  'storage_depot': 3
 };
 
 const BUILDING_COSTS: Record<string, { c: number, t: number }> = {
@@ -199,12 +200,6 @@ const BUILDING_INFO: Record<string, {
   }
 };
 
-const UNIT_COSTS: any = {
-  marine: { c: 48, t: 0, time: 20, label: 'Marine' },
-  ranger: { c: 41, t: 0, time: 30, label: 'Ranger' },
-  sentinel: { c: 200, t: 0, time: 40, label: 'Sentinel' }
-};
-
 // Organized building categories
 const BUILDING_CATEGORIES = {
   structures: {
@@ -240,8 +235,10 @@ const BUILDING_CATEGORIES = {
   }
 };
 
-export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps) {
+export default function PlanetInterior(props: PlanetInteriorProps) {
+  const { planet, onClose } = props;
   const [planetData, setPlanetData] = useState<Planet | null>(null);
+  const [taxRate, setTaxRate] = useState<number>(planet.taxRate || 10);
   const [loading, setLoading] = useState(true);
 
   // Interaction State
@@ -252,12 +249,12 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
   const [showUpgradeMenu, setShowUpgradeMenu] = useState<{ building: any } | null>(null);
   const [recruitSelection, setRecruitSelection] = useState<string>('marine');
   const [recruitCount, setRecruitCount] = useState<number>(10);
-  const [showRecruitConsole, setShowRecruitConsole] = useState(false);
   const [showDefensePanel, setShowDefensePanel] = useState(false);
   const [showWorkshop, setShowWorkshop] = useState<'defense_workshop' | 'siege_workshop' | null>(null);
   const [showExpansionModal, setShowExpansionModal] = useState(false);
   const [showTurretModal, setShowTurretModal] = useState(false);
   const [showAdmiralPanel, setShowAdmiralPanel] = useState(false);
+  const [showRecruitmentPanel, setShowRecruitmentPanel] = useState(false);
   const [hoveredBuildingType, setHoveredBuildingType] = useState<string | null>(null);
   const [activeMainTab, setActiveMainTab] = useState<string>('structures');
   const [expandedSubsections, setExpandedSubsections] = useState<Set<string>>(new Set(['military', 'civil', 'workshops', 'operations']));
@@ -287,6 +284,9 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
     try {
       const data = await api.getPlanet(planet.id);
       setPlanetData(data);
+      if (data.taxRate !== undefined) {
+        setTaxRate(data.taxRate);
+      }
     } catch (error) {
       console.error('Failed to load planet data:', error);
     } finally {
@@ -296,6 +296,9 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
 
   useEffect(() => {
     loadPlanetData();
+    // Periodic refresh every 10 seconds to keep resources and queues in sync
+    const interval = setInterval(loadPlanetData, 10000);
+    return () => clearInterval(interval);
   }, [planet.id]);
 
   // Timer Logic
@@ -313,22 +316,19 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
   const construction = planetData?.construction;
   useEffect(() => {
     if (construction?.isBuilding && construction.buildFinishTime) {
-      // Logic moved to rely on 'now' if we wanted, or kept simple here
-      // Let's just use the existing logic for construction right now to minimize diff risk, 
-      // but strictly speaking we could unify.
-      // Re-implementing simplified construction timer using `now` would be cleaner but changing logic.
-      // Keeping existing interval logic for construction for safety, but `now` is needed for recruitment.
-
       const finish = new Date(construction.buildFinishTime!);
       const diff = Math.ceil((finish.getTime() - now.getTime()) / 1000);
 
       if (diff <= 0) {
-        if (timeLeft !== null) { // Only reload if we transition from having time to 0
+        if (timeLeft !== null) {
           setTimeLeft(null);
           loadPlanetData();
+          props.onUpdate?.();
         }
       } else {
-        setTimeLeft(`${diff}s`);
+        const building = buildings.find(b => b.id === construction.activeBuildId);
+        const prefix = building?.status === 'demolishing' ? 'Salvaging: ' : '';
+        setTimeLeft(`${prefix}${diff}s`);
       }
     } else {
       setTimeLeft(null);
@@ -342,6 +342,9 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
   // Occupied Map
   const occupiedMap = new Set<string>();
   buildings.forEach(b => {
+    // If we are moving a building, it doesn't "occupy" its old spot for the ghost/placement check
+    if (movingBuildingId && b.id === movingBuildingId) return;
+    
     const size = BUILDING_SIZES[b.type] || 2;
     for (let dx = 0; dx < size; dx++) {
       for (let dy = 0; dy < size; dy++) {
@@ -361,12 +364,10 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
     // Overlap
     for (let dx = 0; dx < size; dx++) {
       for (let dy = 0; dy < size; dy++) {
-        // Check collision, but ignore 'ignoreId' if provided
-        // We need to check if the occupied map has something *other* than us.
-        // Simplest: Iterate buildings directly instead of using occupiedMap for complex checks, OR rebuild map excluding us?
-        // Re-iterating is safer for "exclude".
+        // Check collision against other buildings (excluding ignoreId)
         const blocking = buildings.find(b => {
           if (ignoreId && b.id === ignoreId) return false;
+          if (movingBuildingId && b.id === movingBuildingId) return false; // Also ignore moving building
           const bSize = BUILDING_SIZES[b.type] || 2;
           return (x + dx >= b.x && x + dx < b.x + bSize && y + dy >= b.y && y + dy < b.y + bSize);
         });
@@ -407,7 +408,7 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
             setMoveMode(false);
 
             loadPlanetData();
-            onUpdate?.();
+            props.onUpdate?.();
           }
         } catch (e: any) { alert(e.message); }
       } else {
@@ -430,7 +431,7 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
           await api.build(planet.id, buildMode, x, y);
           setBuildMode(null);
           loadPlanetData();
-          onUpdate?.();
+          props.onUpdate?.();
         } catch (e: any) { alert(e.message); }
       }
       return;
@@ -648,13 +649,16 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
     for (let x = 0; x < gridSizeX; x++) {
       // Ghost Logic
       let ghostClass = '';
-      if (buildMode && hoveredTile) {
-        const size = BUILDING_SIZES[buildMode] || 2;
+      const movingBuilding = movingBuildingId ? buildings.find(b => b.id === movingBuildingId) : null;
+      const activeType = buildMode || movingBuilding?.type;
+
+      if (activeType && hoveredTile) {
+        const size = BUILDING_SIZES[activeType] || 2;
         // Check if THIS cell is inside the hovered footprint
         if (x >= hoveredTile.x && x < hoveredTile.x + size &&
           y >= hoveredTile.y && y < hoveredTile.y + size) {
           // Check validity of the ROOT hovered tile
-          const valid = canPlaceAt(hoveredTile.x, hoveredTile.y, buildMode);
+          const valid = canPlaceAt(hoveredTile.x, hoveredTile.y, activeType, movingBuildingId || undefined);
           ghostClass = valid ? 'ghost-valid' : 'ghost-invalid';
         }
       }
@@ -673,11 +677,15 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
   }
 
   const buildingElements = buildings.map(b => {
+    // Hide the building from the grid if it's currently being moved
+    if (movingBuildingId && b.id === movingBuildingId) return null;
+
     const size = BUILDING_SIZES[b.type] || 2;
+    const isWorking = b.status === 'constructing' || b.status === 'upgrading' || b.status === 'demolishing';
     return (
       <div
         key={b.id}
-        className={`grid-building ${b.type} ${b.status === 'constructing' || b.status === 'upgrading' ? 'constructing' : ''}`}
+        className={`grid-building ${b.type} ${isWorking ? 'constructing' : ''}`}
         style={{
           gridColumn: `${b.x + 1} / span ${size}`,
           gridRow: `${b.y + 1} / span ${size}`
@@ -686,14 +694,14 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
           e.stopPropagation();
           handleTileClick(b.x, b.y);
         }}
-        onMouseEnter={() => {
-          // Prevent ghost from rendering underneath if hovering a building?
-          // No, we technically want to know we can't place there.
-        }}
       >
         <div className="b-name">{BUILDING_LABELS[b.type]}</div>
         <div className="b-level">Lvl {b.level}</div>
-        {b.status !== 'active' && <div className="b-status">{timeLeft || '...'}</div>}
+        {b.status !== 'active' && (
+          <div className="b-status">
+            {b.status === 'demolishing' ? 'Salvaging' : (timeLeft || '...')}
+          </div>
+        )}
       </div>
     );
   });
@@ -759,11 +767,24 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
                           {subsection.buildings.map(type => {
                             const cost = BUILDING_COSTS[type];
                             const canAfford = resources && resources.carbon >= cost.c && resources.titanium >= cost.t;
+                            
+                            // Check if limited building already exists
+                            const limitedBuildings = ['storage_depot', 'academy', 'tavern', 'defense_workshop', 'siege_workshop'];
+                            const isLimited = limitedBuildings.includes(type);
+                            const existingB = buildings.find(b => b.type === type);
+
                             return (
                               <div
                                 key={type}
-                                className={`building-card ${buildMode === type ? 'active' : ''} ${!canAfford ? 'disabled' : ''}`}
-                                onClick={() => canAfford && setBuildMode(buildMode === type ? null : type)}
+                                className={`building-card ${buildMode === type ? 'active' : ''} ${!canAfford ? 'disabled' : ''} ${type === 'colony_hub' ? 'hidden' : ''}`}
+                                style={{ display: type === 'colony_hub' ? 'none' : 'flex' }}
+                                onClick={() => {
+                                  if (isLimited && existingB) {
+                                    setShowUpgradeMenu({ building: existingB });
+                                    return;
+                                  }
+                                  canAfford && setBuildMode(buildMode === type ? null : type);
+                                }}
                                 onMouseEnter={(e) => handleMouseEnterBuilding(e, type)}
                                 onMouseLeave={() => setHoveredBuildingType(null)}
                               >
@@ -771,7 +792,7 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
                                   <span className="building-card-name">{BUILDING_LABELS[type]}</span>
                                 </div>
                                 <div className="building-card-cost">
-                                  {cost.c}C {cost.t}Ti
+                                  {isLimited && existingB ? 'LIMIT 1 (UPGRADE)' : `${cost.c}C ${cost.t}Ti`}
                                 </div>
                               </div>
                             );
@@ -789,17 +810,21 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
           <div className="planet-main-area">
             {/* Resources Bar */}
             <div className="planet-section">
-            <div className="resources-list">
-              <div className="resource-item">
-                <span>Carbon: {resources?.carbon.toFixed(0)}</span>
-                <span className="res-rate">+{planetData?.production?.carbon.toFixed(2)}/h</span>
-              </div>
-              <div className="resource-item">
-                <span>Titanium: {resources?.titanium.toFixed(0)}</span>
-                <span className="res-rate">+{planetData?.production?.titanium.toFixed(2)}/h</span>
-              </div>
+              <div className="resources-list">
                 <div className="resource-item">
-                  <span>Grid: {gridSizeX} × {gridSizeY}</span>
+                  <div className="res-cap-label">Carbon Storage</div>
+                  <div className="res-cap-value">{planetData?.stats?.maxStorage?.toLocaleString() || '1,000'} Cap</div>
+                  <span className="res-rate">Rate: +{planetData?.production?.carbon.toFixed(2)}/h</span>
+                </div>
+                <div className="resource-item">
+                  <div className="res-cap-label">Titanium Storage</div>
+                  <div className="res-cap-value">{planetData?.stats?.maxStorage?.toLocaleString() || '1,000'} Cap</div>
+                  <span className="res-rate">Rate: +{planetData?.production?.titanium.toFixed(2)}/h</span>
+                </div>
+                <div className="resource-item">
+                  <div className="res-cap-label">Grid Size</div>
+                  <div className="res-cap-value">{gridSizeX} × {gridSizeY}</div>
+                  
                   {/* Zoom Controls */}
                   <div className="zoom-controls-compact">
                     <button 
@@ -832,18 +857,19 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
 
                 {isOwner && (
                   <div className="resource-item" style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span>Tax Rate: {planetData?.taxRate ?? 10}%</span>
+                    <div className="res-cap-label">Colony Tax Rate</div>
+                    <div className="res-cap-value">{taxRate}%</div>
                     <input
                       type="range"
                       min="0"
                       max="50"
-                      value={planetData?.taxRate ?? 10}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value);
-                    api.updateTaxRate(planet.id, val).then(() => {
-                      setPlanetData(prev => prev ? { ...prev, taxRate: val } : null);
-                      onUpdate?.();
-                    });
+                      className="tax-slider"
+                      value={taxRate}
+                      onChange={(e) => setTaxRate(parseInt(e.target.value))}
+                      onMouseUp={() => {
+                        api.updateTaxRate(planet.id, taxRate).then(() => {
+                          props.onUpdate?.();
+                        }).catch(err => alert(err.message));
                       }}
                     />
                   </div>
@@ -943,83 +969,33 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
                 </button>
                 {expandedSubsections.has('operations') && (
                   <div className="subsection-content">
-                    {showRecruitConsole ? (
-                      <div className="recruitment-sidebar-context">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                          <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#00f3ff' }}>Recruitment</h4>
-                          <button className="close-btn" style={{ fontSize: '18px' }} onClick={() => setShowRecruitConsole(false)}>×</button>
-                        </div>
-                        <div className="unit-cards-vertical">
-                          {Object.entries(UNIT_COSTS).map(([id, u]: any) => (
-                            <div
-                              key={id}
-                              className={`unit-card-mini ${recruitSelection === id ? 'selected' : ''}`}
-                              onClick={() => setRecruitSelection(id)}
-                            >
-                              <div className="unit-info">
-                                <span className="unit-label">{u.label}</span>
-                                <span className="unit-cost-small">{u.c}C {u.t}Ti</span>
-                              </div>
-                              <div className="unit-time-small">{u.time}s</div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="recruit-actions-sidebar">
-                          <input
-                            type="number"
-                            className="recruit-input-sidebar"
-                            value={recruitCount}
-                            onChange={e => setRecruitCount(parseInt(e.target.value))}
-                            min="1"
-                          />
-                          <button className="recruit-btn-action-small" onClick={handleRecruit}>
-                            TRAIN
+                    <div className="action-grid">
+                      {buildings.some(b => b.type === 'academy' && b.status === 'active') && (
+                        <>
+                          <button 
+                            className="action-card"
+                            onClick={() => setShowRecruitmentPanel(true)}
+                          >
+                            <div className="action-icon">👥</div>
+                            <div className="action-label">Recruitment Console</div>
                           </button>
-                        </div>
-                        {planetData?.recruitmentQueue && planetData.recruitmentQueue.length > 0 && (
-                          <div className="recruitment-queue-mini">
-                            {planetData.recruitmentQueue.map((q: any, i: number) => {
-                              const finish = new Date(q.finishTime).getTime();
-                              const diff = Math.max(0, Math.ceil((finish - now.getTime()) / 1000));
-                              return (
-                                <div key={i} className="queue-item-mini">
-                                  <span>{q.count} {q.unit}</span>
-                                  <span>{diff > 0 ? `${diff}s` : 'Done'}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="action-grid">
-                        {buildings.some(b => b.type === 'academy' && b.status === 'active') && (
-                          <>
-                            <button 
-                              className="action-card"
-                              onClick={() => setShowRecruitConsole(true)}
-                            >
-                              <div className="action-icon">👥</div>
-                              <div className="action-label">Recruitment Console</div>
-                            </button>
-                            <button 
-                              className="action-card"
-                              onClick={() => setShowDefensePanel(true)}
-                            >
-                              <div className="action-icon">🛡️</div>
-                              <div className="action-label">Defensive Strategy</div>
-                            </button>
-                            <button 
-                              className="action-card"
-                              onClick={() => setShowAdmiralPanel(true)}
-                            >
-                              <div className="action-icon">⭐</div>
-                              <div className="action-label">Admiral Command</div>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
+                          <button 
+                            className="action-card"
+                            onClick={() => setShowDefensePanel(true)}
+                          >
+                            <div className="action-icon">🛡️</div>
+                            <div className="action-label">Defensive Strategy</div>
+                          </button>
+                          <button 
+                            className="action-card"
+                            onClick={() => setShowAdmiralPanel(true)}
+                          >
+                            <div className="action-icon">⭐</div>
+                            <div className="action-label">Admiral Command</div>
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1160,7 +1136,7 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
                           await api.build(planet.id, showUpgradeMenu.building.type, showUpgradeMenu.building.x, showUpgradeMenu.building.y);
                           setShowUpgradeMenu(null);
                           loadPlanetData();
-                          onUpdate?.();
+                          props.onUpdate?.();
                         } catch (e: any) { alert(e.message); }
                       }}
                     >
@@ -1169,6 +1145,41 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
                   </div>
                 ) : (
                   <div className="max-level">Maximum Level Reached</div>
+                )}
+
+                {showUpgradeMenu.building.type !== 'colony_hub' && (
+                  <div className="salvage-section" style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '15px' }}>
+                    <div className="salvage-info" style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '8px', textAlign: 'center' }}>
+                      Salvaging will refund 10% of construction costs and take 50% of build time.
+                    </div>
+                    <button 
+                      className="salvage-btn"
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px', 
+                        background: 'linear-gradient(to bottom, #ff5252, #d32f2f)', 
+                        border: 'none', 
+                        borderRadius: '4px', 
+                        color: 'white', 
+                        fontWeight: 'bold', 
+                        cursor: 'pointer',
+                        textTransform: 'uppercase'
+                      }}
+                      onClick={async () => {
+                        const confirmed = window.confirm(`Are you sure you want to salvage this ${BUILDING_LABELS[showUpgradeMenu.building.type]}? You will receive a small resource refund.`);
+                        if (confirmed) {
+                          try {
+                            await api.demolish(planet.id, showUpgradeMenu.building.id);
+                            setShowUpgradeMenu(null);
+                            loadPlanetData();
+                            props.onUpdate?.();
+                          } catch (e: any) { alert(e.message); }
+                        }
+                      }}
+                    >
+                      Salvage Building
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -1189,9 +1200,20 @@ export default function PlanetInterior({ planet, onClose }: PlanetInteriorProps)
             />
           )}
 
-          {showAdmiralPanel && (
-            <AdmiralPanel onClose={() => setShowAdmiralPanel(false)} />
-          )}
+      {showAdmiralPanel && (
+        <AdmiralPanel onClose={() => setShowAdmiralPanel(false)} />
+      )}
+
+      {showRecruitmentPanel && planetData && (
+        <RecruitmentPanel 
+          planet={planetData} 
+          onClose={() => setShowRecruitmentPanel(false)}
+          onUpdate={() => {
+            loadPlanetData();
+            props.onUpdate?.();
+          }}
+        />
+      )}
 
           {showExpansionModal && planetData && (
             <ExpansionModal

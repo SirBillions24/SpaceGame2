@@ -194,10 +194,11 @@ export default function WorldMap({ mapImageUrl, onPlanetClick, sourcePlanetId, o
             cameraRef.current.y = centerY;
           }
 
-          const castleTexture = await PIXI.Assets.load('/assets/castles/castlesprite.png');
+          const colonyTexture = await PIXI.Assets.load('/assets/castles/castlesprite.png');
+          const planetTexture = await PIXI.Assets.load('/assets/castles/castlesprite.png'); // Fallback naming
 
           pData.planets.forEach(p => {
-            const s = new PIXI.Sprite(castleTexture);
+            const s = new PIXI.Sprite(colonyTexture);
             s.anchor.set(0.5);
             s.scale.set(0.15);
             s.x = p.x;

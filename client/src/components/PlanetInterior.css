@@ -155,6 +155,22 @@
   flex-direction: column;
   align-items: center;
   color: #fff;
+  min-width: 120px;
+}
+
+.res-cap-label {
+  font-size: 0.7rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.res-cap-value {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #00f3ff;
+  margin-bottom: 4px;
 }
 
 .res-rate {
@@ -742,4 +758,62 @@
   background: rgba(0, 243, 255, 0.1);
   padding: 1px 3px;
   border-radius: 2px;
+}
+
+/* Styled Tax Slider */
+.tax-slider {
+  -webkit-appearance: none;
+  width: 120px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tax-slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
+  cursor: pointer;
+  background: rgba(0, 243, 255, 0.2);
+  border-radius: 3px;
+  border: 1px solid rgba(0, 243, 255, 0.3);
+}
+
+.tax-slider::-webkit-slider-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #00f3ff;
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -6px; /* Centers thumb on track */
+  box-shadow: 0 0 10px rgba(0, 243, 255, 0.8);
+  border: 2px solid #fff;
+  transition: all 0.2s;
+}
+
+.tax-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
+  box-shadow: 0 0 15px rgba(0, 243, 255, 1);
+}
+
+.tax-slider::-moz-range-track {
+  width: 100%;
+  height: 6px;
+  cursor: pointer;
+  background: rgba(0, 243, 255, 0.2);
+  border-radius: 3px;
+  border: 1px solid rgba(0, 243, 255, 0.3);
+}
+
+.tax-slider::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #00f3ff;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(0, 243, 255, 0.8);
+  border: 2px solid #fff;
 }

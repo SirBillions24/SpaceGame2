@@ -28,47 +28,51 @@ async function processArrivedFleets() {
       try {
         // Handle Returning Fleets
         if (fleet.status === 'returning') {
-          // Fleet returned home. Unload cargo and disband/park units.
-          // 1. Unload Cargo
-          if (fleet.cargoJson) {
-            const loot = JSON.parse(fleet.cargoJson);
-            await prisma.planet.update({
-              where: { id: fleet.fromPlanetId },
-              data: {
-                carbon: { increment: loot.carbon || 0 },
-                titanium: { increment: loot.titanium || 0 },
-                food: { increment: loot.food || 0 }
-              }
+          await prisma.$transaction(async (tx) => {
+            // ATOMIC CHECK: Ensure fleet is still in 'returning' status
+            // Use updateMany with where to ensure we only process once
+            const updated = await tx.fleet.updateMany({
+              where: { id: fleet.id, status: 'returning' },
+              data: { status: 'completed' }
             });
-          }
 
-          // 2. Add units back to the home planet
-          const units = JSON.parse(fleet.unitsJson);
-          for (const [unitType, count] of Object.entries(units)) {
-            await prisma.planetUnit.upsert({
-              where: {
-                planetId_unitType: {
+            // If updated.count is 0, someone else processed it already
+            if (updated.count === 0) return;
+
+            const loot = typeof fleet.cargoJson === 'string' ? JSON.parse(fleet.cargoJson) : fleet.cargoJson;
+            if (loot) {
+              await tx.planet.update({
+                where: { id: fleet.fromPlanetId },
+                data: {
+                  carbon: { increment: loot.carbon || 0 },
+                  titanium: { increment: loot.titanium || 0 },
+                  food: { increment: loot.food || 0 }
+                }
+              });
+            }
+
+            // 2. Add units back to the home planet
+            const units = JSON.parse(fleet.unitsJson);
+            for (const [unitType, count] of Object.entries(units)) {
+              await tx.planetUnit.upsert({
+                where: {
+                  planetId_unitType: {
+                    planetId: fleet.fromPlanetId,
+                    unitType: unitType as string,
+                  },
+                },
+                update: {
+                  count: {
+                    increment: count as number,
+                  },
+                },
+                create: {
                   planetId: fleet.fromPlanetId,
                   unitType: unitType as string,
+                  count: count as number,
                 },
-              },
-              update: {
-                count: {
-                  increment: count as number,
-                },
-              },
-              create: {
-                planetId: fleet.fromPlanetId,
-                unitType: unitType as string,
-                count: count as number,
-              },
-            });
-          }
-
-          // 3. Mark fleet as completed
-          await prisma.fleet.update({
-            where: { id: fleet.id },
-            data: { status: 'completed' },
+              });
+            }
           });
           continue; // Done with this fleet
         }
@@ -87,24 +91,8 @@ async function processArrivedFleets() {
         await syncPlanetResources(fleet.toPlanetId);
 
         if (fleet.type === 'attack') {
-          // Resolve combat
+          // Resolve combat (This function now handles losses and tool deduction internally)
           const combatResult = await resolveCombat(fleet.id);
-
-          // Apply losses to defender
-          for (const [unitType, lossCount] of Object.entries(combatResult.defenderTotalLosses)) {
-            await prisma.planetUnit.updateMany({
-              where: {
-                planetId: fleet.toPlanetId,
-                unitType,
-              },
-              data: {
-                count: {
-                  decrement: lossCount as number,
-                },
-              },
-            });
-          }
-
 
           // --- FIX: Remove losses from Defense Layout to prevent ghost troops ---
           const defenseLayout = await prisma.defenseLayout.findUnique({
@@ -150,15 +138,30 @@ async function processArrivedFleets() {
           if (combatResult.resourcesJson) {
             resourcesJson = combatResult.resourcesJson;
             const loot = JSON.parse(combatResult.resourcesJson);
-            // Deduct from defender
-            await prisma.planet.update({
-              where: { id: fleet.toPlanetId },
-              data: {
-                carbon: { decrement: loot.carbon },
-                titanium: { decrement: loot.titanium },
-                food: { decrement: loot.food }
-              }
-            });
+            
+            // Re-fetch target planet to get absolute current resources for safe deduction
+            const targetPlanet = await prisma.planet.findUnique({ where: { id: fleet.toPlanetId } });
+            if (targetPlanet) {
+              // Ensure we don't loot more than exists (atomicity check)
+              const actualLoot = {
+                carbon: Math.min(loot.carbon, targetPlanet.carbon),
+                titanium: Math.min(loot.titanium, targetPlanet.titanium),
+                food: Math.min(loot.food, targetPlanet.food),
+              };
+              
+              // Correct the report if loot was capped
+              resourcesJson = JSON.stringify(actualLoot);
+
+              // Deduct from defender
+              await prisma.planet.update({
+                where: { id: fleet.toPlanetId },
+                data: {
+                  carbon: { decrement: actualLoot.carbon },
+                  titanium: { decrement: actualLoot.titanium },
+                  food: { decrement: actualLoot.food }
+                }
+              });
+            }
           }
 
           // Create battle report
@@ -258,13 +261,13 @@ async function processArrivedFleets() {
             data: { status: 'completed' },
           });
         }
-      } catch (error) {
-        console.error(`Error processing fleet ${fleet.id}:`, error);
+      } catch (error: any) {
+        console.error(`CRITICAL: Error processing fleet ${fleet.id} (Type: ${fleet.type}, Status: ${fleet.status}):`, error);
         // Mark as error but don't crash the worker
         await prisma.fleet.update({
           where: { id: fleet.id },
-          data: { status: 'error' }, // STOP the loop. Do not retry indefinitely.
-        });
+          data: { status: 'error' }, 
+        }).catch(err => console.error(`Failed to update fleet ${fleet.id} to error state:`, err));
       }
     }
   } catch (error) {

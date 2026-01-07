@@ -30,7 +30,7 @@ model User {
   @@map("users")
 }
 
-// Formerly Castle
+// Planetary Colony
 model Planet {
   id      String @id @default(uuid())
   ownerId String @map("owner_user_id")
@@ -44,7 +44,7 @@ model Planet {
   food       Float @default(500) // Nutrient Paste (Upkeep)
   credits    Float @default(100)
   stability  Int   @default(0) // Public Order (0 is neutral, negative is bad)
-  taxRate    Int @default(10) // Percentage? Or GGE Index? Let's use % for now.
+  taxRate    Int @default(10) // Percentage
   population Int @default(100)
 
   // NPC / PVE
@@ -67,7 +67,7 @@ model Planet {
   defenseTurretsJson String? @map("defense_turrets_json") // JSON: [{ level: 1 }, { level: 2 }, ...] Max 20 turrets
 
   // Construction Queue (Global/Sequential for now, or per building)
-  // For GGE style, usually one construction slot per base.
+  // One construction slot per colony.
   // We keep this to track which building is being upgraded if we enforce single slot.
   isBuilding      Boolean   @default(false) @map("is_building")
   // We might store the ID of the building being constructed here
@@ -82,7 +82,7 @@ model Planet {
 
   // Defense (Sci-Fi equivalents)
   // These also become buildings or stay as "Global Defense"? 
-  // GGE has walls/gates as specific slots. For MVP grid, let's keep them as "Buildings" too?
+  // Colonies often have defensive upgrades. For MVP grid, let's keep them as "Buildings" too?
   // Or Keep them abstract for now to reduce complexity.
   // The User said "copy gameplay exactly... plot of land... fit buildings".
   // So defenses should likely be buildings or special slots.
@@ -105,7 +105,7 @@ model Planet {
   @@map("planets")
 }
 
-// Formerly CastleUnit
+// Colony Unit
 model PlanetUnit {
   id        String   @id @default(uuid())
   planetId  String   @map("planet_id")
@@ -222,7 +222,7 @@ model BattleReport {
   @@map("battle_reports")
 }
 
-// Formerly March
+// Fleet / Expedition
 model Fleet {
   id                  String   @id @default(uuid())
   ownerId             String   @map("owner_user_id")

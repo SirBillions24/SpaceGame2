@@ -1,24 +1,20 @@
 import prisma from '../lib/prisma';
 
+import { UNIT_DATA } from '../constants/unitData';
+
 // --- CONSTANTS & STATS ---
 
-// Unit Stats: Melee/Ranged Attack & Defense
-// Marine: Melee
-// Ranger: Ranged
-// Sentinel: Tank (High Def)
-// Interceptor: Fast (High Impact)
-const UNIT_STATS: Record<string, { meleeAtk: number; rangedAtk: number; meleeDef: number; rangedDef: number; capacity: number }> = {
-  marine: { meleeAtk: 12, rangedAtk: 0, meleeDef: 12, rangedDef: 6, capacity: 10 },
-  ranger: { meleeAtk: 4, rangedAtk: 14, meleeDef: 4, rangedDef: 10, capacity: 5 },
-  sentinel: { meleeAtk: 6, rangedAtk: 2, meleeDef: 18, rangedDef: 18, capacity: 20 },
-  interceptor: { meleeAtk: 16, rangedAtk: 0, meleeDef: 8, rangedDef: 8, capacity: 15 },
-};
+// Stats aggregation helper
+function getUnitStats(unitType: string) {
+  return UNIT_DATA[unitType] || { meleeAtk: 5, rangedAtk: 5, meleeDef: 5, rangedDef: 5, capacity: 5 };
+}
 
 // Helper: Calculate total loot based on capacity and planet resources
 function calculateLoot(survivingUnits: FlankUnits, planetResources: { carbon: number; titanium: number; food: number }) {
   let totalCapacity = 0;
   for (const [u, count] of Object.entries(survivingUnits)) {
-    const caps = UNIT_STATS[u]?.capacity || 0;
+    const s = getUnitStats(u);
+    const caps = s?.capacity || 0;
     totalCapacity += caps * count;
   }
 
@@ -120,11 +116,6 @@ interface CombatResult {
   } | null;
 }
 
-// Stats aggregation helper
-function getUnitStats(unitType: string) {
-  return UNIT_STATS[unitType] || { meleeAtk: 5, rangedAtk: 5, meleeDef: 5, rangedDef: 5 };
-}
-
 /**
  * Resolve a single wave collision in a Sector
  */
@@ -189,8 +180,8 @@ export function resolveWaveCollision(
 
   // Shield Generator (Wall)
   // Bonus: +50% per level (simplified to +50 power per level in constants, let's stick to power or switch to %?)
-  // GGE: Wall gives % bonus to troops. E.g. +80% defense bonus.
-  // Our code previously used flat power. Let's switch to Percentage Bonus for scaling proper GGE logic.
+  // Defensive Grid gives % bonus to troops.
+  // Our code previously used flat power. Let's switch to Percentage Bonus for scaling proper mechanics.
   // Current: const SHIELD_GENERATOR_BONUS = 50;
   // Let's define Base Wall Bonus: Level 1 = 20%, Level 2 = 40%...
   // For compatibility with previous code, let's calculate a "Base Bonus %" derived from buildings.shield.
@@ -305,9 +296,6 @@ export function resolveWaveCollision(
   };
 }
 
-/**
- * Resolve a whole Sector (up to 4-6 waves)
- */
 /**
  * Resolve a whole Sector (up to 4-6 waves)
  */
@@ -531,12 +519,29 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     perimeter: fleet.toPlanet.perimeterFieldLevel
   };
 
+  // --- COURTYARD PREP ---
+  // Any units on the planet NOT in the defense layout lanes go to the courtyard
+  const allPlanetUnits = await prisma.planetUnit.findMany({
+    where: { planetId: fleet.toPlanetId }
+  });
+
+  const courtyardDefenders: FlankUnits = {};
+  allPlanetUnits.forEach(pu => {
+    const assignedLeft = defLeft.units[pu.unitType] || 0;
+    const assignedCenter = defCenter.units[pu.unitType] || 0;
+    const assignedRight = defRight.units[pu.unitType] || 0;
+    const unassigned = Math.max(0, pu.count - (assignedLeft + assignedCenter + assignedRight));
+    if (unassigned > 0) {
+      courtyardDefenders[pu.unitType] = unassigned;
+    }
+  });
+
   // 2. Resolve Sectors (pass attacker bonuses only)
   const leftResult = resolveSector(attStructure.left, defLeft, buildings, false, attackerBonuses, { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 });
   const centerResult = resolveSector(attStructure.front, defCenter, buildings, true, attackerBonuses, { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 });
   const rightResult = resolveSector(attStructure.right, defRight, buildings, false, attackerBonuses, { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 });
 
-  // 3. Surface Invasion Logic
+  // 3. Courtyard Invasion Logic
   let attackerSectorsWon = 0;
   if (leftResult.winner === 'attacker') attackerSectorsWon++;
   if (centerResult.winner === 'attacker') attackerSectorsWon++;
@@ -545,8 +550,10 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   let attBonus = 0;
   let defBonus = 0;
 
-  if (attackerSectorsWon === 3) attBonus = 0.30;
-  else if (attackerSectorsWon === 1) defBonus = 0.30;
+  // Bonus/Penalty Logic
+  if (attackerSectorsWon === 3) attBonus = 0.30; // +30% for winning all 3 lanes
+  else if (attackerSectorsWon === 0) defBonus = 0.50; // +50% for defender if they held all 3 lanes
+  else if (attackerSectorsWon === 1) defBonus = 0.30; // +30% for defender if they held 2 lanes
 
   const surfAtt: FlankUnits = {};
   const addUnits = (target: FlankUnits, source: FlankUnits) => {
@@ -559,54 +566,62 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   addUnits(surfAtt, centerResult.survivingAttackers);
   addUnits(surfAtt, rightResult.survivingAttackers);
 
-  // Courtyard Defense (Empty)
-  const surfDef: FlankUnits = {};
-  
-  // Note: Attacker bonuses already applied in sector resolution
-  // No need to re-apply here
+  // Courtyard Battle
+  let attackerWonSurface = false;
+  let attLosses: FlankUnits = {};
+  let defLosses: FlankUnits = {};
 
-  let surfaceResult = null;
-  if (attackerSectorsWon > 0) {
-    // Check if attacker has units to fight with
-    const attCount = Object.values(surfAtt).reduce((a, b) => a + b, 0);
-    const defCount = Object.values(surfDef).reduce((a, b) => a + b, 0);
+  const attCount = Object.values(surfAtt).reduce((a, b) => a + b, 0);
+  const defCount = Object.values(courtyardDefenders).reduce((a, b) => a + b, 0);
 
-    let attackerWonSurface = false;
-    let attLosses: FlankUnits = {};
-    let defLosses: FlankUnits = {};
-
-    if (attCount > 0) {
-      if (defCount === 0) {
-        attackerWonSurface = true;
-      } else {
-        const finalBat = resolveWaveCollision(
-          surfAtt,
-          surfDef,
-          {},
-          { shield: 0, starport: 0, perimeter: 0 },
-          false,
-          {},
-          attackerBonuses, // Attacker bonuses apply to surface battle too
-          { meleeStrengthBonus: 0, rangedStrengthBonus: 0, wallReductionBonus: 0 } // Defender bonuses not used
-        );
-        attackerWonSurface = finalBat.attackerWon;
-        attLosses = finalBat.attackerLosses;
-        defLosses = finalBat.defenderLosses;
-      }
+  if (attCount > 0) {
+    if (defCount === 0) {
+      attackerWonSurface = true;
+    } else {
+      // Apply bonuses to stats for the courtyard fight
+      const finalBat = resolveWaveCollision(
+        surfAtt,
+        courtyardDefenders,
+        {}, // No tools in courtyard
+        { shield: 0, starport: 0, perimeter: 0 }, // No walls in courtyard
+        false,
+        {},
+        { 
+          meleeStrengthBonus: attackerBonuses.meleeStrengthBonus + (attBonus * 100), 
+          rangedStrengthBonus: attackerBonuses.rangedStrengthBonus + (attBonus * 100), 
+          wallReductionBonus: 0 
+        },
+        { 
+          meleeStrengthBonus: (defBonus * 100), 
+          rangedStrengthBonus: (defBonus * 100), 
+          wallReductionBonus: 0 
+        }
+      );
+      attackerWonSurface = finalBat.attackerWon;
+      attLosses = finalBat.attackerLosses;
+      defLosses = finalBat.defenderLosses;
     }
-
-    surfaceResult = {
-      winner: attackerWonSurface ? 'attacker' : 'defender',
-      attackerBonus: attBonus,
-      defenderBonus: defBonus,
-      initialAttackerUnits: { ...surfAtt },
-      initialDefenderUnits: { ...surfDef },
-      attackerLosses: attLosses,
-      defenderLosses: defLosses
-    } as const;
   }
 
-  const finalWinner = (surfaceResult && surfaceResult.winner === 'attacker') ? 'attacker' : 'defender';
+  const surfaceResult: {
+    winner: 'attacker' | 'defender';
+    attackerBonus: number;
+    defenderBonus: number;
+    initialAttackerUnits: FlankUnits;
+    initialDefenderUnits: FlankUnits;
+    attackerLosses: FlankUnits;
+    defenderLosses: FlankUnits;
+  } = {
+    winner: attackerWonSurface ? 'attacker' : 'defender',
+    attackerBonus: attBonus,
+    defenderBonus: defBonus,
+    initialAttackerUnits: { ...surfAtt },
+    initialDefenderUnits: { ...courtyardDefenders },
+    attackerLosses: attLosses,
+    defenderLosses: defLosses
+  };
+
+  const finalWinner = (surfaceResult.winner === 'attacker') ? 'attacker' : 'defender';
 
   // 4. Loot & Losses Aggregation
   const totalAttLosses: FlankUnits = {};

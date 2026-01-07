@@ -2,10 +2,10 @@
 
 ## 🎯 Overview
 
-Implement a Commander/Admiral system similar to Goodgame Empire where:
+Implement a Commander/Admiral system where:
 - Admirals are **required** for all fleet movements (attack, support, scout)
 - Admirals consist of **4 pieces** (gear slots)
-- Pieces are obtained by **attacking NPC castles** (loot drops)
+- Pieces are obtained by **attacking NPC planets** (loot drops)
 - Admirals provide combat bonuses when equipped
 
 ---
@@ -14,7 +14,7 @@ Implement a Commander/Admiral system similar to Goodgame Empire where:
 
 ### 1. Admiral Pieces (4 Slots)
 
-Based on Goodgame Empire, commanders have 4 gear pieces. Let's define them:
+Admirals have 4 gear pieces:
 
 | Slot | Goodgame Empire | Sci-Fi Name | Purpose |
 |------|----------------|-------------|---------|

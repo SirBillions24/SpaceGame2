@@ -411,6 +411,19 @@ export const api = {
       throw new Error(error.error || 'Failed to unequip gear');
     }
     return response.json();
+  },
+
+  async demolish(planetId: string, buildingId: string) {
+    const response = await fetch(`${API_BASE_URL}/actions/demolish`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId, buildingId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Demolition failed');
+    }
+    return response.json();
   }
 };
 

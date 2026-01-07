@@ -8,7 +8,7 @@ import {
   validateUnitsAvailable,
   deductUnits,
 } from '../services/fleetService';
-import { placeBuilding, recruitUnit, spawnPlanet, moveBuilding, syncPlanetResources } from '../services/planetService';
+import { placeBuilding, recruitUnit, spawnPlanet, moveBuilding, syncPlanetResources, demolishBuilding } from '../services/planetService';
 import { MAX_GRID_SIZE, EXPANSION_BASE_COST_CARBON, EXPANSION_BASE_COST_TITANIUM, EXPANSION_COST_MULTIPLIER, DEFENSE_TURRET_BUILD_TIME_SECONDS } from '../constants/mechanics';
 import { getDefenseTurrets, calculateDefenseCapacity } from '../services/defenseService';
 
@@ -286,7 +286,7 @@ router.post('/recruit', authenticateToken, async (req: AuthRequest, res: Respons
       return res.status(400).json({ error: 'Missing parameters' });
     }
 
-    if (!['marine', 'ranger', 'sentinel'].includes(unitType)) {
+    if (!['marine', 'ranger', 'sentinel', 'interceptor'].includes(unitType)) {
       return res.status(400).json({ error: 'Invalid unit type' });
     }
 
@@ -402,6 +402,30 @@ router.post('/move', authenticateToken, async (req: AuthRequest, res: Response) 
 
   } catch (err: any) {
     console.error('Move error:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Demolish a building
+router.post('/demolish', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { planetId, buildingId } = req.body;
+
+    if (!planetId || !buildingId) {
+      return res.status(400).json({ error: 'Missing parameters' });
+    }
+
+    const ownsPlanet = await validatePlanetOwnership(userId, planetId);
+    if (!ownsPlanet) {
+      return res.status(403).json({ error: 'You do not own this planet' });
+    }
+
+    const result = await demolishBuilding(planetId, buildingId);
+    res.json({ message: 'Demolition started', ...result });
+
+  } catch (err: any) {
+    console.error('Demolish error:', err);
     res.status(400).json({ error: err.message });
   }
 });

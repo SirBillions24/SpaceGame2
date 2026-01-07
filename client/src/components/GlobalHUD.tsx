@@ -40,7 +40,7 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
     const xpInLevel = Math.max(0, xp - prevThreshold);
     const xpPercent = range > 0 ? (xpInLevel / range) * 100 : 0;
 
-    const rubies = 250;
+    const rubies = 250; // Placeholder for Dark Matter
 
     const credits = planet?.resources?.credits || 0;
     const carbon = planet?.resources?.carbon || 0;
@@ -56,11 +56,11 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
     const foodProd = stats?.foodRate || 0;
     const foodCons = stats?.foodConsumption || 0;
     const foodNet = stats?.netFoodRate || 0;
-    const foodTooltip = `Prod: ${foodProd.toFixed(0)}/h\nCons: ${foodCons.toFixed(0)}/h\nNet: ${foodNet > 0 ? '+' : ''}${foodNet.toFixed(0)}/h`;
+    const foodTooltip = `Nutrient Paste:\nProd: ${foodProd.toFixed(2)}/h\nCons: ${foodCons.toFixed(2)}/h\nNet: ${foodNet > 0 ? '+' : ''}${foodNet.toFixed(2)}/h`;
 
     // PO Tooltip
     // Show Productivity Bonus
-    const poTooltip = `Public Order: ${publicOrder}\nProductivity: ${productivity.toFixed(0)}%\n(100% Base + Bonus)`;
+    const poTooltip = `System Stability: ${publicOrder}\nProductivity: ${productivity.toFixed(0)}%\n(100% Base + Bonus)`;
 
     // Credits Tooltip
     const taxRev = stats?.creditRate || 0;
@@ -76,6 +76,30 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                     <div className="username">{user?.username || 'Commander'}</div>
                     <div className="xp-bar-container">
                         <div className="xp-bar" style={{ width: `${xpPercent}%` }}></div>
+                    </div>
+                </div>
+
+                <div className="resource-dropdown xp-dropdown">
+                    <h5>Commander Progress</h5>
+                    <div className="military-row">
+                        <span className="unit-name">Level:</span>
+                        <span className="unit-count">{level}</span>
+                    </div>
+                    <div className="military-row">
+                        <span className="unit-name">Current XP:</span>
+                        <span className="unit-count">{xpInLevel.toLocaleString()}</span>
+                    </div>
+                    <div className="military-row">
+                        <span className="unit-name">Next Level:</span>
+                        <span className="unit-count">{range.toLocaleString()}</span>
+                    </div>
+                    <div className="military-row">
+                        <span className="unit-name">Remaining:</span>
+                        <span className="unit-count">{(range - xpInLevel).toLocaleString()}</span>
+                    </div>
+                    <div className="military-row" style={{ borderTop: '1px solid #444', marginTop: '5px', paddingTop: '5px' }}>
+                        <span className="unit-name">Total XP:</span>
+                        <span className="unit-count">{xp.toLocaleString()}</span>
                     </div>
                 </div>
             </div>
@@ -203,7 +227,7 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                     <div className="resource-dropdown order-dropdown">
                         <h5>System Stability</h5>
                         <div className="military-row">
-                            <span className="unit-name">Stability:</span>
+                            <span className="unit-name">Index:</span>
                             <span className="unit-count">{publicOrder}</span>
                         </div>
                         <div className="military-row">
@@ -241,8 +265,12 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                 </div>
 
                 <div className="currency-pill premium">
-                    <span className="icon ruby-icon">R</span>
+                    <span className="icon dm-icon">DM</span>
                     <span>{rubies}</span>
+                    <div className="resource-dropdown dm-dropdown">
+                        <h5>Dark Matter</h5>
+                        <p>Premium currency for high-tech upgrades and instant processing.</p>
+                    </div>
                 </div>
                 <div className="hud-icon-btn mail-icon" onClick={() => setMailboxOpen(true)}>
                     ✉️

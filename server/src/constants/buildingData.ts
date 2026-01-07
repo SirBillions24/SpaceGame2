@@ -30,7 +30,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
     carbon_processor: {
         type: 'carbon_processor',
         name: 'Carbon Processor',
-        size: 2,
+        size: 3,
         category: 'civil',
         levels: {
             1: { level: 1, requiredPlayerLevel: 1, cost: { carbon: 13, titanium: 0 }, production: 8, time: 2, xp: 2 },
@@ -49,7 +49,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
     titanium_extractor: {
         type: 'titanium_extractor',
         name: 'Titanium Extractor',
-        size: 2,
+        size: 3,
         category: 'civil',
         levels: {
             1: { level: 1, requiredPlayerLevel: 2, cost: { carbon: 14, titanium: 0 }, production: 8, time: 5, xp: 2 },
@@ -68,7 +68,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
     hydroponics: {
         type: 'hydroponics',
         name: 'Hydroponics',
-        size: 2,
+        size: 3,
         category: 'civil',
         levels: {
             1: { level: 1, requiredPlayerLevel: 2, cost: { carbon: 30, titanium: 0 }, production: 16, time: 5, xp: 3 },
@@ -86,7 +86,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
     housing_unit: {
         type: 'housing_unit',
         name: 'Housing Unit',
-        size: 2,
+        size: 3,
         category: 'civil',
         levels: {
             1: { level: 1, requiredPlayerLevel: 3, cost: { carbon: 20, titanium: 10 }, population: 10, stability: -10, time: 4, xp: 3 },
@@ -118,7 +118,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
     tavern: {
         type: 'tavern',
         name: 'Intelligence Hub',
-        size: 2,
+        size: 3,
         category: 'military',
         levels: {
             1: { level: 1, requiredPlayerLevel: 7, cost: { carbon: 145, titanium: 95 }, time: 240, xp: 7 },
@@ -130,7 +130,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
     defense_workshop: {
         type: 'defense_workshop',
         name: 'Systems Workshop',
-        size: 2,
+        size: 3,
         category: 'military',
         levels: {
             1: { level: 1, requiredPlayerLevel: 5, cost: { carbon: 61, titanium: 30 }, time: 30, xp: 9 },
@@ -141,7 +141,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
     siege_workshop: {
         type: 'siege_workshop',
         name: 'Munitions Factory',
-        size: 2,
+        size: 3,
         category: 'military',
         levels: {
             1: { level: 1, requiredPlayerLevel: 4, cost: { carbon: 118, titanium: 63 }, time: 20, xp: 12 },
@@ -152,7 +152,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
     storage_depot: {
         type: 'storage_depot',
         name: 'Automated Storage Depot',
-        size: 2,
+        size: 3,
         category: 'civil',
         levels: {
             1: { level: 1, requiredPlayerLevel: 3, cost: { carbon: 79, titanium: 42 }, storage: 1700, time: 300, xp: 5 },
@@ -170,7 +170,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
     colony_hub: {
         type: 'colony_hub',
         name: 'Colony Hub',
-        size: 4,
+        size: 7,
         category: 'civil',
         levels: {
             1: { level: 1, requiredPlayerLevel: 1, cost: { carbon: 0, titanium: 0 }, stability: 100, time: 0, xp: 0 },
@@ -196,7 +196,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
     shield_generator: {
         type: 'shield_generator',
         name: 'Shield Generator',
-        size: 2,
+        size: 3,
         category: 'military',
         levels: {
             1: { level: 1, requiredPlayerLevel: 11, cost: { carbon: 1000, titanium: 1000 }, time: 1800, xp: 50 },
