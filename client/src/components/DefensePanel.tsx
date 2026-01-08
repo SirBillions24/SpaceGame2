@@ -32,6 +32,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
 
     const [maxSlots, setMaxSlots] = useState(1);
     const [caps, setCaps] = useState({ canopy: 100 });
+    const [shieldBonus, setShieldBonus] = useState(0);
     const [showTurretModal, setShowTurretModal] = useState(false);
 
     // Admiral State
@@ -45,7 +46,11 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
     } | null>(null);
     const [loadingAdmiral, setLoadingAdmiral] = useState(false);
     const [showAdmiralDropdown, setShowAdmiralDropdown] = useState(false);
+    const [showToolDropdown, setShowToolDropdown] = useState(false);
+    const [showTotalDropdown, setShowTotalDropdown] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const toolDropdownRef = useRef<HTMLDivElement>(null);
+    const totalDropdownRef = useRef<HTMLDivElement>(null);
 
     // Tool Selection Modal State
     const [showToolSelector, setShowToolSelector] = useState<{ lane: 'front' | 'left' | 'right' | null } | null>(null);
@@ -62,12 +67,18 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setShowAdmiralDropdown(false);
             }
+            if (toolDropdownRef.current && !toolDropdownRef.current.contains(event.target as Node)) {
+                setShowToolDropdown(false);
+            }
+            if (totalDropdownRef.current && !totalDropdownRef.current.contains(event.target as Node)) {
+                setShowTotalDropdown(false);
+            }
         };
-        if (showAdmiralDropdown) {
+        if (showAdmiralDropdown || showToolDropdown || showTotalDropdown) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
-    }, [showAdmiralDropdown]);
+    }, [showAdmiralDropdown, showToolDropdown]);
 
     const loadAdmiral = async () => {
         try {
@@ -106,6 +117,16 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
             // Get defense capacity from API response (if available)
             const defenseCapacity = profile.defenseCapacity || 0;
             setCaps({ canopy: defenseCapacity || (canopyLevel * 20) }); // Fallback to old calculation if not available
+            
+            // Set shield bonus
+            if (p.buildings) {
+                const canopy = p.buildings.find(b => b.type === 'canopy_generator');
+                if (canopy && canopy.level > 0) {
+                    // Level 1: 30, Level 2: 50, Level 3: 70, Level 4: 90
+                    const bonuses: Record<number, number> = { 1: 30, 2: 50, 3: 70, 4: 90 };
+                    setShieldBonus(bonuses[canopy.level] || 0);
+                }
+            }
             
             // Update planet data to get latest turrets
             setCurrentPlanet(p);
@@ -187,11 +208,10 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
 
         if (current.tools.length >= maxSlots) return;
 
-        // Add proper slot
-        // Initial count 1 or max available? let's start with 0 so user sets it? Or 1.
+        // Add proper slot with initial count 1
         updater({
             ...current,
-            tools: [...current.tools, { type: toolType, count: 0 }]
+            tools: [...current.tools, { type: toolType, count: 1 }]
         });
         setShowToolSelector(null);
     };
@@ -220,10 +240,82 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
         return sum(front.tools) + sum(left.tools) + sum(right.tools);
     };
 
+    const calculateToolBonuses = () => {
+        const toolStats: Record<string, { type: string, value: number }> = {
+            'sentry_drones': { type: 'shield', value: 25 },
+            'hardened_bulkheads': { type: 'hub', value: 35 },
+            'targeting_uplinks': { type: 'ranged', value: 25 }
+        };
+
+        const bonuses = {
+            left: { shield: 0, hub: 0, ranged: 0 },
+            front: { shield: 0, hub: 0, ranged: 0 },
+            right: { shield: 0, hub: 0, ranged: 0 }
+        };
+
+        const addLaneBonuses = (lane: 'left' | 'front' | 'right', tools: ToolSlot[]) => {
+            tools.forEach(t => {
+                const stats = toolStats[t.type];
+                if (stats && t.count > 0) {
+                    if (stats.type === 'shield') bonuses[lane].shield += stats.value;
+                    if (stats.type === 'hub') bonuses[lane].hub += stats.value;
+                    if (stats.type === 'ranged') bonuses[lane].ranged += stats.value;
+                }
+            });
+        };
+
+        addLaneBonuses('left', left.tools);
+        addLaneBonuses('front', front.tools);
+        addLaneBonuses('right', right.tools);
+
+        return bonuses;
+    };
+
+    const toolBonuses = calculateToolBonuses();
+    const hasAnyToolBonus = Object.values(toolBonuses).some(l => l.shield > 0 || l.hub > 0 || l.ranged > 0);
+
+    const calculateTotals = () => {
+        // Find max tool bonus from any lane for the general "Total" overview
+        const maxToolShield = Math.max(toolBonuses.left.shield, toolBonuses.front.shield, toolBonuses.right.shield);
+        const maxToolRanged = Math.max(toolBonuses.left.ranged, toolBonuses.front.ranged, toolBonuses.right.ranged);
+        const maxToolHub = toolBonuses.front.hub;
+
+        const isStationed = admiral?.stationedPlanetId === currentPlanet.id;
+        const admiralMelee = isStationed ? (admiral?.meleeStrengthBonus || 0) : 0;
+        const admiralRanged = isStationed ? (admiral?.rangedStrengthBonus || 0) : 0;
+
+        return {
+            melee: {
+                base: 100,
+                admiral: admiralMelee,
+                total: 100 + admiralMelee
+            },
+            ranged: {
+                base: 100,
+                admiral: admiralRanged,
+                modules: maxToolRanged,
+                total: 100 + admiralRanged + maxToolRanged
+            },
+            shield: {
+                building: shieldBonus,
+                modules: maxToolShield,
+                total: shieldBonus + maxToolShield
+            },
+            hub: {
+                building: (currentPlanet as any).starportLevel * 35 || 0, // Docking Hub is 35% per level in combatService
+                modules: maxToolHub,
+                total: ((currentPlanet as any).starportLevel * 35 || 0) + maxToolHub
+            }
+        };
+    };
+
+    const totals = calculateTotals();
+
     // --- Render ---
 
     const renderLane = (title: string, lane: 'front' | 'left' | 'right', data: LaneData) => {
         const totalInLane = Object.values(data.units).reduce((a, b) => a + b, 0);
+        const assignedUnits = Object.entries(data.units).filter(([_, count]) => count > 0);
 
         return (
             <div className="defense-lane">
@@ -234,29 +326,33 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
 
                 {/* UNITS SECTION */}
                 <div className="section-label">Units</div>
-                <div className="unit-inputs">
-                    {UNIT_TYPES.map(unit => {
+                <div className="unit-slots">
+                    {assignedUnits.length === 0 && <div className="empty-lane-msg">No units assigned.</div>}
+                    {assignedUnits.map(([unit, count]) => {
                         const owned = availableUnits[unit] || 0;
-                        const assignedElsewhere = getAssignedUnitCount(unit) - (data.units[unit] || 0);
+                        const assignedElsewhere = getAssignedUnitCount(unit) - count;
                         const maxForThisLane = Math.max(0, owned - assignedElsewhere);
-                        const currentVal = data.units[unit] || 0;
 
                         return (
-                            <div key={unit} className="unit-input-row">
-                                <label className="unit-name">{unit}</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    max={owned}
-                                    value={currentVal}
-                                    onChange={e => {
-                                        let val = parseInt(e.target.value) || 0;
-                                        // Cap to owned
-                                        val = Math.min(val, maxForThisLane + currentVal); // Can increase up to remaining owned
-                                        updateUnit(lane, unit, Math.max(0, val));
-                                    }}
-                                />
-                                <span className="unit-total">/ {owned}</span>
+                            <div key={unit} className="unit-slot-filled">
+                                <div className="unit-slot-info">
+                                    <span className="unit-name">{unit}</span>
+                                    <button className="remove-unit-btn" onClick={() => updateUnit(lane, unit, 0)}>×</button>
+                                </div>
+                                <div className="unit-qty-row">
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max={owned}
+                                        value={count}
+                                        onChange={e => {
+                                            let val = parseInt(e.target.value) || 0;
+                                            val = Math.min(val, maxForThisLane + count);
+                                            updateUnit(lane, unit, Math.max(0, val));
+                                        }}
+                                    />
+                                    <span>/ {owned}</span>
+                                </div>
                             </div>
                         );
                     })}
@@ -294,9 +390,9 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
                     })}
 
                     {/* Render Empty Slots */}
-                    {Array.from({ length: maxSlots - data.tools.length }).map((_, i) => (
-                        <div key={`empty-${i}`} className="tool-slot empty" onClick={() => setShowToolSelector({ lane })}>
-                            <span>+ Add Tool</span>
+                    {Array.from({ length: Math.max(0, maxSlots - data.tools.length) }).map((_, i) => (
+                        <div key={`empty-${i}`} className="tool-slot empty">
+                            <span>Empty Slot</span>
                         </div>
                     ))}
                 </div>
@@ -346,106 +442,302 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
         <div className="defense-panel-overlay">
             <div className="defense-panel modal">
                 <div className="defense-header">
-                    <div>
-                        <h2>Defensive Structure (Canopy Lvl {maxSlots})</h2>
-                        <div className="defense-stats">
-                            <span style={{ color: capacityExceeded ? '#ff4444' : '#aaa' }}>
-                                Total Capacity: {totalUnitsAssigned} / {caps.canopy} troops (shared across all lanes)
-                            </span>
-                            <span className="defense-bonus-info" style={{ marginLeft: '15px', color: '#00f3ff' }}>
-                                Hub: Lvl {currentPlanet.starportLevel || 0} | Minefield: Lvl {currentPlanet.perimeterFieldLevel || 0}
-                            </span>
-                            {currentPlanet.defenseTurretsJson && (
-                                <span className="turret-count">
-                                    {(() => {
-                                        try {
-                                            const turrets = JSON.parse(currentPlanet.defenseTurretsJson);
-                                            return `${turrets.length} Turrets`;
-                                        } catch {
-                                            return '';
-                                        }
-                                    })()}
-                                </span>
-                            )}
+                    <div className="header-main">
+                        <div className="header-left">
+                            <h2>Defensive Structure</h2>
+                            <div className="defense-stats-new">
+                                <div className="stat-pill">
+                                    <span className="label">Shield:</span>
+                                    <span className="value">{shieldBonus}% (Lvl {maxSlots})</span>
+                                </div>
+                                <div className="stat-pill">
+                                    <span className="label">Hub:</span>
+                                    <span className="value">Lvl {currentPlanet.starportLevel || 0}</span>
+                                </div>
+                                <div className="stat-pill">
+                                    <span className="label">Minefield:</span>
+                                    <span className="value">Lvl {currentPlanet.perimeterFieldLevel || 0}</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        {/* Admiral Selector */}
-                        <div className="admiral-selector-defense" ref={dropdownRef}>
-                            <button 
-                                className={`admiral-dropdown-btn ${admiral?.stationedPlanetId === currentPlanet.id ? 'active' : ''}`}
-                                onClick={() => setShowAdmiralDropdown(!showAdmiralDropdown)}
-                                title={admiral?.stationedPlanetId === currentPlanet.id ? 'Admiral is stationed here for defense' : 'Station an admiral for defense bonuses'}
-                            >
-                                {admiral ? (
-                                    <>
-                                        <div className="admiral-mini-info">
-                                            <span className="admiral-name">{admiral.name}</span>
+
+                        <div className="header-right">
+                            {/* Modules Dropdown */}
+                            <div className="dropdown-container" ref={toolDropdownRef}>
+                                <button 
+                                    className={`defense-tab-btn ${showToolDropdown ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setShowToolDropdown(!showToolDropdown);
+                                        setShowTotalDropdown(false);
+                                        setShowAdmiralDropdown(false);
+                                    }}
+                                >
+                                    <div className="tab-label-group">
+                                        <span className="tab-label">MODULES</span>
+                                        <span className={`tab-status ${hasAnyToolBonus ? 'active' : ''}`}>
+                                            {hasAnyToolBonus ? 'ACTIVE' : 'NONE'}
+                                        </span>
+                                    </div>
+                                    <span className="tab-arrow">▼</span>
+                                </button>
+
+                                {showToolDropdown && (
+                                    <div className="dropdown-menu-new">
+                                        <h4>Module Bonuses</h4>
+                                        <div className="lane-bonus-group">
+                                            <h5>Left Flank</h5>
+                                            <div className="bonus-row"><span>Shield:</span> <span className="success">+{toolBonuses.left.shield}%</span></div>
+                                            <div className="bonus-row"><span>Ranged Acc:</span> <span className="success">+{toolBonuses.left.ranged}%</span></div>
+                                        </div>
+                                        <div className="lane-bonus-group">
+                                            <h5>Central Hub</h5>
+                                            <div className="bonus-row"><span>Shield:</span> <span className="success">+{toolBonuses.front.shield}%</span></div>
+                                            <div className="bonus-row"><span>Hub Integrity:</span> <span className="success">+{toolBonuses.front.hub}%</span></div>
+                                            <div className="bonus-row"><span>Ranged Acc:</span> <span className="success">+{toolBonuses.front.ranged}%</span></div>
+                                        </div>
+                                        <div className="lane-bonus-group">
+                                            <h5>Right Flank</h5>
+                                            <div className="bonus-row"><span>Shield:</span> <span className="success">+{toolBonuses.right.shield}%</span></div>
+                                            <div className="bonus-row"><span>Ranged Acc:</span> <span className="success">+{toolBonuses.right.ranged}%</span></div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Admiral Selector */}
+                            <div className="dropdown-container" ref={dropdownRef}>
+                                <button 
+                                    className={`defense-tab-btn ${admiral?.stationedPlanetId === currentPlanet.id ? 'admiral-active' : ''}`}
+                                    onClick={() => {
+                                        setShowAdmiralDropdown(!showAdmiralDropdown);
+                                        setShowToolDropdown(false);
+                                        setShowTotalDropdown(false);
+                                    }}
+                                    title={admiral?.stationedPlanetId === currentPlanet.id ? 'Admiral is stationed here for defense' : 'Station an admiral for defense bonuses'}
+                                >
+                                    {admiral ? (
+                                        <div className="tab-label-group">
+                                            <span className="tab-label">{admiral.name.toUpperCase()}</span>
                                             {admiral.stationedPlanetId === currentPlanet.id ? (
-                                                <span className="admiral-status-active">STATIONED</span>
+                                                <span className="tab-status active">STATIONED</span>
                                             ) : (
-                                                <span className="admiral-status-off">UNASSIGNED</span>
+                                                <span className="tab-status">UNASSIGNED</span>
                                             )}
                                         </div>
-                                    </>
-                                ) : (
-                                    <span className="no-admiral-text">No Admiral</span>
-                                )}
-                                <span className="dropdown-arrow">▼</span>
-                            </button>
-
-                            {showAdmiralDropdown && (
-                                <div className="admiral-dropdown-menu">
-                                    {loadingAdmiral ? (
-                                        <div className="dropdown-item">Loading...</div>
-                                    ) : admiral ? (
-                                        <div className="admiral-details-popover">
-                                            <h4>{admiral.name}</h4>
-                                            <div className="attribute-row">
-                                                <span>Melee Defense:</span>
-                                                <span className="success-text">+{admiral.meleeStrengthBonus}%</span>
-                                            </div>
-                                            <div className="attribute-row">
-                                                <span>Ranged Defense:</span>
-                                                <span className="success-text">+{admiral.rangedStrengthBonus}%</span>
-                                            </div>
-                                            <div className="attribute-row" style={{ marginTop: '5px', borderTop: '1px solid #444', paddingTop: '5px' }}>
-                                                <span className="status-label">Status:</span>
-                                                <span className={admiral.stationedPlanetId === currentPlanet.id ? 'success-text' : 'warning-text'}>
-                                                    {admiral.stationedPlanetId === currentPlanet.id ? 'Stationed Here' : 'Not Stationed Here'}
-                                                </span>
-                                            </div>
-                                            <p className="note">Admirals only provide bonuses to the planet where they are stationed.</p>
-                                        </div>
                                     ) : (
-                                        <div className="dropdown-item">No Admiral Available</div>
+                                        <div className="tab-label-group">
+                                            <span className="tab-label">ADMIRAL</span>
+                                            <span className="tab-status">NONE</span>
+                                        </div>
                                     )}
-                                </div>
-                            )}
+                                    <span className="tab-arrow">▼</span>
+                                </button>
+
+                                {showAdmiralDropdown && (
+                                    <div className="dropdown-menu-new">
+                                        {loadingAdmiral ? (
+                                            <div className="dropdown-item">Loading...</div>
+                                        ) : admiral ? (
+                                            <div className="admiral-details-popover">
+                                                <h4>{admiral.name}</h4>
+                                                <div className="attribute-row">
+                                                    <span>Melee Defense:</span>
+                                                    <span className="success-text">+{admiral.meleeStrengthBonus}%</span>
+                                                </div>
+                                                <div className="attribute-row">
+                                                    <span>Ranged Defense:</span>
+                                                    <span className="success-text">+{admiral.rangedStrengthBonus}%</span>
+                                                </div>
+                                                <div className="attribute-row" style={{ marginTop: '5px', borderTop: '1px solid #444', paddingTop: '5px' }}>
+                                                    <span className="status-label">Status:</span>
+                                                    <span className={admiral.stationedPlanetId === currentPlanet.id ? 'success-text' : 'warning-text'}>
+                                                        {admiral.stationedPlanetId === currentPlanet.id ? 'Stationed Here' : 'Not Stationed Here'}
+                                                    </span>
+                                                </div>
+                                                <p className="note">Admirals only provide bonuses to the planet where they are stationed.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="dropdown-item">No Admiral Available</div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Total Bonuses Dropdown */}
+                            <div className="dropdown-container" ref={totalDropdownRef}>
+                                <button 
+                                    className={`defense-tab-btn highlight ${showTotalDropdown ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setShowTotalDropdown(!showTotalDropdown);
+                                        setShowToolDropdown(false);
+                                        setShowAdmiralDropdown(false);
+                                    }}
+                                >
+                                    <div className="tab-label-group">
+                                        <span className="tab-label">OVERVIEW</span>
+                                        <span className="tab-status active">TOTALS</span>
+                                    </div>
+                                    <span className="tab-arrow">▼</span>
+                                </button>
+
+                                {showTotalDropdown && (
+                                    <div className="dropdown-menu-new total-overview">
+                                        <h4>Total Defensive Output</h4>
+                                        <div className="total-section">
+                                            <div className="total-main">
+                                                <span>Melee Strength:</span>
+                                                <span className="total-value">{totals.melee.total}%</span>
+                                            </div>
+                                            <div className="total-breakdown">
+                                                <span>Base: 100% | Admiral: +{totals.melee.admiral}%</span>
+                                            </div>
+                                        </div>
+                                        <div className="total-section">
+                                            <div className="total-main">
+                                                <span>Ranged Strength:</span>
+                                                <span className="total-value">{totals.ranged.total}%</span>
+                                            </div>
+                                            <div className="total-breakdown">
+                                                <span>Base: 100% | Admiral: +{totals.ranged.admiral}% | Modules: +{totals.ranged.modules}%</span>
+                                            </div>
+                                        </div>
+                                        <div className="total-section">
+                                            <div className="total-main">
+                                                <span>Energy Shield:</span>
+                                                <span className="total-value">+{totals.shield.total}%</span>
+                                            </div>
+                                            <div className="total-breakdown">
+                                                <span>Canopy: +{totals.shield.building}% | Modules: +{totals.shield.modules}%</span>
+                                            </div>
+                                        </div>
+                                        <div className="total-section">
+                                            <div className="total-main">
+                                                <span>Hub Integrity:</span>
+                                                <span className="total-value">+{totals.hub.total}%</span>
+                                            </div>
+                                            <div className="total-breakdown">
+                                                <span>Hub Lvl: +{totals.hub.building}% | Modules: +{totals.hub.modules}%</span>
+                                            </div>
+                                        </div>
+                                        <p className="note">Overview shows maximum potential bonuses. Specific sector tools only apply to units in that sector.</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button className="close-btn" onClick={onClose}>×</button>
+                        </div>
+                    </div>
+
+                    <div className="header-sub">
+                        <div className="capacity-bar-container">
+                            <div className="capacity-info">
+                                <span className={capacityExceeded ? 'error' : ''}>
+                                    Total Capacity: {totalUnitsAssigned} / {caps.canopy} troops
+                                </span>
+                            </div>
+                            <div className="capacity-bar-bg">
+                                <div 
+                                    className={`capacity-bar-fill ${capacityExceeded ? 'exceeded' : ''}`} 
+                                    style={{ width: `${Math.min(100, (totalUnitsAssigned / caps.canopy) * 100)}%` }}
+                                />
+                            </div>
                         </div>
 
-                        <button 
-                            className="add-turret-btn"
-                            onClick={() => setShowTurretModal(true)}
-                            style={{ 
-                                background: '#4a90e2', 
-                                border: 'none', 
-                                color: 'white', 
-                                padding: '8px 12px', 
-                                borderRadius: '4px',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            Add Turret
-                        </button>
-                        <button className="close-btn" onClick={onClose}>×</button>
+                        <div className="turret-control-box">
+                            <button 
+                                className="add-turret-btn"
+                                onClick={() => setShowTurretModal(true)}
+                            >
+                                Add Turret
+                            </button>
+                            <span className="turret-counter">
+                                {(() => {
+                                    try {
+                                        const turrets = currentPlanet.defenseTurretsJson ? JSON.parse(currentPlanet.defenseTurretsJson) : [];
+                                        return `${turrets.length}/20 Turrets`;
+                                    } catch {
+                                        return '0/20 Turrets';
+                                    }
+                                })()}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
                 <div className="defense-lanes-container">
-                    {renderLane("Left Flank", "left", left)}
-                    {renderLane("Central Docking Hub", "front", front)}
-                    {renderLane("Right Flank", "right", right)}
+                    <div className="lanes-main">
+                        {renderLane("Left Flank", "left", left)}
+                        {renderLane("Central Docking Hub", "front", front)}
+                        {renderLane("Right Flank", "right", right)}
+                    </div>
+
+                    <div className="defense-pool-sidebar">
+                        <h3>Available Units</h3>
+                        <div className="pool-list">
+                            {UNIT_TYPES.map(unit => {
+                                const owned = availableUnits[unit] || 0;
+                                const assigned = getAssignedUnitCount(unit);
+                                const available = Math.max(0, owned - assigned);
+
+                                return (
+                                    <div key={unit} className="pool-item">
+                                        <div className="pool-item-info">
+                                            <span className="unit-name">{unit}</span>
+                                            <span className="unit-available">{available} available</span>
+                                        </div>
+                                        <div className="pool-actions">
+                                            <div className="pool-action-group">
+                                                <span className="group-label">Front:</span>
+                                                <button onClick={() => updateUnit('front', unit, (front.units[unit] || 0) + Math.min(10, available))} disabled={available <= 0}>+10</button>
+                                                <button onClick={() => updateUnit('front', unit, (front.units[unit] || 0) + Math.min(100, available))} disabled={available <= 0}>+100</button>
+                                                <button onClick={() => updateUnit('front', unit, (front.units[unit] || 0) + available)} disabled={available <= 0}>MAX</button>
+                                            </div>
+                                            <div className="pool-action-group">
+                                                <span className="group-label">Left:</span>
+                                                <button onClick={() => updateUnit('left', unit, (left.units[unit] || 0) + Math.min(10, available))} disabled={available <= 0}>+10</button>
+                                                <button onClick={() => updateUnit('left', unit, (left.units[unit] || 0) + Math.min(100, available))} disabled={available <= 0}>+100</button>
+                                                <button onClick={() => updateUnit('left', unit, (left.units[unit] || 0) + available)} disabled={available <= 0}>MAX</button>
+                                            </div>
+                                            <div className="pool-action-group">
+                                                <span className="group-label">Right:</span>
+                                                <button onClick={() => updateUnit('right', unit, (right.units[unit] || 0) + Math.min(10, available))} disabled={available <= 0}>+10</button>
+                                                <button onClick={() => updateUnit('right', unit, (right.units[unit] || 0) + Math.min(100, available))} disabled={available <= 0}>+100</button>
+                                                <button onClick={() => updateUnit('right', unit, (right.units[unit] || 0) + available)} disabled={available <= 0}>MAX</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <h3 style={{ marginTop: '20px' }}>Defense Modules</h3>
+                        <div className="pool-list">
+                            {Object.entries(availableTools).filter(([_, count]) => count > 0).map(([type, count]) => {
+                                const assigned = getAssignedToolCount(type);
+                                const available = Math.max(0, count - assigned);
+
+                                return (
+                                    <div key={type} className="pool-item">
+                                        <div className="pool-item-info">
+                                            <span className="tool-name">{type.split('_').join(' ')}</span>
+                                            <span className="unit-available">{available} available</span>
+                                        </div>
+                                        <div className="pool-actions">
+                                            <button onClick={() => addToolToLane('front', type)} disabled={available <= 0 || front.tools.length >= maxSlots}>
+                                                Front
+                                            </button>
+                                            <button onClick={() => addToolToLane('left', type)} disabled={available <= 0 || left.tools.length >= maxSlots}>
+                                                Left
+                                            </button>
+                                            <button onClick={() => addToolToLane('right', type)} disabled={available <= 0 || right.tools.length >= maxSlots}>
+                                                Right
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
 
                 <div className="defense-footer">

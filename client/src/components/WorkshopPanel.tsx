@@ -12,14 +12,14 @@ interface WorkshopPanelProps {
 
 const TOOLS: Record<string, any> = {
     'defense_workshop': [
-        { id: 'sentry_drones', label: 'Sentry Drones', c: 40, t: 40, time: 30, desc: '+Energy Canopy Power' },
-        { id: 'hardened_bulkheads', label: 'Hardened Bulkheads', c: 280, t: 120, time: 60, desc: '+Docking Hub Integrity' },
-        { id: 'targeting_uplinks', label: 'Targeting Uplinks', c: 525, t: 225, time: 60, desc: '+Ranged Accuracy Bonus' }
+        { id: 'sentry_drones', label: 'Sentry Drones', c: 40, t: 40, time: 30, desc: '+25% Shield Strength' },
+        { id: 'hardened_bulkheads', label: 'Hardened Bulkheads', c: 280, t: 120, time: 60, desc: '+35% Hub Integrity' },
+        { id: 'targeting_uplinks', label: 'Targeting Uplinks', c: 525, t: 225, time: 60, desc: '+25% Ranged Accuracy' }
     ],
     'siege_workshop': [
-        { id: 'invasion_anchors', label: 'Invasion Anchors', c: 28, t: 12, time: 30, desc: '-Enemy Energy Canopy' },
-        { id: 'plasma_breachers', label: 'Plasma Breachers', c: 56, t: 24, time: 60, desc: '-Enemy Docking Hub' },
-        { id: 'stealth_field_pods', label: 'Stealth Field Pods', c: 105, t: 45, time: 60, desc: '-Enemy Ranged Power' }
+        { id: 'invasion_anchors', label: 'Invasion Anchors', c: 28, t: 12, time: 30, desc: '-10% Enemy Shield' },
+        { id: 'plasma_breachers', label: 'Plasma Breachers', c: 56, t: 24, time: 60, desc: '-10% Enemy Hub' },
+        { id: 'stealth_field_pods', label: 'Stealth Field Pods', c: 105, t: 45, time: 60, desc: '-10% Enemy Ranged Power' }
     ]
 };
 

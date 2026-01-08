@@ -211,7 +211,7 @@ export function resolveWaveCollision(
     if (s.bonusType === 'hub_reduction' && isCenter) hubBonusPct = Math.max(0, hubBonusPct - (s.bonusValue * count));
     if (s.bonusType === 'ranged_reduction') {
       const reduction = Math.min(1.0, s.bonusValue * count);
-      defRanged *= (1 - reduction);
+    defRanged *= (1 - reduction);
     }
   }
 
@@ -334,7 +334,7 @@ export function resolveSector(
     if (defCount <= 0) {
       const attCount = Object.values(wave.units).reduce((a, b) => a + b, 0);
       if (attCount > 0) {
-        winner = 'attacker';
+      winner = 'attacker';
       }
       for (const [u, c] of Object.entries(wave.units)) {
         survivingAttackers[u] = (survivingAttackers[u] || 0) + c;
@@ -600,25 +600,25 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   addUnits(finalCourtyardDefenders, rightResult.survivingDefenders);
 
   // Courtyard Battle
-  let attackerWonSurface = false;
-  let attLosses: FlankUnits = {};
-  let defLosses: FlankUnits = {};
+    let attackerWonSurface = false;
+    let attLosses: FlankUnits = {};
+    let defLosses: FlankUnits = {};
 
   const attCount = Object.values(surfAtt).reduce((a, b) => a + b, 0);
   const defCount = Object.values(finalCourtyardDefenders).reduce((a, b) => a + b, 0);
 
-  if (attCount > 0) {
-    if (defCount === 0) {
-      attackerWonSurface = true;
-    } else {
+    if (attCount > 0) {
+      if (defCount === 0) {
+        attackerWonSurface = true;
+      } else {
       // Apply bonuses to stats for the courtyard fight
-      const finalBat = resolveWaveCollision(
-        surfAtt,
+        const finalBat = resolveWaveCollision(
+          surfAtt,
         finalCourtyardDefenders,
         {}, // No tools in courtyard
         { canopy: 0, hub: 0, minefield: 0 }, // No walls in courtyard
-        false,
-        {},
+          false,
+          {},
         { 
           meleeStrengthBonus: attackerBonuses.meleeStrengthBonus + (attBonus * 100), 
           rangedStrengthBonus: attackerBonuses.rangedStrengthBonus + (attBonus * 100), 
@@ -629,12 +629,12 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
           rangedStrengthBonus: (defBonus * 100) + defenderBonuses.rangedStrengthBonus, 
           canopyReductionBonus: 0 
         }
-      );
-      attackerWonSurface = finalBat.attackerWon;
-      attLosses = finalBat.attackerLosses;
-      defLosses = finalBat.defenderLosses;
+        );
+        attackerWonSurface = finalBat.attackerWon;
+        attLosses = finalBat.attackerLosses;
+        defLosses = finalBat.defenderLosses;
+      }
     }
-  }
 
   const surfaceResult: {
     winner: 'attacker' | 'defender';
@@ -645,13 +645,13 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     attackerLosses: FlankUnits;
     defenderLosses: FlankUnits;
   } = {
-    winner: attackerWonSurface ? 'attacker' : 'defender',
-    attackerBonus: attBonus,
-    defenderBonus: defBonus,
-    initialAttackerUnits: { ...surfAtt },
+      winner: attackerWonSurface ? 'attacker' : 'defender',
+      attackerBonus: attBonus,
+      defenderBonus: defBonus,
+      initialAttackerUnits: { ...surfAtt },
     initialDefenderUnits: { ...finalCourtyardDefenders },
-    attackerLosses: attLosses,
-    defenderLosses: defLosses
+      attackerLosses: attLosses,
+      defenderLosses: defLosses
   };
 
   const finalWinner = (surfaceResult.winner === 'attacker') ? 'attacker' : 'defender';
@@ -773,7 +773,7 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
           await prisma.toolInventory.update({
             where: { id: currentTool.id },
             data: { count: newCount }
-          });
+        });
         }
       }
     }
@@ -792,7 +792,7 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
         await prisma.planetUnit.update({
           where: { id: currentUnit.id },
           data: { count: newCount }
-        });
+      });
       }
     }
   }

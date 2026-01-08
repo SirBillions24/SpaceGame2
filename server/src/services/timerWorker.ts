@@ -46,37 +46,37 @@ async function processArrivedFleets() {
             const loot = typeof fleet.cargoJson === 'string' ? JSON.parse(fleet.cargoJson) : fleet.cargoJson;
             if (loot) {
               await tx.planet.update({
-                where: { id: fleet.fromPlanetId },
-                data: {
-                  carbon: { increment: loot.carbon || 0 },
-                  titanium: { increment: loot.titanium || 0 },
-                  food: { increment: loot.food || 0 }
-                }
-              });
-            }
+              where: { id: fleet.fromPlanetId },
+              data: {
+                carbon: { increment: loot.carbon || 0 },
+                titanium: { increment: loot.titanium || 0 },
+                food: { increment: loot.food || 0 }
+              }
+            });
+          }
 
-            // 2. Add units back to the home planet
-            const units = JSON.parse(fleet.unitsJson);
-            for (const [unitType, count] of Object.entries(units)) {
+          // 2. Add units back to the home planet
+          const units = JSON.parse(fleet.unitsJson);
+          for (const [unitType, count] of Object.entries(units)) {
               await tx.planetUnit.upsert({
-                where: {
-                  planetId_unitType: {
-                    planetId: fleet.fromPlanetId,
-                    unitType: unitType as string,
-                  },
-                },
-                update: {
-                  count: {
-                    increment: count as number,
-                  },
-                },
-                create: {
+              where: {
+                planetId_unitType: {
                   planetId: fleet.fromPlanetId,
                   unitType: unitType as string,
-                  count: count as number,
                 },
-              });
-            }
+              },
+              update: {
+                count: {
+                  increment: count as number,
+                },
+              },
+              create: {
+                planetId: fleet.fromPlanetId,
+                unitType: unitType as string,
+                count: count as number,
+              },
+            });
+          }
           });
           continue; // Done with this fleet
         }
@@ -117,15 +117,15 @@ async function processArrivedFleets() {
               // Correct the report if loot was capped
               resourcesJson = JSON.stringify(actualLoot);
 
-              // Deduct from defender
-              await prisma.planet.update({
-                where: { id: fleet.toPlanetId },
-                data: {
+            // Deduct from defender
+            await prisma.planet.update({
+              where: { id: fleet.toPlanetId },
+              data: {
                   carbon: { decrement: actualLoot.carbon },
                   titanium: { decrement: actualLoot.titanium },
                   food: { decrement: actualLoot.food }
-                }
-              });
+              }
+            });
             }
           }
 
