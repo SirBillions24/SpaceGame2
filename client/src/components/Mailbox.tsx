@@ -4,37 +4,55 @@ import './Mailbox.css';
 
 interface BattleReportSummary {
     id: string;
-    fleetId: string;
-    isAttacker: boolean;
+    type: 'battle';
+    title: string;
     winner: 'attacker' | 'defender';
+    isAttacker: boolean;
     attackerPlanet: { name: string; x: number; y: number };
     defenderPlanet: { name: string; x: number; y: number };
     createdAt: string;
-    loot?: { carbon: number; titanium: number; food: number };
-    resourcesStolen?: { carbon: number; titanium: number; food: number };
-    admirals?: {
-        attacker: { name: string; meleeStrengthBonus: number; rangedStrengthBonus: number; canopyReductionBonus: number } | null;
-        defender: { name: string } | null;
-    };
 }
+
+interface EspionageReportSummary {
+    id: string;
+    type: 'espionage';
+    title: string;
+    targetX: number;
+    targetY: number;
+    accuracy: number;
+    createdAt: string;
+}
+
+interface MessageSummary {
+    id: string;
+    type: 'message';
+    subType: string;
+    title: string;
+    content: string;
+    isRead: boolean;
+    createdAt: string;
+}
+
+type InboxItem = BattleReportSummary | EspionageReportSummary | MessageSummary;
 
 interface MailboxProps {
     onClose: () => void;
 }
 
 export default function Mailbox({ onClose }: MailboxProps) {
-    const [reports, setReports] = useState<BattleReportSummary[]>([]);
-    const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+    const [items, setItems] = useState<InboxItem[]>([]);
+    const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+    const [selectedItemType, setSelectedItemType] = useState<'battle' | 'espionage' | 'message' | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadReports();
+        loadInbox();
     }, []);
 
-    const loadReports = async () => {
+    const loadInbox = async () => {
         try {
-            const data = await api.getReports(); // We need to add this to api.ts
-            setReports(data.reports);
+            const data = await api.getInbox();
+            setItems(data.items);
         } catch (e) {
             console.error(e);
         } finally {
@@ -42,8 +60,18 @@ export default function Mailbox({ onClose }: MailboxProps) {
         }
     };
 
-    const handleSelect = (id: string) => {
-        setSelectedReportId(id);
+    const handleSelect = (item: InboxItem) => {
+        setSelectedItemId(item.id);
+        setSelectedItemType(item.type);
+        if (item.type === 'message' && !item.isRead) {
+            api.markMessageRead(item.id);
+            setItems(prev => prev.map(i => i.id === item.id ? { ...i, isRead: true } as InboxItem : i));
+        }
+    };
+
+    const handleBack = () => {
+        setSelectedItemId(null);
+        setSelectedItemType(null);
     };
 
     return (
@@ -55,33 +83,47 @@ export default function Mailbox({ onClose }: MailboxProps) {
                 </div>
 
                 <div className="mailbox-content">
-                    {selectedReportId ? (
-                        <BattleReportView id={selectedReportId} onBack={() => setSelectedReportId(null)} />
+                    {selectedItemId ? (
+                        selectedItemType === 'battle' ? (
+                            <BattleReportView id={selectedItemId} onBack={handleBack} />
+                        ) : selectedItemType === 'espionage' ? (
+                            <EspionageReportView id={selectedItemId} onBack={handleBack} />
+                        ) : (
+                            <MessageView id={selectedItemId} items={items} onBack={handleBack} />
+                        )
                     ) : (
                         <div className="report-list">
                             {loading ? (
                                 <div className="loading">Receiving transmissions...</div>
-                            ) : reports.length === 0 ? (
+                            ) : items.length === 0 ? (
                                 <div className="empty-state">No messages in buffer.</div>
                             ) : (
-                                reports.map(report => (
-                                    <div key={report.id} className={`report-item ${report.winner === (report.isAttacker ? 'attacker' : 'defender') ? 'won' : 'lost'}`} onClick={() => handleSelect(report.id)}>
+                                items.map(item => (
+                                    <div 
+                                        key={item.id} 
+                                        className={`report-item ${item.type} ${item.type === 'message' && !item.isRead ? 'unread' : ''}`} 
+                                        onClick={() => handleSelect(item)}
+                                    >
                                         <div className="report-icon">
-                                            {report.isAttacker ? '⚔️' : '🛡️'}
+                                            {item.type === 'battle' ? (item.isAttacker ? '⚔️' : '🛡️') : 
+                                             item.type === 'espionage' ? '🛰️' : '✉️'}
                                         </div>
                                         <div className="report-summary">
-                                            <div className="report-title">
-                                                {report.isAttacker
-                                                    ? `Attack on ${report.defenderPlanet.name}`
-                                                    : `Defense against ${report.attackerPlanet.name}`}
-                                            </div>
+                                            <div className="report-title">{item.title}</div>
                                             <div className="report-date">
-                                                {new Date(report.createdAt).toLocaleString()}
+                                                {new Date(item.createdAt).toLocaleString()}
                                             </div>
                                         </div>
-                                        <div className={`report-status ${report.winner === (report.isAttacker ? 'attacker' : 'defender') ? 'win' : 'loss'}`}>
-                                            {report.winner === (report.isAttacker ? 'attacker' : 'defender') ? 'VICTORY' : 'DEFEAT'}
-                                        </div>
+                                        {item.type === 'battle' && (
+                                            <div className={`report-status ${(item.winner === 'attacker') === item.isAttacker ? 'win' : 'loss'}`}>
+                                                {(item.winner === 'attacker') === item.isAttacker ? 'VICTORY' : 'DEFEAT'}
+                                            </div>
+                                        )}
+                                        {item.type === 'espionage' && (
+                                            <div className="report-status info">
+                                                INTEL: {Math.round(item.accuracy * 100)}%
+                                            </div>
+                                        )}
                                     </div>
                                 ))
                             )}
@@ -146,6 +188,77 @@ const ToolList = ({ tools }: { tools: Record<string, number> | Record<string, nu
     );
 };
 
+function EspionageReportView({ id, onBack }: { id: string, onBack: () => void }) {
+    const [report, setReport] = useState<any | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.getEspionageReport(id).then(setReport).finally(() => setLoading(false));
+    }, [id]);
+
+    if (loading) return <div className="loading-detail">Downloading satellite data...</div>;
+    if (!report) return <div>Error loading report.</div>;
+
+    return (
+        <div className="espionage-report-view">
+            <div className="br-nav">
+                <button className="back-btn" onClick={onBack}>← Back</button>
+            </div>
+            <div className="report-header info">
+                <h3>SATELLITE INTELLIGENCE</h3>
+                <div className="sub-status">TARGET: [{report.targetX}, {report.targetY}]</div>
+            </div>
+            <div className="esp-details">
+                <div className="esp-meta">
+                    <span>Generated: {new Date(report.createdAt).toLocaleString()}</span>
+                    <span>Accuracy: {Math.round(report.accuracy * 100)}%</span>
+                </div>
+                <div className="colonies-detected">
+                    {report.data.map((colony: any) => (
+                        <div key={colony.id} className="detected-colony">
+                            <div className="colony-header">
+                                <span className="colony-name">{colony.name}</span>
+                                <span className="colony-owner">Owner: {colony.ownerName}</span>
+                                <span className="colony-pos">({colony.x}, {colony.y})</span>
+                            </div>
+                            <div className="unit-intel">
+                                {colony.units.map((unit: any) => (
+                                    <div key={unit.type} className="unit-row">
+                                        <span className="unit-type">{unit.type}</span>
+                                        <span className="unit-count">
+                                            {unit.count !== null ? unit.count : `${unit.countRange[0]} - ${unit.countRange[1]}`}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function MessageView({ id, items, onBack }: { id: string, items: any[], onBack: () => void }) {
+    const message = items.find(i => i.id === id);
+    if (!message) return <div>Message not found.</div>;
+
+    return (
+        <div className="message-view">
+            <div className="br-nav">
+                <button className="back-btn" onClick={onBack}>← Back</button>
+            </div>
+            <div className="message-header">
+                <h3>{message.title}</h3>
+                <div className="message-date">{new Date(message.createdAt).toLocaleString()}</div>
+            </div>
+            <div className="message-body">
+                {message.content}
+            </div>
+        </div>
+    );
+}
+
 function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
     const [report, setReport] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
@@ -166,6 +279,7 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
 
     if (loading) return <div className="loading-detail">Decryption in progress...</div>;
     if (!report) return <div>Error loading report.</div>;
+    // ... rest of BattleReportView
 
     // Parse Lane Results (Backwards compatibility)
     // New format: { sectors: {...}, surface: {...} }
@@ -470,3 +584,4 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
         </div>
     );
 }
+

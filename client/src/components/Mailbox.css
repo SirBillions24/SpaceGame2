@@ -742,3 +742,61 @@
     border: 1px solid rgba(0, 243, 255, 0.2);
     display: inline-block;
 }
+
+/* Unified Inbox Styles */
+.report-item.battle.won { border-left: 4px solid #00cc66; }
+.report-item.battle.lost { border-left: 4px solid #ff3333; }
+.report-item.espionage { border-left: 4px solid #00f2ff; }
+.report-item.message { border-left: 4px solid #f1c40f; }
+.report-item.message.unread { background: rgba(241, 196, 15, 0.05); }
+
+.report-status.info { color: #00f2ff; }
+
+.espionage-report-view, .message-view {
+    padding: 20px;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.esp-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    color: #888;
+    font-size: 0.9rem;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+}
+
+.message-header {
+    margin-bottom: 20px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 15px;
+}
+
+.message-header h3 {
+    margin: 0;
+    color: #f1c40f;
+}
+
+.message-date {
+    color: #666;
+    font-size: 0.85rem;
+    margin-top: 5px;
+}
+
+.message-body {
+    line-height: 1.6;
+    font-size: 1.1rem;
+    color: #ddd;
+}
+
+.report-header.info {
+    background: rgba(0, 242, 255, 0.1);
+    border: 1px solid #00f2ff;
+    text-align: center;
+    padding: 15px;
+    border-radius: 8px;
+}

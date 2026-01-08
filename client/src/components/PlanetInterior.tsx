@@ -6,6 +6,7 @@ import ExpansionModal from './ExpansionModal';
 import DefenseTurretModal from './DefenseTurretModal';
 import AdmiralPanel from './AdmiralPanel';
 import RecruitmentPanel from './RecruitmentPanel';
+import { IntelligenceHubPanel } from './IntelligenceHubPanel';
 import './PlanetInterior.css';
 
 interface PlanetInteriorProps {
@@ -272,6 +273,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
   const [showExpansionModal, setShowExpansionModal] = useState(false);
   const [showTurretModal, setShowTurretModal] = useState(false);
   const [showAdmiralPanel, setShowAdmiralPanel] = useState(false);
+  const [showEspionagePanel, setShowEspionagePanel] = useState(false);
   const [showRecruitmentPanel, setShowRecruitmentPanel] = useState(false);
   const [hoveredBuildingType, setHoveredBuildingType] = useState<string | null>(null);
   const [activeMainTab, setActiveMainTab] = useState<string>('structures');
@@ -1017,6 +1019,15 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                           </button>
                         </>
                       )}
+                      {buildings.some(b => b.type === 'tavern' && b.status === 'active') && (
+                        <button 
+                          className="action-card"
+                          onClick={() => setShowEspionagePanel(true)}
+                        >
+                          <div className="action-icon">📡</div>
+                          <div className="action-label">Intelligence Hub</div>
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1248,6 +1259,13 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
             loadPlanetData();
             props.onUpdate?.();
           }}
+        />
+      )}
+
+      {showEspionagePanel && planetData && (
+        <IntelligenceHubPanel 
+          planetId={planetData.id} 
+          onClose={() => setShowEspionagePanel(false)} 
         />
       )}
 

@@ -2,19 +2,41 @@ import { useEffect, useRef, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import { api, type Planet, type Fleet } from '../lib/api';
 
+interface Probe {
+  id: string;
+  targetX: number;
+  targetY: number;
+  status: string;
+  startTime: string;
+  arrivalTime: string;
+  returnTime?: string;
+  radius: number;
+  fromPlanet: { x: number; y: number };
+}
+
 interface WorldMapProps {
   mapImageUrl: string;
   onPlanetClick?: (planet: Planet) => void;
   sourcePlanetId?: string | null;
   onMapContainerReady?: (container: PIXI.Container) => void;
   currentUserId?: string;
+  isEspionageMode?: boolean;
+  onEspionageModeChange?: (active: boolean) => void;
 }
 
 // Tile configuration
 const TILE_SIZE = 1024; // Size of each tile in world units
 const RENDER_PADDING = 1;
 
-export default function WorldMap({ mapImageUrl, onPlanetClick, sourcePlanetId, onMapContainerReady, currentUserId }: WorldMapProps) {
+export default function WorldMap({ 
+  mapImageUrl, 
+  onPlanetClick, 
+  sourcePlanetId, 
+  onMapContainerReady, 
+  currentUserId,
+  isEspionageMode: controlledEspionageMode,
+  onEspionageModeChange
+}: WorldMapProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const mapContainerRef = useRef<PIXI.Container | null>(null);
@@ -27,30 +49,74 @@ export default function WorldMap({ mapImageUrl, onPlanetClick, sourcePlanetId, o
   const fleetObjectsRef = useRef<Map<string, { sprite: PIXI.Sprite, graphics: PIXI.Graphics, label: PIXI.Text }>>(new Map());
   // We keep the latest fleets data in a ref to access it inside the render loop without dependency issues
   const latestFleetsRef = useRef<Fleet[]>([]);
+  const latestProbesRef = useRef<Probe[]>([]);
+  const probeObjectsRef = useRef<Map<string, { sprite: PIXI.Sprite, graphics: PIXI.Graphics }>>(new Map());
 
   const [planets, setPlanets] = useState<Planet[]>([]);
+  const [localEspionageMode, setLocalEspionageMode] = useState(false);
+  const [selectedProbeType, setSelectedProbeType] = useState('recon_probe');
+  
+  useEffect(() => {
+    if (ghostProbeRef.current) {
+      ghostProbeRef.current.clear();
+      const radius = selectedProbeType === 'advanced_probe' ? 300 : 150;
+      ghostProbeRef.current.circle(0, 0, radius);
+      ghostProbeRef.current.stroke({ width: 2, color: 0x00f2ff, alpha: 0.5 });
+      ghostProbeRef.current.fill({ color: 0x00f2ff, alpha: 0.1 });
+    }
+  }, [selectedProbeType]);
+
+  const [hasIntelHub, setHasIntelHub] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const isEspionageMode = controlledEspionageMode !== undefined ? controlledEspionageMode : localEspionageMode;
+  const setIsEspionageMode = onEspionageModeChange || setLocalEspionageMode;
+
+  const isEspionageModeRef = useRef(isEspionageMode);
+  useEffect(() => {
+    isEspionageModeRef.current = isEspionageMode;
+  }, [isEspionageMode]);
+
+  const currentUserIdRef = useRef(currentUserId);
+  useEffect(() => {
+    currentUserIdRef.current = currentUserId;
+  }, [currentUserId]);
+
+  // Ghost Probe for placement
+  const ghostProbeRef = useRef<PIXI.Graphics | null>(null);
 
   // Camera state
   const cameraRef = useRef({ x: 0, y: 0, scale: 1 });
   const lastRenderedTilesRef = useRef<Set<string>>(new Set());
 
-  // Fleet Polling
+  // Fleet & Probe Polling
   useEffect(() => {
-    const fetchFleets = async () => {
+    const fetchData = async () => {
       try {
-        const data = await api.getFleets();
-        latestFleetsRef.current = data.fleets;
+        const [fleetData, probeData] = await Promise.all([
+          api.getFleets(),
+          api.getProbes()
+        ]);
+        latestFleetsRef.current = fleetData.fleets;
+        latestProbesRef.current = probeData;
+
+        // Check for intel hub on any player planet
+        if (currentUserId) {
+          const myPlanets = await api.getPlanets();
+          const owned = myPlanets.planets.filter(p => p.ownerId === currentUserId);
+          const intelHub = owned.some(p => p.buildings?.some(b => b.type === 'tavern' && b.status === 'active'));
+          setHasIntelHub(intelHub);
+        }
       } catch (err) {
-        console.error('Failed to fetch fleets', err);
+        console.error('Failed to fetch map data', err);
       }
     };
 
-    fetchFleets();
-    const interval = setInterval(fetchFleets, 2000); // Poll every 2s
+    fetchData();
+    const interval = setInterval(fetchData, 2000); // Poll every 2s
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => {
     const initPixi = async () => {
@@ -96,6 +162,10 @@ export default function WorldMap({ mapImageUrl, onPlanetClick, sourcePlanetId, o
         const planetLayer = new PIXI.Container();
         planetLayer.zIndex = 20;
         mapContainer.addChild(planetLayer);
+
+        const espionageLayer = new PIXI.Container();
+        espionageLayer.zIndex = 30;
+        mapContainer.addChild(espionageLayer);
 
         // Map Texture
         const mapTexture = await PIXI.Assets.load(mapImageUrl);
@@ -314,12 +384,110 @@ export default function WorldMap({ mapImageUrl, onPlanetClick, sourcePlanetId, o
             objects.label.x = currentX;
             objects.label.y = currentY;
           });
+
+          // --- RENDER PROBES ---
+          const currentProbes = latestProbesRef.current;
+          const activeProbeIds = new Set(currentProbes.map(p => p.id));
+
+          // 1. Remove stale probes
+          for (const [id, objects] of probeObjectsRef.current.entries()) {
+            if (!activeProbeIds.has(id)) {
+              espionageLayer.removeChild(objects.sprite);
+              espionageLayer.removeChild(objects.graphics);
+              objects.sprite.destroy();
+              objects.graphics.destroy();
+              probeObjectsRef.current.delete(id);
+            }
+          }
+
+          // 2. Update/Create active probes
+          currentProbes.forEach(probe => {
+            let objects = probeObjectsRef.current.get(probe.id);
+
+            if (!objects) {
+              const sprite = new PIXI.Sprite(PIXI.Texture.WHITE); // Placeholder or drone icon
+              sprite.anchor.set(0.5);
+              sprite.scale.set(0.2);
+              sprite.tint = 0x00f2ff;
+
+              const graphics = new PIXI.Graphics();
+              espionageLayer.addChild(graphics);
+              espionageLayer.addChild(sprite);
+
+              objects = { sprite, graphics };
+              probeObjectsRef.current.set(probe.id, objects);
+            }
+
+            let posX = probe.targetX;
+            let posY = probe.targetY;
+            let showRadius = true;
+
+            if (probe.status === 'traveling') {
+              const start = new Date(probe.startTime).getTime();
+              const end = new Date(probe.arrivalTime).getTime();
+              const nowMs = Date.now();
+              const progress = Math.max(0, Math.min(1, (nowMs - start) / (end - start)));
+              
+              posX = probe.fromPlanet.x + (probe.targetX - probe.fromPlanet.x) * progress;
+              posY = probe.fromPlanet.y + (probe.targetY - probe.fromPlanet.y) * progress;
+              
+              objects.sprite.alpha = 0.6;
+            } else if (probe.status === 'returning') {
+              const start = new Date(probe.lastUpdateTime).getTime(); // Recall started
+              const end = new Date(probe.returnTime!).getTime();
+              const nowMs = Date.now();
+              const progress = Math.max(0, Math.min(1, (nowMs - start) / (end - start)));
+              
+              // Move from target back to home
+              posX = probe.targetX + (probe.fromPlanet.x - probe.targetX) * progress;
+              posY = probe.targetY + (probe.fromPlanet.y - probe.targetY) * progress;
+              
+              objects.sprite.alpha = 0.4;
+              objects.sprite.tint = 0xff0000; // Red for returning
+            } else {
+              objects.sprite.alpha = 1.0;
+              objects.sprite.tint = 0x00f2ff;
+            }
+
+            objects.sprite.x = posX;
+            objects.sprite.y = posY;
+
+            // Draw Radius and Connection Line
+            objects.graphics.clear();
+            
+            // Draw tether line to home colony
+            objects.graphics.moveTo(probe.fromPlanet.x, probe.fromPlanet.y);
+            objects.graphics.lineTo(posX, posY);
+            objects.graphics.stroke({ width: 1, color: 0x00f2ff, alpha: 0.15 });
+
+            if (showRadius) {
+              objects.graphics.circle(posX, posY, probe.radius);
+              objects.graphics.stroke({ width: 1, color: 0x00f2ff, alpha: 0.3 });
+              if (probe.status !== 'traveling' && probe.status !== 'returning') {
+                objects.graphics.fill({ color: 0x00f2ff, alpha: 0.05 });
+              }
+            }
+          });
+
+          // --- GHOST PROBE ---
+          if (ghostProbeRef.current) {
+            ghostProbeRef.current.visible = isEspionageModeRef.current;
+          }
         });
 
+        // Create ghost probe
+        const ghostProbe = new PIXI.Graphics();
+        ghostProbe.circle(0, 0, 150);
+        ghostProbe.stroke({ width: 2, color: 0x00f2ff, alpha: 0.5 });
+        ghostProbe.fill({ color: 0x00f2ff, alpha: 0.1 });
+        ghostProbe.visible = false;
+        espionageLayer.addChild(ghostProbe);
+        ghostProbeRef.current = ghostProbe;
+
         // Input Handling (Pan/Zoom) - Simplified for brevity, copied from original
-        // ... (Implement Pan/Zoom listeners similar to original code)
         let isDragging = false;
         let lastPos = { x: 0, y: 0 };
+        let dragStartTime = 0;
 
         app.canvas.addEventListener('wheel', (e) => {
           e.preventDefault();
@@ -330,11 +498,52 @@ export default function WorldMap({ mapImageUrl, onPlanetClick, sourcePlanetId, o
         app.canvas.addEventListener('mousedown', (e) => {
           isDragging = true;
           lastPos = { x: e.clientX, y: e.clientY };
+          dragStartTime = Date.now();
+        });
+
+        app.canvas.addEventListener('click', async (e) => {
+          // If was dragging, don't trigger click
+          if (Date.now() - dragStartTime > 200) return;
+
+          if (isEspionageModeRef.current) {
+            // Calculate world coords
+            const rect = app.canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const worldX = cameraRef.current.x + (mouseX - app.screen.width / 2) / cameraRef.current.scale;
+            const worldY = cameraRef.current.y + (mouseY - app.screen.height / 2) / cameraRef.current.scale;
+
+            try {
+              // Get home planet to launch from
+              const myPlanets = await api.getPlanets();
+              const home = myPlanets.planets.find(p => p.ownerId === currentUserIdRef.current && !p.isNpc);
+              if (!home) throw new Error('No home colony found');
+
+              await api.launchProbe(home.id, Math.round(worldX), Math.round(worldY), selectedProbeType);
+              setIsEspionageMode(false);
+              alert(`${selectedProbeType.replace('_', ' ').toUpperCase()} Launched!`);
+            } catch (err: any) {
+              alert(err.message);
+            }
+          }
         });
 
         window.addEventListener('mouseup', () => isDragging = false);
 
         app.canvas.addEventListener('mousemove', (e) => {
+          const rect = app.canvas.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+
+          const worldX = cameraRef.current.x + (mouseX - app.screen.width / 2) / cameraRef.current.scale;
+          const worldY = cameraRef.current.y + (mouseY - app.screen.height / 2) / cameraRef.current.scale;
+
+          if (ghostProbeRef.current) {
+            ghostProbeRef.current.x = worldX;
+            ghostProbeRef.current.y = worldY;
+          }
+
           if (isDragging) {
             const dx = (e.clientX - lastPos.x) / cameraRef.current.scale;
             const dy = (e.clientY - lastPos.y) / cameraRef.current.scale;
@@ -365,8 +574,80 @@ export default function WorldMap({ mapImageUrl, onPlanetClick, sourcePlanetId, o
       {loading && <div style={{ position: 'absolute', top: '50%', left: '50%', color: 'white' }}>Loading System...</div>}
       {/* Planet Count / Debug */}
       <div style={{ position: 'absolute', top: 10, left: 10, color: 'white', background: 'rgba(0,0,0,0.5)', padding: 5 }}>
-        Planets: {planets.length} <br /> Active Fleets: {latestFleetsRef.current.length}
+        Planets: {planets.length} <br /> Active Fleets: {latestFleetsRef.current.length} <br />
+        Active Probes: {latestProbesRef.current.length}
       </div>
+
+      {hasIntelHub && (
+        <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={() => setIsEspionageMode(!isEspionageMode)}
+            style={{
+              padding: '10px 20px',
+              background: isEspionageMode ? '#00f2ff' : '#222',
+              color: isEspionageMode ? '#000' : '#00f2ff',
+              border: '2px solid #00f2ff',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              boxShadow: '0 0 10px rgba(0, 242, 255, 0.3)'
+            }}
+          >
+            {isEspionageMode ? 'CANCEL PROBE DEPLOYMENT' : 'DEPLOY RECON PROBE'}
+          </button>
+        </div>
+      )}
+
+      {isEspionageMode && (
+        <div style={{ 
+          position: 'absolute', 
+          top: 80, 
+          left: '50%', 
+          transform: 'translateX(-50%)', 
+          color: '#00f2ff', 
+          background: 'rgba(0,0,0,0.85)', 
+          padding: '15px 30px', 
+          borderRadius: '10px',
+          border: '1px solid #00f2ff',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '10px',
+          boxShadow: '0 0 20px rgba(0, 242, 255, 0.4)'
+        }}>
+          <div style={{ fontWeight: 'bold', letterSpacing: '1px' }}>SELECT PROBE TYPE & CLICK ON MAP</div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setSelectedProbeType('recon_probe'); }}
+              style={{
+                padding: '5px 15px',
+                background: selectedProbeType === 'recon_probe' ? '#00f2ff' : '#111',
+                color: selectedProbeType === 'recon_probe' ? '#000' : '#00f2ff',
+                border: '1px solid #00f2ff',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.8rem'
+              }}
+            >
+              BASIC (150 Radius)
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setSelectedProbeType('advanced_probe'); }}
+              style={{
+                padding: '5px 15px',
+                background: selectedProbeType === 'advanced_probe' ? '#00f2ff' : '#111',
+                color: selectedProbeType === 'advanced_probe' ? '#000' : '#00f2ff',
+                border: '1px solid #00f2ff',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.8rem'
+              }}
+            >
+              ADVANCED (300 Radius)
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

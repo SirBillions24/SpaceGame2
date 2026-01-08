@@ -26,6 +26,9 @@ model User {
   fleets  Fleet[]
   admiral Admiral?
   gearPieces GearPiece[]
+  reconProbes ReconProbe[]
+  inboxMessages InboxMessage[]
+  espionageReports EspionageReport[]
 
   @@map("users")
 }
@@ -101,6 +104,7 @@ model Planet {
   fleetsTo      Fleet[]         @relation("ToPlanet")
   defenseLayout DefenseLayout?
   stationedAdmiral Admiral?      @relation("StationedAdmiral")
+  reconProbesLaunched ReconProbe[] @relation("ProbesLaunched")
 
   @@unique([x, y])
   @@map("planets")
@@ -269,4 +273,58 @@ model Building {
   planet Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
 
   @@map("buildings")
+}
+
+model ReconProbe {
+  id               String   @id @default(uuid())
+  type             String   @default("recon_probe")
+  ownerId          String   @map("owner_user_id")
+  fromPlanetId     String   @map("from_planet_id")
+  targetX          Int      @map("target_x")
+  targetY          Int      @map("target_y")
+  status           String   @default("traveling") // "traveling", "active", "discovered", "returning", "cooldown", "destroyed"
+  startTime        DateTime @default(now()) @map("start_time")
+  arrivalTime      DateTime @map("arrival_time")
+  returnTime       DateTime? @map("return_time")
+  cooldownUntil    DateTime? @map("cooldown_until")
+  wasDiscovered    Boolean  @default(false) @map("was_discovered")
+  lastUpdateTime   DateTime @default(now()) @map("last_update_time")
+  discoveryChance  Float    @default(0) @map("discovery_chance") // 0.0 to 1.0
+  accuracy         Float    @default(0) @map("accuracy") // 0.0 to 1.0 (Information relay accuracy)
+  radius           Int      @default(150) // Scan radius
+  
+  owner            User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  fromPlanet       Planet   @relation("ProbesLaunched", fields: [fromPlanetId], references: [id])
+
+  @@map("recon_probes")
+}
+
+model EspionageReport {
+  id               String   @id @default(uuid())
+  ownerId          String   @map("owner_user_id")
+  probeId          String?  @map("probe_id")
+  probeType        String   @map("probe_type")
+  targetX          Int      @map("target_x")
+  targetY          Int      @map("target_y")
+  accuracy         Float    @default(0)
+  dataJson         String   @map("data_json") // Detailed intel on colonies
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("espionage_reports")
+}
+
+model InboxMessage {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String   // "probe_alert", "system_alert", etc.
+  title     String
+  content   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("inbox_messages")
 }

@@ -22,6 +22,8 @@ function App() {
   const [needsSpawn, setNeedsSpawn] = useState(false);
   const [hudPlanet, setHudPlanet] = useState<Planet | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isEspionageMode, setIsEspionageMode] = useState(false);
+  const [hasIntelHub, setHasIntelHub] = useState(false);
 
   // Check for stored auth token & load initial data
   useEffect(() => {
@@ -59,6 +61,7 @@ function App() {
 
         api.getPlanets().then(data => {
           const myPlanets = data.planets.filter(p => p.ownerId === user.userId && !p.isNpc);
+          setHasIntelHub(myPlanets.some(p => p.buildings?.some(b => b.type === 'tavern' && b.status === 'active')));
           if (myPlanets.length === 0) {
             setNeedsSpawn(true);
           } else if (!hudPlanet) {
@@ -143,9 +146,28 @@ function App() {
         sourcePlanetId={sourcePlanet?.id}
         onMapContainerReady={handleMapContainerReady}
         currentUserId={isLoggedIn ? getCurrentUser()?.userId : undefined}
+        isEspionageMode={isEspionageMode}
+        onEspionageModeChange={setIsEspionageMode}
       />
 
       <div className="hud-overlay" style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', gap: '10px', zIndex: 1000 }}>
+        {hasIntelHub && (
+          <button 
+            onClick={() => setIsEspionageMode(!isEspionageMode)} 
+            style={{ 
+              background: isEspionageMode ? '#00f2ff' : '#1e3a3d', 
+              color: isEspionageMode ? '#000' : '#00f2ff', 
+              border: '2px solid #00f2ff', 
+              padding: '10px 20px', 
+              cursor: 'pointer', 
+              borderRadius: '4px', 
+              fontWeight: 'bold',
+              boxShadow: isEspionageMode ? '0 0 15px #00f2ff' : 'none'
+            }}
+          >
+            {isEspionageMode ? 'Cancel Probe' : 'Launch Probe'}
+          </button>
+        )}
         <button onClick={() => setShowTravelOverview(true)} style={{ background: '#ff9800', color: 'black', border: '2px solid #e65100', padding: '10px 20px', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold' }}>
           Travel Overview
         </button>
@@ -167,6 +189,11 @@ function App() {
           mapContainer={mapContainer}
           onEnterPlanet={handleEnterPlanet}
           onClose={handleCloseBanner}
+          hasIntelHub={hasIntelHub && (selectedPlanet.ownerId === currentUser?.id || selectedPlanet.ownerId === getCurrentUser()?.userId)}
+          onLaunchProbe={() => {
+            setIsEspionageMode(true);
+            setSelectedPlanet(null);
+          }}
           onSendFleet={() => {
             const user = getCurrentUser();
             if (!sourcePlanet && user && hudPlanet && hudPlanet.ownerId === user.userId) {

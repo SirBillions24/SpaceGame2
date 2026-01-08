@@ -468,6 +468,94 @@ export const api = {
       throw new Error(error.error || 'Dev tool failed');
     }
     return response.json();
+  },
+
+  // Espionage API
+  async launchProbe(fromPlanetId: string, targetX: number, targetY: number, probeType: string = 'recon_probe') {
+    const response = await fetch(`${API_BASE_URL}/espionage/launch`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ fromPlanetId, targetX, targetY, probeType }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to launch probe');
+    }
+    return response.json();
+  },
+
+  async recallProbe(id: string) {
+    const response = await fetch(`${API_BASE_URL}/espionage/recall/${id}`, {
+      method: 'POST',
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to recall probe');
+    }
+    return response.json();
+  },
+
+  async generateProbeReport(id: string) {
+    const response = await fetch(`${API_BASE_URL}/espionage/report/${id}`, {
+      method: 'POST',
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to generate report');
+    }
+    return response.json();
+  },
+
+  async getInbox() {
+    const response = await fetch(`${API_BASE_URL}/mailbox`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch inbox');
+    return response.json();
+  },
+
+  async getEspionageReport(id: string) {
+    const response = await fetch(`${API_BASE_URL}/mailbox/espionage/${id}`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch report');
+    return response.json();
+  },
+
+  async markMessageRead(id: string) {
+    const response = await fetch(`${API_BASE_URL}/mailbox/message/${id}/read`, {
+      method: 'PUT',
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to mark read');
+    return response.json();
+  },
+
+  async getProbes() {
+    const response = await fetch(`${API_BASE_URL}/espionage/probes`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch probes');
+    return response.json();
+  },
+
+  async getProbeData(id: string) {
+    const response = await fetch(`${API_BASE_URL}/espionage/probes/${id}`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch probe data');
+    return response.json();
+  },
+
+  async deleteProbe(id: string) {
+    const response = await fetch(`${API_BASE_URL}/espionage/probes/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to delete probe');
+    return response.json();
   }
 };
 

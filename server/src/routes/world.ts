@@ -6,7 +6,7 @@ import { optionalAuthenticateToken, AuthRequest } from '../middleware/auth';
 const router = Router();
 
 // Get all planets with their positions and owners
-router.get('/planets', async (req: AuthRequest, res: Response) => {
+router.get('/planets', optionalAuthenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const planets = await prisma.planet.findMany({
       include: {
@@ -16,24 +16,29 @@ router.get('/planets', async (req: AuthRequest, res: Response) => {
             username: true,
           },
         },
+        buildings: true, // Include buildings to check for Intel Hub
       },
       orderBy: {
         createdAt: 'asc',
       },
     });
 
-    const result = planets.map((planet) => ({
-      id: planet.id,
-      x: planet.x,
-      y: planet.y,
-      name: planet.name,
-      ownerId: planet.ownerId,
-      ownerName: planet.owner.username,
-      taxRate: planet.taxRate,
-      isNpc: planet.isNpc,
-      npcLevel: planet.npcLevel,
-      createdAt: planet.createdAt,
-    }));
+    const result = planets.map((planet) => {
+      const isOwner = req.userId === planet.ownerId;
+      return {
+        id: planet.id,
+        x: planet.x,
+        y: planet.y,
+        name: planet.name,
+        ownerId: planet.ownerId,
+        ownerName: planet.owner.username,
+        taxRate: planet.taxRate,
+        isNpc: planet.isNpc,
+        npcLevel: planet.npcLevel,
+        createdAt: planet.createdAt,
+        buildings: isOwner ? planet.buildings.map(b => ({ type: b.type, status: b.status })) : [],
+      };
+    });
 
     res.json({
       planets: result, // Formerly castles

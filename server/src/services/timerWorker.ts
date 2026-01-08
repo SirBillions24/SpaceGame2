@@ -1,6 +1,7 @@
 import prisma from '../lib/prisma';
 import { resolveCombat } from './combatService';
 import { syncPlanetResources } from './planetService';
+import { updateProbes } from './espionageService';
 
 const CHECK_INTERVAL = 5000; // Check every 5 seconds
 
@@ -10,6 +11,9 @@ const CHECK_INTERVAL = 5000; // Check every 5 seconds
 async function processArrivedFleets() {
   try {
     const now = new Date();
+
+    // 0. Update Espionage Probes
+    await updateProbes();
 
     // Find all fleets that should have arrived
     const arrivedFleets = await prisma.fleet.findMany({

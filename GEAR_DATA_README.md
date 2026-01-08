@@ -234,3 +234,4 @@ export const ALL_GEAR_ITEMS: GearItemDefinition[] = [
 - **Balance issues?** Check total bonuses don't exceed caps when all items equipped
 
 
+

@@ -10,9 +10,20 @@ interface PlanetBannerProps {
   onClose: () => void;
   onSendFleet: () => void;
   onSelectAsSource: () => void;
+  onLaunchProbe?: () => void;
+  hasIntelHub?: boolean;
 }
 
-export default function PlanetBanner({ planet, mapContainer, onEnterPlanet, onClose, onSendFleet, onSelectAsSource }: PlanetBannerProps) {
+export default function PlanetBanner({ 
+  planet, 
+  mapContainer, 
+  onEnterPlanet, 
+  onClose, 
+  onSendFleet, 
+  onSelectAsSource,
+  onLaunchProbe,
+  hasIntelHub
+}: PlanetBannerProps) {
   const bannerRef = useRef<HTMLDivElement>(null);
 
 
