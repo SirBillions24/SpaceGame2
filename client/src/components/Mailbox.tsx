@@ -262,7 +262,7 @@ function MessageView({ id, items, onBack }: { id: string, items: any[], onBack: 
 function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
     const [report, setReport] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'overview' | 'details'>('details'); // Default to details as per user pref
+    const [viewMode, setViewMode] = useState<'overview' | 'details'>('overview'); // Default to overview
     const [expandedSectors, setExpandedSectors] = useState<string[]>([]);
 
     const toggleSector = (laneKey: string) => {
@@ -347,17 +347,18 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
             {viewMode === 'overview' && (
                 <div className="br-overview">
                     {/* Admiral Information */}
-                    {(admirals.attacker || admirals.defender) && (
-                        <div className="admiral-section">
-                            <h4>Commanders</h4>
-                            <div className="admiral-grid">
-                                {admirals.attacker && (
-                                    <div className="admiral-card attacker">
-                                        <div className="admiral-header">
-                                            <span className="admiral-label">Attacker</span>
-                                            <span className="admiral-name">{admirals.attacker.name}</span>
-                                        </div>
-                                        <div className="admiral-bonuses">
+                    <div className="admiral-section">
+                        <h4>Commanders</h4>
+                        <div className="admiral-grid">
+                            {/* Attacker Admiral Card */}
+                            <div className="admiral-card attacker">
+                                <div className="admiral-header">
+                                    <span className="admiral-label">Attacker</span>
+                                    <span className="admiral-name">{admirals.attacker?.name || 'No Admiral Assigned'}</span>
+                                </div>
+                                <div className="admiral-bonuses">
+                                    {admirals.attacker ? (
+                                        <>
                                             {admirals.attacker.meleeStrengthBonus > 0 && (
                                                 <span className="bonus attack">+{admirals.attacker.meleeStrengthBonus}% Melee</span>
                                             )}
@@ -372,16 +373,24 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                              admirals.attacker.canopyReductionBonus === 0 && (
                                                 <span className="no-bonus">No bonuses</span>
                                             )}
-                                        </div>
-                                    </div>
-                                )}
-                                {admirals.defender && (
-                                    <div className="admiral-card defender">
-                                        <div className="admiral-header">
-                                            <span className="admiral-label">Defender</span>
-                                            <span className="admiral-name">{admirals.defender.name}</span>
-                                        </div>
-                                        <div className="admiral-bonuses">
+                                        </>
+                                    ) : (
+                                        <span className="no-bonus">No bonuses applied to this fleet</span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Defender Admiral Card */}
+                            <div className="admiral-card defender">
+                                <div className="admiral-header">
+                                    <span className="admiral-label">Defender</span>
+                                    <span className="admiral-name">
+                                        {admirals.defender ? admirals.defender.name : 'No Admiral Stationed'}
+                                    </span>
+                                </div>
+                                <div className="admiral-bonuses">
+                                    {admirals.defender ? (
+                                        <>
                                             {admirals.defender.meleeStrengthBonus > 0 && (
                                                 <span className="bonus attack">+{admirals.defender.meleeStrengthBonus}% Melee</span>
                                             )}
@@ -396,12 +405,14 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                               !admirals.defender.canopyReductionBonus) && (
                                                 <span className="no-bonus">No bonuses</span>
                                             )}
-                                        </div>
-                                    </div>
-                                )}
+                                        </>
+                                    ) : (
+                                        <span className="no-bonus">No defensive bonuses active</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    )}
+                    </div>
                     <div className="loot-section">
                         <h4>Resources Plundered</h4>
                         {report.resourcesJson ? (
@@ -545,12 +556,14 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                     <div>Deployed: <UnitList units={surfaceResult.initialAttackerUnits} colorClass="neutral" /></div>
                                     <div className="bonus-breakdown">
                                         Sector Bonus: +{(surfaceResult.attackerBonus * 100).toFixed(0)}%
-                                        {admirals.attacker && (
+                                        {admirals.attacker ? (
                                             <>
-                                                {admirals.attacker.meleeStrengthBonus > 0 && ` | M: +${admirals.attacker.meleeStrengthBonus}%`}
+                                                {admirals.attacker.meleeStrengthBonus > 0 && ` | Melee: +${admirals.attacker.meleeStrengthBonus}%`}
                                                 {admirals.attacker.rangedStrengthBonus > 0 && ` | R: +${admirals.attacker.rangedStrengthBonus}%`}
-                                                {admirals.attacker.canopyReductionBonus !== 0 && ` | C: ${admirals.attacker.canopyReductionBonus}%`}
+                                                {admirals.attacker.canopyReductionBonus !== 0 && ` | Canopy Reduc: ${admirals.attacker.canopyReductionBonus}%`}
                                             </>
+                                        ) : (
+                                            ` | No Admiral`
                                         )}
                                     </div>
                                     <div className="losses">Lost: <UnitList units={surfaceResult.attackerLosses} colorClass="red" /></div>
@@ -561,12 +574,14 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                     <div>Deployed: <UnitList units={surfaceResult.initialDefenderUnits} colorClass="neutral" /></div>
                                     <div className="bonus-breakdown">
                                         Sector Bonus: +{(surfaceResult.defenderBonus * 100).toFixed(0)}%
-                                        {admirals.defender && (
+                                        {admirals.defender ? (
                                             <>
-                                                {admirals.defender.meleeStrengthBonus > 0 && ` | M: +${admirals.defender.meleeStrengthBonus}%`}
+                                                {admirals.defender.meleeStrengthBonus > 0 && ` | Melee: +${admirals.defender.meleeStrengthBonus}%`}
                                                 {admirals.defender.rangedStrengthBonus > 0 && ` | R: +${admirals.defender.rangedStrengthBonus}%`}
-                                                {admirals.defender.canopyReductionBonus !== 0 && ` | C: ${admirals.defender.canopyReductionBonus}%`}
+                                                {admirals.defender.canopyReductionBonus !== 0 && ` | Canopy Reduc: ${admirals.defender.canopyReductionBonus}%`}
                                             </>
+                                        ) : (
+                                            ` | No Admiral`
                                         )}
                                     </div>
                                     <div className="losses">Lost: <UnitList units={surfaceResult.defenderLosses} colorClass="red" /></div>

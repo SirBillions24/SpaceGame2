@@ -95,6 +95,16 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
       },
     };
 
+    const buildingsForResponse = (syncedPlanet as any).buildings || [];
+    const buildingsMapped = buildingsForResponse.map((b: any) => ({
+      id: b.id,
+      type: b.type,
+      x: b.x,
+      y: b.y,
+      level: b.level,
+      status: b.status,
+    }));
+
     if (isOwner) {
       responseData.units = units;
       responseData.resources = {
@@ -108,7 +118,7 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
         titanium: planetStats.titaniumRate,
         food: planetStats.foodRate
       };
-      responseData.buildings = (syncedPlanet as any).buildings || [];
+      responseData.buildings = buildingsMapped;
       responseData.gridSizeX = (syncedPlanet as any).gridSizeX || (syncedPlanet as any).gridSize || 10;
       responseData.gridSizeY = (syncedPlanet as any).gridSizeY || (syncedPlanet as any).gridSize || 10;
       responseData.construction = {
@@ -127,7 +137,9 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
       responseData.units = {};
       responseData.resources = { carbon: 0, titanium: 0, food: 0, credits: 0 };
       responseData.production = { carbon: 0, titanium: 0, food: 0 };
-      responseData.buildings = [];
+      responseData.buildings = buildingsMapped;
+      responseData.gridSizeX = (syncedPlanet as any).gridSizeX || (syncedPlanet as any).gridSize || 10;
+      responseData.gridSizeY = (syncedPlanet as any).gridSizeY || (syncedPlanet as any).gridSize || 10;
       responseData.stats = { ...planetStats, carbonRate: 0, titaniumRate: 0, foodRate: 0, netFoodRate: 0, population: 0, creditRate: 0 };
     }
 

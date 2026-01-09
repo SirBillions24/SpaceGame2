@@ -297,7 +297,14 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
   const hasDraggedRef = useRef<boolean>(false);
 
   const currentUser = getCurrentUser();
-  const isOwner = currentUser?.userId === planet.ownerId;
+  const [isOwner, setIsOwner] = useState(currentUser?.userId === planet.ownerId);
+
+  // Sync isOwner when planetData loads
+  useEffect(() => {
+    if (planetData) {
+      setIsOwner(currentUser?.userId === planetData.ownerId);
+    }
+  }, [planetData, currentUser?.userId]);
 
   // Initial Load
   const loadPlanetData = async () => {
@@ -758,73 +765,75 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
           </div>
         </div>
 
-        <div className="planet-content">
-          {/* Left Sidebar: Structures */}
-          <div className="planet-sidebar">
-            <div className="subsection-container">
-              {Object.entries(BUILDING_CATEGORIES.structures.subsections).map(([subKey, subsection]) => {
-                const isExpanded = expandedSubsections.has(subKey);
-                return (
-                  <div key={subKey} className="subsection">
-                    <button
-                      className="subsection-header"
-                      onClick={() => {
-                        const newExpanded = new Set(expandedSubsections);
-                        if (isExpanded) {
-                          newExpanded.delete(subKey);
-                        } else {
-                          newExpanded.add(subKey);
-                        }
-                        setExpandedSubsections(newExpanded);
-                      }}
-                    >
-                      <span className="subsection-title">{subsection.label}</span>
-                      <span className="subsection-toggle">{isExpanded ? '−' : '+'}</span>
-                    </button>
-                    {isExpanded && (
-                      <div className="subsection-content">
-                        <div className="building-grid">
-                          {subsection.buildings.map(type => {
-                            const cost = BUILDING_COSTS[type];
-                            const canAfford = resources && resources.carbon >= cost.c && resources.titanium >= cost.t;
-                            
-                            // Check if limited building already exists
-                            const limitedBuildings = ['storage_depot', 'naval_academy', 'orbital_garrison', 'tavern', 'defense_workshop', 'siege_workshop'];
-                            const isLimited = limitedBuildings.includes(type);
-                            const existingB = buildings.find(b => b.type === type);
+        <div className={`planet-content ${!isOwner ? 'observation-mode' : ''}`}>
+          {/* Left Sidebar: Structures - Only for Owners */}
+          {isOwner && (
+            <div className="planet-sidebar">
+              <div className="subsection-container">
+                {Object.entries(BUILDING_CATEGORIES.structures.subsections).map(([subKey, subsection]) => {
+                  const isExpanded = expandedSubsections.has(subKey);
+                  return (
+                    <div key={subKey} className="subsection">
+                      <button
+                        className="subsection-header"
+                        onClick={() => {
+                          const newExpanded = new Set(expandedSubsections);
+                          if (isExpanded) {
+                            newExpanded.delete(subKey);
+                          } else {
+                            newExpanded.add(subKey);
+                          }
+                          setExpandedSubsections(newExpanded);
+                        }}
+                      >
+                        <span className="subsection-title">{subsection.label}</span>
+                        <span className="subsection-toggle">{isExpanded ? '−' : '+'}</span>
+                      </button>
+                      {isExpanded && (
+                        <div className="subsection-content">
+                          <div className="building-grid">
+                            {subsection.buildings.map(type => {
+                              const cost = BUILDING_COSTS[type];
+                              const canAfford = resources && resources.carbon >= cost.c && resources.titanium >= cost.t;
+                              
+                              // Check if limited building already exists
+                              const limitedBuildings = ['storage_depot', 'naval_academy', 'orbital_garrison', 'tavern', 'defense_workshop', 'siege_workshop'];
+                              const isLimited = limitedBuildings.includes(type);
+                              const existingB = buildings.find(b => b.type === type);
 
-                            return (
-                              <div
-                                key={type}
-                                className={`building-card ${buildMode === type ? 'active' : ''} ${!canAfford ? 'disabled' : ''} ${type === 'colony_hub' ? 'hidden' : ''}`}
-                                style={{ display: type === 'colony_hub' ? 'none' : 'flex' }}
-                                onClick={() => {
-                                  if (isLimited && existingB) {
-                                    setShowUpgradeMenu({ building: existingB });
-                                    return;
-                                  }
-                                  canAfford && setBuildMode(buildMode === type ? null : type);
-                                }}
-                                onMouseEnter={(e) => handleMouseEnterBuilding(e, type)}
-                                onMouseLeave={() => setHoveredBuildingType(null)}
-                              >
-                                <div className="building-card-header">
-                                  <span className="building-card-name">{BUILDING_LABELS[type]}</span>
+                              return (
+                                <div
+                                  key={type}
+                                  className={`building-card ${buildMode === type ? 'active' : ''} ${!canAfford ? 'disabled' : ''} ${type === 'colony_hub' ? 'hidden' : ''}`}
+                                  style={{ display: type === 'colony_hub' ? 'none' : 'flex' }}
+                                  onClick={() => {
+                                    if (isLimited && existingB) {
+                                      setShowUpgradeMenu({ building: existingB });
+                                      return;
+                                    }
+                                    canAfford && setBuildMode(buildMode === type ? null : type);
+                                  }}
+                                  onMouseEnter={(e) => handleMouseEnterBuilding(e, type)}
+                                  onMouseLeave={() => setHoveredBuildingType(null)}
+                                >
+                                  <div className="building-card-header">
+                                    <span className="building-card-name">{BUILDING_LABELS[type]}</span>
+                                  </div>
+                                  <div className="building-card-cost">
+                                    {isLimited && existingB ? 'LIMIT 1 (UPGRADE)' : `${cost.c}C ${cost.t}Ti`}
+                                  </div>
                                 </div>
-                                <div className="building-card-cost">
-                                  {isLimited && existingB ? 'LIMIT 1 (UPGRADE)' : `${cost.c}C ${cost.t}Ti`}
-                                </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Main Area: Grid + Resources */}
           <div className="planet-main-area">
@@ -833,13 +842,25 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
               <div className="resources-list">
                 <div className="resource-item">
                   <div className="res-cap-label">Carbon Storage</div>
-                  <div className="res-cap-value">{planetData?.stats?.maxStorage?.toLocaleString() || '1,000'} Cap</div>
-                  <span className="res-rate">Rate: +{planetData?.production?.carbon.toFixed(2)}/h</span>
+                  {isOwner ? (
+                    <>
+                      <div className="res-cap-value">{planetData?.stats?.maxStorage?.toLocaleString() || '1,000'} Cap</div>
+                      <span className="res-rate">Rate: +{planetData?.production?.carbon.toFixed(2)}/h</span>
+                    </>
+                  ) : (
+                    <div className="res-cap-value">CLASSIFIED</div>
+                  )}
                 </div>
                 <div className="resource-item">
                   <div className="res-cap-label">Titanium Storage</div>
-                  <div className="res-cap-value">{planetData?.stats?.maxStorage?.toLocaleString() || '1,000'} Cap</div>
-                  <span className="res-rate">Rate: +{planetData?.production?.titanium.toFixed(2)}/h</span>
+                  {isOwner ? (
+                    <>
+                      <div className="res-cap-value">{planetData?.stats?.maxStorage?.toLocaleString() || '1,000'} Cap</div>
+                      <span className="res-rate">Rate: +{planetData?.production?.titanium.toFixed(2)}/h</span>
+                    </>
+                  ) : (
+                    <div className="res-cap-value">CLASSIFIED</div>
+                  )}
                 </div>
                 <div className="resource-item">
                   <div className="res-cap-label">Grid Size</div>
@@ -924,116 +945,118 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
             </div>
           </div>
 
-          {/* Right Sidebar: Production & Fleet Management */}
-          <div className="planet-sidebar">
-            <div className="subsection-container">
-              {/* Production Section */}
-              <div className="subsection">
-                <button
-                  className="subsection-header"
-                  onClick={() => {
-                    const newExpanded = new Set(expandedSubsections);
-                    if (expandedSubsections.has('workshops')) {
-                      newExpanded.delete('workshops');
-                    } else {
-                      newExpanded.add('workshops');
-                    }
-                    setExpandedSubsections(newExpanded);
-                  }}
-                >
-                  <span className="subsection-title">Production</span>
-                  <span className="subsection-toggle">{expandedSubsections.has('workshops') ? '−' : '+'}</span>
-                </button>
-                {expandedSubsections.has('workshops') && (
-                  <div className="subsection-content">
-                    <div className="action-grid">
-                      {buildings.some(b => b.type === 'defense_workshop' && b.status === 'active') && (
-                        <button 
-                          className="action-card"
-                          onClick={() => setShowWorkshop('defense_workshop')}
-                        >
-                          <div className="action-icon">⚙️</div>
-                          <div className="action-label">Systems Workshop</div>
-                        </button>
-                      )}
-                      {buildings.some(b => b.type === 'siege_workshop' && b.status === 'active') && (
-                        <button 
-                          className="action-card"
-                          onClick={() => setShowWorkshop('siege_workshop')}
-                        >
-                          <div className="action-icon">💣</div>
-                          <div className="action-label">Munitions Factory</div>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Fleet Management Section */}
-              <div className="subsection">
-                <button
-                  className="subsection-header"
-                  onClick={() => {
-                    const newExpanded = new Set(expandedSubsections);
-                    if (expandedSubsections.has('operations')) {
-                      newExpanded.delete('operations');
-                    } else {
-                      newExpanded.add('operations');
-                    }
-                    setExpandedSubsections(newExpanded);
-                  }}
-                >
-                  <span className="subsection-title">Fleet Management</span>
-                  <span className="subsection-toggle">{expandedSubsections.has('operations') ? '−' : '+'}</span>
-                </button>
-                {expandedSubsections.has('operations') && (
-                  <div className="subsection-content">
-                    <div className="action-grid">
-                      {/* Base Action: Defensive Strategy is always available */}
-                      <button 
-                        className="action-card"
-                        onClick={() => setShowDefensePanel(true)}
-                      >
-                        <div className="action-icon">🛡️</div>
-                        <div className="action-label">Defensive Strategy</div>
-                      </button>
-
-                      {buildings.some(b => b.type === 'orbital_garrison' && b.status === 'active') && (
-                        <button 
-                          className="action-card"
-                          onClick={() => setShowRecruitmentPanel(true)}
-                        >
-                          <div className="action-icon">👥</div>
-                          <div className="action-label">Recruitment Console</div>
-                        </button>
-                      )}
-                      {buildings.some(b => b.type === 'naval_academy' && b.status === 'active') && (
-                        <>
+          {/* Right Sidebar: Production & Fleet Management - Only for Owners */}
+          {isOwner && (
+            <div className="planet-sidebar">
+              <div className="subsection-container">
+                {/* Production Section */}
+                <div className="subsection">
+                  <button
+                    className="subsection-header"
+                    onClick={() => {
+                      const newExpanded = new Set(expandedSubsections);
+                      if (expandedSubsections.has('workshops')) {
+                        newExpanded.delete('workshops');
+                      } else {
+                        newExpanded.add('workshops');
+                      }
+                      setExpandedSubsections(newExpanded);
+                    }}
+                  >
+                    <span className="subsection-title">Production</span>
+                    <span className="subsection-toggle">{expandedSubsections.has('workshops') ? '−' : '+'}</span>
+                  </button>
+                  {expandedSubsections.has('workshops') && (
+                    <div className="subsection-content">
+                      <div className="action-grid">
+                        {buildings.some(b => b.type === 'defense_workshop' && b.status === 'active') && (
                           <button 
                             className="action-card"
-                            onClick={() => setShowAdmiralPanel(true)}
+                            onClick={() => setShowWorkshop('defense_workshop')}
                           >
-                            <div className="action-icon">⭐</div>
-                            <div className="action-label">Admiral Command</div>
+                            <div className="action-icon">⚙️</div>
+                            <div className="action-label">Systems Workshop</div>
                           </button>
-                        </>
-                      )}
-                      {buildings.some(b => b.type === 'tavern' && b.status === 'active') && (
+                        )}
+                        {buildings.some(b => b.type === 'siege_workshop' && b.status === 'active') && (
+                          <button 
+                            className="action-card"
+                            onClick={() => setShowWorkshop('siege_workshop')}
+                          >
+                            <div className="action-icon">💣</div>
+                            <div className="action-label">Munitions Factory</div>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Fleet Management Section */}
+                <div className="subsection">
+                  <button
+                    className="subsection-header"
+                    onClick={() => {
+                      const newExpanded = new Set(expandedSubsections);
+                      if (expandedSubsections.has('operations')) {
+                        newExpanded.delete('operations');
+                      } else {
+                        newExpanded.add('operations');
+                      }
+                      setExpandedSubsections(newExpanded);
+                    }}
+                  >
+                    <span className="subsection-title">Fleet Management</span>
+                    <span className="subsection-toggle">{expandedSubsections.has('operations') ? '−' : '+'}</span>
+                  </button>
+                  {expandedSubsections.has('operations') && (
+                    <div className="subsection-content">
+                      <div className="action-grid">
+                        {/* Base Action: Defensive Strategy is always available */}
                         <button 
                           className="action-card"
-                          onClick={() => setShowEspionagePanel(true)}
+                          onClick={() => setShowDefensePanel(true)}
                         >
-                          <div className="action-icon">📡</div>
-                          <div className="action-label">Intelligence Hub</div>
+                          <div className="action-icon">🛡️</div>
+                          <div className="action-label">Defensive Strategy</div>
                         </button>
-                      )}
+
+                        {buildings.some(b => b.type === 'orbital_garrison' && b.status === 'active') && (
+                          <button 
+                            className="action-card"
+                            onClick={() => setShowRecruitmentPanel(true)}
+                          >
+                            <div className="action-icon">👥</div>
+                            <div className="action-label">Recruitment Console</div>
+                          </button>
+                        )}
+                        {buildings.some(b => b.type === 'naval_academy' && b.status === 'active') && (
+                          <>
+                            <button 
+                              className="action-card"
+                              onClick={() => setShowAdmiralPanel(true)}
+                            >
+                              <div className="action-icon">⭐</div>
+                              <div className="action-label">Admiral Command</div>
+                            </button>
+                          </>
+                        )}
+                        {buildings.some(b => b.type === 'tavern' && b.status === 'active') && (
+                          <button 
+                            className="action-card"
+                            onClick={() => setShowEspionagePanel(true)}
+                          >
+                            <div className="action-icon">📡</div>
+                            <div className="action-label">Intelligence Hub</div>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Global Hover Tooltip (Conditional) */}
           {hoveredBuildingType && BUILDING_INFO[hoveredBuildingType] && (

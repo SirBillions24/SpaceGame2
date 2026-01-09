@@ -108,15 +108,14 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
             // Fetch layout
             const profile = await api.getDefenseProfile(currentPlanet.id);
 
-            // Canopy Level determines Max Slots. Level 1 = 1 Slot.
-            const canopyLevel = profile.canopyLevel || 1;
+            // Canopy Level determines Max Slots. 
+            const canopyLevel = profile.canopyLevel || 0;
             const hubLevel = profile.dockingHubLevel || 0;
             const minefieldLevel = profile.minefieldLevel || 0;
-            setMaxSlots(Math.max(1, canopyLevel));
+            setMaxSlots(canopyLevel); 
             
-            // Get defense capacity from API response (if available)
-            const defenseCapacity = profile.defenseCapacity || 0;
-            setCaps({ canopy: defenseCapacity || (canopyLevel * 20) }); // Fallback to old calculation if not available
+            // Get defense capacity from API response
+            setCaps({ canopy: profile.defenseCapacity ?? 0 });
             
             // Set shield bonus
             if (p.buildings) {
@@ -448,7 +447,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
                             <div className="defense-stats-new">
                                 <div className="stat-pill">
                                     <span className="label">Shield:</span>
-                                    <span className="value">{shieldBonus}% (Lvl {maxSlots})</span>
+                                    <span className="value">{shieldBonus}% (Lvl {currentPlanet.energyCanopyLevel || 0})</span>
                                 </div>
                                 <div className="stat-pill">
                                     <span className="label">Hub:</span>
@@ -638,7 +637,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
                             <div className="capacity-bar-bg">
                                 <div 
                                     className={`capacity-bar-fill ${capacityExceeded ? 'exceeded' : ''}`} 
-                                    style={{ width: `${Math.min(100, (totalUnitsAssigned / caps.canopy) * 100)}%` }}
+                                    style={{ width: `${caps.canopy > 0 ? Math.min(100, (totalUnitsAssigned / caps.canopy) * 100) : 0}%` }}
                                 />
                             </div>
                         </div>

@@ -93,6 +93,15 @@
   min-height: 0;
 }
 
+.planet-content.observation-mode {
+  justify-content: center;
+}
+
+.planet-content.observation-mode .planet-main-area {
+  max-width: 1200px;
+  flex: 0 1 auto;
+}
+
 /* Sidebar Styling */
 .planet-sidebar {
   width: 320px;

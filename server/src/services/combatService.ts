@@ -451,8 +451,8 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     throw new Error("Invalid fleet state");
   }
 
-  // Get admiral bonuses (attack bonuses only - defense system separate)
-  const attackerAdmiral = fleet.admiral || fleet.owner.admiral;
+  // Get admiral bonuses (attack bonuses only - MUST be explicitly assigned to the fleet)
+  const attackerAdmiral = fleet.admiral;
   const attackerBonuses = attackerAdmiral ? {
     meleeStrengthBonus: (attackerAdmiral as any).meleeStrengthBonus || 0,
     rangedStrengthBonus: (attackerAdmiral as any).rangedStrengthBonus || 0,
