@@ -231,6 +231,95 @@ async function processFleetReturn(job: Job<FleetReturnJob>) {
             });
         }
 
+        // Restore borrowed troops to defense layout from reserves
+        if ((fleet as any).borrowedFromDefenseJson) {
+            const borrowed = JSON.parse((fleet as any).borrowedFromDefenseJson);
+
+            const defenseLayout = await tx.defenseLayout.findUnique({
+                where: { planetId: fleet.fromPlanetId },
+            });
+
+            if (defenseLayout) {
+                // Get current planet units (after adding returning units back)
+                const planetUnits = await tx.planetUnit.findMany({
+                    where: { planetId: fleet.fromPlanetId },
+                });
+                const availableUnits: Record<string, number> = {};
+                planetUnits.forEach(pu => availableUnits[pu.unitType] = pu.count);
+
+                // Parse current defense layout to see what's already assigned
+                const currentDefense: Record<string, Record<string, number>> = { front: {}, left: {}, right: {} };
+                const parseLane = (laneKey: string, laneName: string) => {
+                    try {
+                        const laneData = JSON.parse((defenseLayout as any)[laneKey] || '{}');
+                        const laneUnits = laneData.units || laneData;
+                        for (const [unitType, count] of Object.entries(laneUnits)) {
+                            if (typeof count === 'number' && count > 0) {
+                                currentDefense[laneName][unitType] = count;
+                            }
+                        }
+                    } catch (e) { }
+                };
+                parseLane('frontLaneJson', 'front');
+                parseLane('leftLaneJson', 'left');
+                parseLane('rightLaneJson', 'right');
+
+                // Calculate total on defense per unit type
+                const totalOnDefense: Record<string, number> = {};
+                for (const lane of Object.values(currentDefense)) {
+                    for (const [unitType, count] of Object.entries(lane)) {
+                        totalOnDefense[unitType] = (totalOnDefense[unitType] || 0) + count;
+                    }
+                }
+
+                // Calculate available reserves (planet units not on defense)
+                const reserves: Record<string, number> = {};
+                for (const [unitType, count] of Object.entries(availableUnits)) {
+                    reserves[unitType] = Math.max(0, count - (totalOnDefense[unitType] || 0));
+                }
+
+                const updateData: Record<string, string> = {};
+
+                const restoreLane = (laneKey: string, laneName: string) => {
+                    try {
+                        const currentLane = JSON.parse((defenseLayout as any)[laneKey] || '{}');
+                        const hasTools = currentLane.tools !== undefined;
+                        const laneUnits = hasTools ? { ...(currentLane.units || {}) } : { ...currentLane };
+
+                        for (const [unitType, originalBorrowed] of Object.entries(borrowed[laneName] || {})) {
+                            const currentLaneCount = laneUnits[unitType] || 0;
+
+                            // Calculate how many we can restore from reserves
+                            const reserveAvailable = reserves[unitType] || 0;
+                            const canRestore = Math.min(originalBorrowed as number, reserveAvailable);
+
+                            if (canRestore > 0) {
+                                laneUnits[unitType] = currentLaneCount + canRestore;
+                                // Deduct from reserves so we don't over-allocate across lanes
+                                reserves[unitType] = reserveAvailable - canRestore;
+                            }
+                        }
+
+                        updateData[laneKey] = JSON.stringify(hasTools ? { units: laneUnits, tools: currentLane.tools } : laneUnits);
+                    } catch (e) {
+                        console.error(`Error restoring defense lane ${laneName}:`, e);
+                    }
+                };
+
+                restoreLane('frontLaneJson', 'front');
+                restoreLane('leftLaneJson', 'left');
+                restoreLane('rightLaneJson', 'right');
+
+                if (Object.keys(updateData).length > 0) {
+                    await tx.defenseLayout.update({
+                        where: { id: defenseLayout.id },
+                        data: updateData,
+                    });
+                    console.log(`🛡️ Restored troops to defense for fleet ${fleetId}`);
+                }
+            }
+        }
+
         return fleet;
     });
 

@@ -115,17 +115,30 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
     const [waves, setWaves] = useState<WaveData[]>(createInitialState());
     const [selectedItem, setSelectedItem] = useState<{ type: ItemType, id: string } | null>(null);
     const [placementAmount, setPlacementAmount] = useState<number | 'max'>('max');
-    const [admiral, setAdmiral] = useState<{ 
-        id: string; 
-        name: string; 
-        meleeStrengthBonus: number; 
-        rangedStrengthBonus: number; 
+
+    // Admiral types
+    type AdmiralData = {
+        id: string;
+        name: string;
+        meleeStrengthBonus: number;
+        rangedStrengthBonus: number;
         canopyReductionBonus: number;
         stationedPlanetId?: string | null;
-    } | null>(null);
+        isOnMission?: boolean;
+        isBusy?: boolean;
+    };
+
+    // Selected admiral (null = None selected)
+    const [selectedAdmiral, setSelectedAdmiral] = useState<AdmiralData | null>(null);
+    // All admirals for dropdown display (includes busy ones)
+    const [allAdmirals, setAllAdmirals] = useState<AdmiralData[]>([]);
     const [loadingAdmiral, setLoadingAdmiral] = useState(false);
     const [showAdmiralDropdown, setShowAdmiralDropdown] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // State for defense borrowing warning
+    const [borrowedFromDefense, setBorrowedFromDefense] = useState<Record<string, Record<string, number>>>({ front: {}, left: {}, right: {} });
+    const [hasBorrowedTroops, setHasBorrowedTroops] = useState(false);
 
     // Load admiral on mount
     useEffect(() => {
@@ -149,10 +162,36 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
         try {
             setLoadingAdmiral(true);
             const admiralData = await api.getAdmiral();
-            setAdmiral(admiralData);
+
+            // Check if admiral is already on an active mission
+            const fleetsResponse = await api.getFleets();
+            const activeFleets = fleetsResponse.fleets || [];
+            const admiralOnMission = activeFleets.some(
+                (f: any) => f.admiralId === admiralData.id && ['enroute', 'returning'].includes(f.status)
+            );
+            const isStationedForDefense = !!admiralData.stationedPlanetId;
+            const isBusy = admiralOnMission || isStationedForDefense;
+
+            // Store admiral data with busy status
+            const admiralWithStatus: AdmiralData = {
+                ...admiralData,
+                isOnMission: admiralOnMission,
+                isBusy
+            };
+
+            // Add to dropdown list
+            setAllAdmirals([admiralWithStatus]);
+
+            // Only pre-select if NOT busy
+            if (!isBusy) {
+                setSelectedAdmiral(admiralWithStatus);
+            } else {
+                setSelectedAdmiral(null); // Default to None
+            }
         } catch (err) {
             // Admiral might not exist yet, that's okay
-            setAdmiral(null);
+            setSelectedAdmiral(null);
+            setAllAdmirals([]);
         } finally {
             setLoadingAdmiral(false);
         }
@@ -187,6 +226,35 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
         });
         return used;
     }, [waves]);
+
+    // Fetch defense borrowing preview when unit allocations change
+    useEffect(() => {
+        const unitTotals: Record<string, number> = {};
+        ALL_UNITS.forEach(u => {
+            if (usedTotals[u] && usedTotals[u] > 0) {
+                unitTotals[u] = usedTotals[u];
+            }
+        });
+
+        if (Object.keys(unitTotals).length === 0) {
+            setBorrowedFromDefense({ front: {}, left: {}, right: {} });
+            setHasBorrowedTroops(false);
+            return;
+        }
+
+        // Debounce the API call
+        const timeoutId = setTimeout(async () => {
+            try {
+                const result = await api.previewDefenseBorrowing(fromPlanet.id, unitTotals);
+                setBorrowedFromDefense(result.borrowedFromDefense);
+                setHasBorrowedTroops(result.hasBorrowedTroops);
+            } catch (err) {
+                console.error('Failed to preview defense borrowing:', err);
+            }
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+    }, [usedTotals, fromPlanet.id]);
 
     // Handle Slot Click -> Assign / Edit
     const handleSlotClick = (waveIdx: number, lane: Lane, slotType: 'unitSlots' | 'toolSlots', slotIdx: number) => {
@@ -282,7 +350,8 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
             });
         });
 
-        onCommit(finalSoldierUnits, laneAssignments, admiral?.id);
+        // Only include admiral if one is selected (selectedAdmiral is already available)
+        onCommit(finalSoldierUnits, laneAssignments, selectedAdmiral?.id);
     };
 
     return (
@@ -297,14 +366,14 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                 <div className="npc-stability-container" style={{ display: 'inline-flex', alignItems: 'center', marginLeft: '10px', gap: '8px' }}>
                                     <span style={{ fontSize: '0.7rem', color: '#888' }}>STABILITY:</span>
                                     <div className="stability-bar-bg" style={{ width: '60px', height: '6px', background: '#222', borderRadius: '3px', position: 'relative', overflow: 'hidden', border: '1px solid #444' }}>
-                                        <div 
-                                            className="stability-bar-fill" 
-                                            style={{ 
-                                                width: `${Math.max(0, 100 - ((toPlanet.attackCount || 0) / (toPlanet.maxAttacks || 15) * 100))}%`, 
-                                                height: '100%', 
+                                        <div
+                                            className="stability-bar-fill"
+                                            style={{
+                                                width: `${Math.max(0, 100 - ((toPlanet.attackCount || 0) / (toPlanet.maxAttacks || 15) * 100))}%`,
+                                                height: '100%',
                                                 background: (toPlanet.attackCount || 0) / (toPlanet.maxAttacks || 15) > 0.7 ? '#ff4d4d' : '#00ff88',
                                                 transition: 'width 0.3s ease'
-                                            }} 
+                                            }}
                                         />
                                     </div>
                                     <span style={{ fontSize: '0.7rem', color: '#00f3ff' }}>{Math.max(0, (toPlanet.maxAttacks || 15) - (toPlanet.attackCount || 0))} Hits Left</span>
@@ -323,55 +392,65 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                     <div className="admiral-selector-ap">
                         <label>Admiral:</label>
                         <div className="admiral-dropdown-container" ref={dropdownRef}>
-                        <button 
-                            className={`admiral-dropdown-btn ${admiral?.stationedPlanetId ? 'busy' : ''}`}
-                            onClick={() => setShowAdmiralDropdown(!showAdmiralDropdown)}
-                        >
-                            {admiral ? (
-                                <>
-                                    <span className="admiral-name">{admiral.name}</span>
-                                    {admiral.stationedPlanetId ? (
-                                        <span className="admiral-status-busy">(STATIONED FOR DEFENSE)</span>
-                                    ) : (
-                                        <span className="admiral-bonus">
-                                            {admiral.meleeStrengthBonus > 0 && `+${admiral.meleeStrengthBonus}% M`}
-                                            {admiral.rangedStrengthBonus > 0 && ` / +${admiral.rangedStrengthBonus}% R`}
-                                        </span>
-                                    )}
-                                </>
-                            ) : (
-                                <span className="no-admiral-text">None Selected</span>
-                            )}
-                            <span className="dropdown-arrow">▼</span>
-                        </button>
-                        {showAdmiralDropdown && (
-                            <div className="admiral-dropdown-menu">
-                                {loadingAdmiral ? (
-                                    <div className="dropdown-item">Loading...</div>
-                                ) : admiral ? (
+                            <button
+                                className="admiral-dropdown-btn"
+                                onClick={() => setShowAdmiralDropdown(!showAdmiralDropdown)}
+                            >
+                                {selectedAdmiral ? (
                                     <>
-                                    <div className={`dropdown-item ${admiral.stationedPlanetId ? 'disabled' : 'selected'}`}>
-                                            <span>{admiral.name}</span>
-                                            {admiral.stationedPlanetId ? (
-                                                <span className="item-status-busy">BUSY</span>
-                                            ) : (
-                                                <span className="item-bonus">
-                                                    {admiral.meleeStrengthBonus > 0 && `+${admiral.meleeStrengthBonus}% M`}
-                                                    {admiral.rangedStrengthBonus > 0 && ` / +${admiral.rangedStrengthBonus}% R`}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="dropdown-item" onClick={() => { setAdmiral(null); setShowAdmiralDropdown(false); }}>
-                                            <span>None</span>
-                                        </div>
+                                        <span className="admiral-name">{selectedAdmiral.name}</span>
+                                        <span className="admiral-bonus">
+                                            {selectedAdmiral.meleeStrengthBonus > 0 && `+${selectedAdmiral.meleeStrengthBonus}% M`}
+                                            {selectedAdmiral.rangedStrengthBonus > 0 && ` / +${selectedAdmiral.rangedStrengthBonus}% R`}
+                                        </span>
                                     </>
                                 ) : (
-                                    <div className="dropdown-item" onClick={loadAdmiral}>
-                                        <span>Load Admiral</span>
-                                    </div>
+                                    <span className="no-admiral-text">None Selected</span>
                                 )}
-                            </div>
-                        )}
+                                <span className="dropdown-arrow">▼</span>
+                            </button>
+                            {showAdmiralDropdown && (
+                                <div className="admiral-dropdown-menu">
+                                    {loadingAdmiral ? (
+                                        <div className="dropdown-item">Loading...</div>
+                                    ) : (
+                                        <>
+                                            {/* None option */}
+                                            <div
+                                                className={`dropdown-item ${!selectedAdmiral ? 'selected' : ''}`}
+                                                onClick={() => { setSelectedAdmiral(null); setShowAdmiralDropdown(false); }}
+                                            >
+                                                <span>None</span>
+                                            </div>
+                                            {/* Available admirals */}
+                                            {allAdmirals.map((adm) => (
+                                                <div
+                                                    key={adm.id}
+                                                    className={`dropdown-item ${adm.isBusy ? 'disabled' : ''} ${selectedAdmiral?.id === adm.id ? 'selected' : ''}`}
+                                                    onClick={() => {
+                                                        if (!adm.isBusy) {
+                                                            setSelectedAdmiral(adm);
+                                                            setShowAdmiralDropdown(false);
+                                                        }
+                                                    }}
+                                                >
+                                                    <span>{adm.name}</span>
+                                                    {adm.stationedPlanetId ? (
+                                                        <span className="item-status-busy">STATIONED</span>
+                                                    ) : adm.isOnMission ? (
+                                                        <span className="item-status-busy">ON MISSION</span>
+                                                    ) : (
+                                                        <span className="item-bonus">
+                                                            {adm.meleeStrengthBonus > 0 && `+${adm.meleeStrengthBonus}% M`}
+                                                            {adm.rangedStrengthBonus > 0 && ` / +${adm.rangedStrengthBonus}% R`}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                     <button className="close-ap" onClick={onCancel}>×</button>
@@ -411,9 +490,9 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                                         {slot.itemId ? (
                                                             <>
                                                                 <div className="slot-image-wrapper" style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                    <img 
-                                                                        src={UNIT_ICONS[slot.itemId]} 
-                                                                        alt={slot.itemId} 
+                                                                    <img
+                                                                        src={UNIT_ICONS[slot.itemId]}
+                                                                        alt={slot.itemId}
                                                                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                                                         onError={(e) => {
                                                                             (e.target as HTMLImageElement).style.display = 'none';
@@ -448,9 +527,9 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                                         {slot.itemId ? (
                                                             <>
                                                                 <div className="slot-image-wrapper" style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                    <img 
-                                                                        src={TOOL_ICONS[slot.itemId]} 
-                                                                        alt={slot.itemId} 
+                                                                    <img
+                                                                        src={TOOL_ICONS[slot.itemId]}
+                                                                        alt={slot.itemId}
                                                                         style={{ width: '80%', height: '80%', objectFit: 'contain' }}
                                                                         onError={(e) => {
                                                                             (e.target as HTMLImageElement).style.display = 'none';
@@ -517,10 +596,10 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                         title={`${u.replace('_', ' ').toUpperCase()} (${getUnitClass(u).toUpperCase()}) - Strong vs ${getClassAdvantage(getUnitClass(u))}`}
                                     >
                                         <div className="unit-icon-wrapper" style={{ position: 'relative', width: '40px', height: '40px', marginBottom: '0.5rem' }}>
-                                            <img 
-                                                src={UNIT_ICONS[u]} 
-                                                alt={u} 
-                                                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} 
+                                            <img
+                                                src={UNIT_ICONS[u]}
+                                                alt={u}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }}
                                                 onError={(e) => {
                                                     (e.target as HTMLImageElement).style.display = 'none';
                                                     const parent = (e.target as HTMLImageElement).parentElement;
@@ -555,9 +634,9 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                         className={`palette-item ${selectedItem?.id === t ? 'selected' : ''} ${remaining <= 0 ? 'disabled' : ''}`}
                                         onClick={() => remaining > 0 && setSelectedItem({ type: 'tool', id: t })}
                                     >
-                                        <img 
-                                            src={TOOL_ICONS[t]} 
-                                            alt={t} 
+                                        <img
+                                            src={TOOL_ICONS[t]}
+                                            alt={t}
                                             onError={(e) => {
                                                 (e.target as HTMLImageElement).style.display = 'none';
                                                 const parent = (e.target as HTMLImageElement).parentElement;
@@ -575,13 +654,38 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                     </div>
 
                     <div className="ap-footer">
-                        <button 
-                            className="attack-btn" 
+                        {/* Defense Borrowing Warning */}
+                        {hasBorrowedTroops && (
+                            <div className="defense-borrow-warning">
+                                <div className="warning-icon">⚠️</div>
+                                <div className="warning-content">
+                                    <div className="warning-title">Troops Being Pulled From Defense</div>
+                                    <div className="warning-details">
+                                        {Object.entries(borrowedFromDefense).map(([lane, units]) => {
+                                            const unitEntries = Object.entries(units).filter(([_, c]) => c > 0);
+                                            if (unitEntries.length === 0) return null;
+
+                                            const laneLabel = lane === 'front' ? 'Center' : lane === 'left' ? 'Left' : 'Right';
+                                            return (
+                                                <div key={lane} className="borrow-lane">
+                                                    <span className="lane-name">{laneLabel}:</span>
+                                                    {unitEntries.map(([unitType, count]) => (
+                                                        <span key={unitType} className="borrow-unit">
+                                                            {count}x {unitType.replace('_', ' ')}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        <button
+                            className="attack-btn"
                             onClick={handleLaunch}
-                            disabled={!!admiral?.stationedPlanetId}
-                            title={admiral?.stationedPlanetId ? 'Admiral is stationed for defense' : ''}
                         >
-                            {admiral?.stationedPlanetId ? 'ADMIRAL BUSY' : 'INITIATE ASSAULT'}
+                            INITIATE ASSAULT
                         </button>
                     </div>
                 </div>

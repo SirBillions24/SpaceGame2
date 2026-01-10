@@ -559,6 +559,25 @@ export const api = {
     });
     if (!response.ok) throw new Error('Failed to delete probe');
     return response.json();
+  },
+
+  // Fleet Operations - Preview defense borrowing
+  async previewDefenseBorrowing(fromPlanetId: string, units: Record<string, number>): Promise<{
+    borrowedFromDefense: Record<string, Record<string, number>>;
+    hasBorrowedTroops: boolean;
+    onDefense: Record<string, Record<string, number>>;
+    totalOnDefense: Record<string, number>;
+  }> {
+    const response = await fetch(`${API_BASE_URL}/actions/fleet/preview-defense-borrowing`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ fromPlanetId, units }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to preview defense borrowing');
+    }
+    return response.json();
   }
 };
 

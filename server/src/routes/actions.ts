@@ -86,6 +86,18 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
         return res.status(400).json({ error: 'This admiral is currently stationed for planetary defense and cannot lead a fleet.' });
       }
 
+      // Prevent sending an admiral who is already leading an active fleet
+      const activeFleetWithAdmiral = await prisma.fleet.findFirst({
+        where: {
+          admiralId: req.body.admiralId,
+          status: { in: ['enroute', 'returning'] },
+        },
+      });
+
+      if (activeFleetWithAdmiral) {
+        return res.status(400).json({ error: 'This admiral is already leading an active fleet operation.' });
+      }
+
       admiralId = admiral.id;
     }
 
@@ -130,6 +142,7 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
       }
     }
 
+
     // Get planet positions
     const fromPlanet = await prisma.planet.findUnique({
       where: { id: fromPlanetId },
@@ -148,6 +161,112 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
     const departAt = new Date();
     const arriveAt = new Date(departAt.getTime() + travelTimeSeconds * 1000);
 
+    // --- DEFENSE-AWARE UNIT DEDUCTION ---
+    // Get current defense layout to determine which units are on defense
+    const defenseLayout = await prisma.defenseLayout.findUnique({
+      where: { planetId: fromPlanetId },
+    });
+
+    // Get all units on the planet
+    const planetUnits = await prisma.planetUnit.findMany({ where: { planetId: fromPlanetId } });
+    const availablePool: Record<string, number> = {};
+    planetUnits.forEach(pu => availablePool[pu.unitType] = pu.count);
+
+    // Parse defense layout to determine units on defense
+    const onDefense: Record<string, Record<string, number>> = { front: {}, left: {}, right: {} };
+    if (defenseLayout) {
+      const parseLane = (json: string, laneName: string) => {
+        try {
+          const data = JSON.parse(json || '{}');
+          const units = data.units || data;
+          for (const [unitType, count] of Object.entries(units)) {
+            if (typeof count === 'number' && count > 0) {
+              onDefense[laneName][unitType] = count;
+            }
+          }
+        } catch (e) { }
+      };
+      parseLane(defenseLayout.frontLaneJson, 'front');
+      parseLane(defenseLayout.leftLaneJson, 'left');
+      parseLane(defenseLayout.rightLaneJson, 'right');
+    }
+
+    // Calculate total on defense per unit type
+    const totalOnDefense: Record<string, number> = {};
+    for (const lane of Object.values(onDefense)) {
+      for (const [unitType, count] of Object.entries(lane)) {
+        totalOnDefense[unitType] = (totalOnDefense[unitType] || 0) + count;
+      }
+    }
+
+    // For each requested unit type, take from RESERVE first, then from DEFENSE (proportionally)
+    const borrowedFromDefense: Record<string, Record<string, number>> = { front: {}, left: {}, right: {} };
+    const requestedUnits = { ...units };
+
+    for (const [unitType, requestedCount] of Object.entries(requestedUnits)) {
+      const available = availablePool[unitType] || 0;
+      const defensiveCount = totalOnDefense[unitType] || 0;
+      const reserveCount = Math.max(0, available - defensiveCount);
+
+      let remaining = requestedCount as number;
+
+      // Take from reserve first
+      const fromReserve = Math.min(remaining, reserveCount);
+      remaining -= fromReserve;
+
+      // If still need more, borrow from defense (proportionally from each lane)
+      if (remaining > 0 && defensiveCount > 0) {
+        for (const lane of ['front', 'left', 'right']) {
+          if (remaining <= 0) break;
+          const laneCount = onDefense[lane][unitType] || 0;
+          if (laneCount > 0) {
+            const ratio = laneCount / defensiveCount;
+            const toBorrow = Math.min(Math.ceil(remaining * ratio), laneCount, remaining);
+            if (toBorrow > 0) {
+              borrowedFromDefense[lane][unitType] = (borrowedFromDefense[lane][unitType] || 0) + toBorrow;
+              remaining -= toBorrow;
+            }
+          }
+        }
+      }
+    }
+
+    // Check if any troops were borrowed from defense
+    const hasBorrowedTroops = Object.values(borrowedFromDefense).some(
+      lane => Object.keys(lane).length > 0 && Object.values(lane).some(c => c > 0)
+    );
+
+    // Update defense layout to remove borrowed troops
+    if (defenseLayout && hasBorrowedTroops) {
+      const updateData: Record<string, string> = {};
+
+      const updateLane = (laneKey: string, laneName: string) => {
+        try {
+          const currentLane = JSON.parse((defenseLayout as any)[laneKey] || '{}');
+          const hasTools = currentLane.tools !== undefined;
+          const units = hasTools ? currentLane.units : currentLane;
+
+          for (const [unitType, borrowed] of Object.entries(borrowedFromDefense[laneName])) {
+            if (units[unitType]) {
+              units[unitType] = Math.max(0, units[unitType] - (borrowed as number));
+              if (units[unitType] === 0) delete units[unitType];
+            }
+          }
+
+          updateData[laneKey] = JSON.stringify(hasTools ? { units, tools: currentLane.tools } : units);
+        } catch (e) { }
+      };
+
+      updateLane('frontLaneJson', 'front');
+      updateLane('leftLaneJson', 'left');
+      updateLane('rightLaneJson', 'right');
+
+      await prisma.defenseLayout.update({
+        where: { id: defenseLayout.id },
+        data: updateData,
+      });
+    }
+
     // Deduct units from origin planet
     await deductUnits(fromPlanetId, units);
 
@@ -156,7 +275,7 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
       await import('../services/fleetService').then(m => m.deductTools(fromPlanetId, allTools));
     }
 
-    // Create fleet
+    // Create fleet with borrowed defense info
     const fleet = await prisma.fleet.create({
       data: {
         ownerId: userId,
@@ -168,6 +287,7 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
           ? JSON.stringify(req.body.laneAssignments)
           : null,
         toolsJson: Object.keys(allTools).length > 0 ? JSON.stringify(allTools) : null,
+        borrowedFromDefenseJson: hasBorrowedTroops ? JSON.stringify(borrowedFromDefense) : null,
         admiralId: admiralId,
         departAt,
         arriveAt,
@@ -258,6 +378,7 @@ router.get('/fleets', authenticateToken, async (req: AuthRequest, res: Response)
       departAt: fleet.departAt,
       arriveAt: fleet.arriveAt,
       status: fleet.status,
+      admiralId: fleet.admiralId,
     }));
 
     res.json({ fleets: result });
@@ -671,6 +792,108 @@ router.post('/tax', authenticateToken, async (req: AuthRequest, res: Response) =
 
   } catch (err: any) {
     console.error('Tax error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Preview which troops will be borrowed from defense for an attack
+// Response: { borrowedFromDefense: { front: { marine: 5 }, left: {}, right: {} }, hasBorrowedTroops: true }
+router.post('/fleet/preview-defense-borrowing', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { fromPlanetId, units } = req.body;
+
+    if (!fromPlanetId || !units) {
+      return res.status(400).json({ error: 'Missing required fields (fromPlanetId, units)' });
+    }
+
+    // Validate ownership
+    const ownsPlanet = await validatePlanetOwnership(userId, fromPlanetId);
+    if (!ownsPlanet) {
+      return res.status(403).json({ error: 'You do not own this planet' });
+    }
+
+    // Get current defense layout
+    const defenseLayout = await prisma.defenseLayout.findUnique({
+      where: { planetId: fromPlanetId },
+    });
+
+    // Get all units on the planet
+    const planetUnits = await prisma.planetUnit.findMany({ where: { planetId: fromPlanetId } });
+    const availablePool: Record<string, number> = {};
+    planetUnits.forEach(pu => availablePool[pu.unitType] = pu.count);
+
+    // Parse defense layout
+    const onDefense: Record<string, Record<string, number>> = { front: {}, left: {}, right: {} };
+    if (defenseLayout) {
+      const parseLane = (json: string, laneName: string) => {
+        try {
+          const data = JSON.parse(json || '{}');
+          const laneUnits = data.units || data;
+          for (const [unitType, count] of Object.entries(laneUnits)) {
+            if (typeof count === 'number' && count > 0) {
+              onDefense[laneName][unitType] = count;
+            }
+          }
+        } catch (e) { }
+      };
+      parseLane(defenseLayout.frontLaneJson, 'front');
+      parseLane(defenseLayout.leftLaneJson, 'left');
+      parseLane(defenseLayout.rightLaneJson, 'right');
+    }
+
+    // Calculate total on defense per unit type
+    const totalOnDefense: Record<string, number> = {};
+    for (const lane of Object.values(onDefense)) {
+      for (const [unitType, count] of Object.entries(lane)) {
+        totalOnDefense[unitType] = (totalOnDefense[unitType] || 0) + count;
+      }
+    }
+
+    // Calculate borrowing
+    const borrowedFromDefense: Record<string, Record<string, number>> = { front: {}, left: {}, right: {} };
+
+    for (const [unitType, requestedCount] of Object.entries(units)) {
+      const available = availablePool[unitType] || 0;
+      const defensiveCount = totalOnDefense[unitType] || 0;
+      const reserveCount = Math.max(0, available - defensiveCount);
+
+      let remaining = requestedCount as number;
+
+      // Take from reserve first
+      const fromReserve = Math.min(remaining, reserveCount);
+      remaining -= fromReserve;
+
+      // If still need more, borrow from defense proportionally
+      if (remaining > 0 && defensiveCount > 0) {
+        for (const lane of ['front', 'left', 'right']) {
+          if (remaining <= 0) break;
+          const laneCount = onDefense[lane][unitType] || 0;
+          if (laneCount > 0) {
+            const ratio = laneCount / defensiveCount;
+            const toBorrow = Math.min(Math.ceil(remaining * ratio), laneCount, remaining);
+            if (toBorrow > 0) {
+              borrowedFromDefense[lane][unitType] = (borrowedFromDefense[lane][unitType] || 0) + toBorrow;
+              remaining -= toBorrow;
+            }
+          }
+        }
+      }
+    }
+
+    const hasBorrowedTroops = Object.values(borrowedFromDefense).some(
+      lane => Object.keys(lane).length > 0 && Object.values(lane).some(c => c > 0)
+    );
+
+    res.json({
+      borrowedFromDefense,
+      hasBorrowedTroops,
+      onDefense,
+      totalOnDefense
+    });
+
+  } catch (error) {
+    console.error('Preview defense borrowing error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

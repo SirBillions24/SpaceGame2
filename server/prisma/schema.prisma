@@ -248,6 +248,9 @@ model Fleet {
   toolsJson           String?  @map("tools_json")
   // Loot carried by the fleet
   cargoJson           String?  @map("cargo_json")
+  // Troops borrowed from defense layout for this mission
+  // JSON: { "front": { "marine": 10 }, "left": { "ranger": 5 }, "right": {} }
+  borrowedFromDefenseJson String? @map("borrowed_from_defense_json")
   // Admiral assigned to this fleet (optional)
   admiralId           String?  @map("admiral_id")
   departAt            DateTime @default(now()) @map("depart_at")
