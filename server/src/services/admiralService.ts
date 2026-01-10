@@ -124,7 +124,7 @@ export async function updateAdmiralName(userId: string, name: string) {
  */
 export async function updateAdmiralGear(userId: string, gear: Partial<AdmiralGear>) {
   const admiral = await getOrCreateAdmiral(userId);
-  
+
   // Validate gear slots - only allow the 4 valid slots
   const validGear: AdmiralGear = {};
   for (const slotType of GEAR_SLOTS) {
@@ -132,7 +132,7 @@ export async function updateAdmiralGear(userId: string, gear: Partial<AdmiralGea
       validGear[slotType] = gear[slotType]!;
     }
   }
-  
+
   const gearJson = JSON.stringify(validGear);
   const bonuses = calculateAdmiralBonuses(gearJson);
 
@@ -152,47 +152,75 @@ export async function updateAdmiralGear(userId: string, gear: Partial<AdmiralGea
 
 /**
  * Equip a gear piece to an admiral slot
+ * Uses transaction to prevent race conditions from parallel equip requests
  */
 export async function equipGearPiece(userId: string, pieceId: string, slotType: GearSlot) {
   if (!GEAR_SLOTS.includes(slotType)) {
     throw new Error(`Invalid gear slot: ${slotType}. Must be one of: ${GEAR_SLOTS.join(', ')}`);
   }
 
-  const admiral = await getOrCreateAdmiral(userId);
-  
-  // Verify the piece exists and belongs to the user
-  const piece = await (prisma as any).gearPiece.findFirst({
-    where: {
-      id: pieceId,
-      userId: userId,
-      slotType: slotType, // Must match the slot type
-    },
+  // Use transaction for atomic read-modify-write
+  return await prisma.$transaction(async (tx) => {
+    // Get or create admiral within transaction
+    let admiral = await tx.admiral.findUnique({ where: { userId } });
+    if (!admiral) {
+      admiral = await tx.admiral.create({
+        data: {
+          userId,
+          name: 'Admiral',
+          gearJson: '{}',
+          attackBonus: 0,
+          defenseBonus: 0,
+        },
+      });
+    }
+
+    // Verify the piece exists and belongs to the user
+    const piece = await (tx as any).gearPiece.findFirst({
+      where: {
+        id: pieceId,
+        userId: userId,
+        slotType: slotType,
+      },
+    });
+
+    if (!piece) {
+      throw new Error('Gear piece not found or does not match slot type');
+    }
+
+    // Get current gear and modify atomically
+    const currentGear: AdmiralGear = JSON.parse(admiral.gearJson || '{}');
+
+    currentGear[slotType] = {
+      id: piece.id,
+      slotType: piece.slotType as GearSlot,
+      name: piece.name,
+      rarity: piece.rarity,
+      level: piece.level,
+      meleeStrengthBonus: piece.meleeStrengthBonus,
+      rangedStrengthBonus: piece.rangedStrengthBonus,
+      canopyReductionBonus: piece.canopyReductionBonus,
+      attackBonus: piece.attackBonus || 0,
+      defenseBonus: piece.defenseBonus || 0,
+      setName: piece.setName || undefined,
+      iconName: piece.iconName || undefined,
+    };
+
+    const gearJson = JSON.stringify(currentGear);
+    const bonuses = calculateAdmiralBonuses(gearJson);
+
+    return await tx.admiral.update({
+      where: { id: admiral.id },
+      data: {
+        gearJson,
+        meleeStrengthBonus: bonuses.meleeStrengthBonus,
+        rangedStrengthBonus: bonuses.rangedStrengthBonus,
+        canopyReductionBonus: bonuses.canopyReductionBonus,
+        attackBonus: bonuses.meleeStrengthBonus + bonuses.rangedStrengthBonus,
+        defenseBonus: 0,
+      } as any,
+    });
   });
-
-  if (!piece) {
-    throw new Error('Gear piece not found or does not match slot type');
-  }
-
-  // Get current gear
-  const currentGear: AdmiralGear = JSON.parse(admiral.gearJson || '{}');
-  
-  // If there's already a piece in this slot, we'll replace it
-  currentGear[slotType] = {
-    id: piece.id,
-    slotType: piece.slotType as GearSlot,
-    name: piece.name,
-    rarity: piece.rarity,
-    level: piece.level,
-    meleeStrengthBonus: piece.meleeStrengthBonus,
-    rangedStrengthBonus: piece.rangedStrengthBonus,
-    canopyReductionBonus: piece.canopyReductionBonus,
-    attackBonus: piece.attackBonus || 0,
-    defenseBonus: piece.defenseBonus || 0,
-    setName: piece.setName || undefined,
-    iconName: piece.iconName || undefined,
-  };
-
-  return await updateAdmiralGear(userId, currentGear);
 }
 
 /**
@@ -205,9 +233,9 @@ export async function unequipGearPiece(userId: string, slotType: GearSlot) {
 
   const admiral = await getOrCreateAdmiral(userId);
   const currentGear: AdmiralGear = JSON.parse(admiral.gearJson || '{}');
-  
+
   delete currentGear[slotType];
-  
+
   return await updateAdmiralGear(userId, currentGear);
 }
 

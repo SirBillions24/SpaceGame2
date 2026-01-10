@@ -110,6 +110,7 @@ model Planet {
   reconProbesLaunched ReconProbe[] @relation("ProbesLaunched")
 
   @@unique([x, y])
+  @@index([ownerId])  // "My planets" queries
   @@map("planets")
 }
 
@@ -261,6 +262,9 @@ model Fleet {
   admiral      Admiral?      @relation(fields: [admiralId], references: [id], onDelete: SetNull)
   battleReport BattleReport?
 
+  @@index([status, arriveAt])    // Timer worker polling
+  @@index([ownerId, status])      // "My fleets" queries
+  @@index([toPlanetId, status])   // Incoming attacks queries
   @@map("fleets")
 }
 

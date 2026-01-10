@@ -81,6 +81,17 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
     const planetStats = calculatePlanetRates(syncedPlanet);
 
     // Prepare response, masking sensitive info for non-owners
+    // Defense visibility: owners see exact values, others see threat tier
+    const totalDefenseLevel = syncedPlanet.energyCanopyLevel + syncedPlanet.orbitalMinefieldLevel + syncedPlanet.dockingHubLevel;
+    const getDefenseTier = (level: number): string => {
+      if (level === 0) return 'Undefended';
+      if (level <= 3) return 'Minimal';
+      if (level <= 6) return 'Light';
+      if (level <= 10) return 'Moderate';
+      if (level <= 15) return 'Heavy';
+      return 'Fortified';
+    };
+
     const responseData: any = {
       id: syncedPlanet.id,
       x: syncedPlanet.x,
@@ -95,10 +106,14 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
       attackCount: syncedPlanet.attackCount,
       maxAttacks: syncedPlanet.maxAttacks,
       createdAt: syncedPlanet.createdAt,
-      defense: {
+      // Defense data: exact for owners, tier assessment for others
+      defense: isOwner ? {
         canopy: syncedPlanet.energyCanopyLevel,
         minefield: syncedPlanet.orbitalMinefieldLevel,
         hub: syncedPlanet.dockingHubLevel,
+      } : {
+        threatTier: getDefenseTier(totalDefenseLevel),
+        hint: 'Launch a probe for detailed intel'
       },
     };
 

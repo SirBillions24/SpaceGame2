@@ -4,7 +4,7 @@ import { ESPIONAGE_DATA, ReconProbeStats } from '../constants/espionageData';
 export async function launchProbe(userId: string, fromPlanetId: string, targetX: number, targetY: number, probeType: string = 'recon_probe') {
     const fromPlanet = await prisma.planet.findUnique({
         where: { id: fromPlanetId },
-        include: { 
+        include: {
             buildings: {
                 where: { type: 'tavern', status: 'active' } // Intelligence Hub
             }
@@ -49,7 +49,7 @@ export async function launchProbe(userId: string, fromPlanetId: string, targetX:
     const dx = targetX - fromPlanet.x;
     const dy = targetY - fromPlanet.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
+
     // Make speed a bit slower if 100 is too fast? User said "not instant". 
     // Let's stick to the data but ensure it's noticeable.
     const travelTimeSeconds = distance / stats.speed;
@@ -98,7 +98,7 @@ export async function recallProbe(userId: string, probeId: string) {
     const dx = probe.targetX - probe.fromPlanet.x;
     const dy = probe.targetY - probe.fromPlanet.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
+
     // Half speed = 2x time
     const returnTimeSeconds = (distance / (stats.speed / 2));
     const returnTime = new Date(Date.now() + returnTimeSeconds * 1000);
@@ -117,7 +117,7 @@ export async function recallProbe(userId: string, probeId: string) {
 
 export async function generateEspionageReport(userId: string, probeId: string) {
     const probeData = await getProbeData(userId, probeId);
-    
+
     // Save report to database
     const report = await prisma.espionageReport.create({
         data: {
@@ -137,7 +137,7 @@ export async function generateEspionageReport(userId: string, probeId: string) {
 export async function getProbeData(userId: string, probeId: string) {
     const probe = await prisma.reconProbe.findUnique({
         where: { id: probeId },
-        include: { owner: true }
+        include: { owner: { select: { id: true, username: true } } }
     });
 
     if (!probe) throw new Error('Probe not found');
@@ -178,7 +178,7 @@ export async function getProbeData(userId: string, probeId: string) {
                 min = Math.max(0, Math.floor(unit.count * (1 - variance)));
                 max = Math.ceil(unit.count * (1 + variance));
             }
-            
+
             return { type: unit.unitType, countRange: [min, max], count: null };
         });
 
@@ -198,7 +198,7 @@ export async function getProbeData(userId: string, probeId: string) {
 
 export async function updateProbes() {
     const now = new Date();
-    
+
     // 1. Process arrivals
     await prisma.reconProbe.updateMany({
         where: {
@@ -261,7 +261,7 @@ export async function updateProbes() {
 
         // Calculate new accuracy
         const newAccuracy = Math.min(1.0, probe.accuracy + stats.accuracyGainPerMinute * timeDiffMinutes);
-        
+
         // Calculate new discovery chance
         const newDiscoveryChance = Math.min(stats.maxDiscoveryChance, probe.discoveryChance + stats.discoveryChancePerMinute * timeDiffMinutes);
 
@@ -272,18 +272,18 @@ export async function updateProbes() {
             const dx = probe.targetX - probe.fromPlanet.x;
             const dy = probe.targetY - probe.fromPlanet.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
-            
+
             // 2x slower return time (Half speed = 2x time)
             const returnTimeSeconds = (distance / (stats.speed / 2));
             const returnTime = new Date(now.getTime() + returnTimeSeconds * 1000);
 
             const discoveredProbe = await prisma.reconProbe.update({
                 where: { id: probe.id },
-                data: { 
-                    status: 'returning', 
+                data: {
+                    status: 'returning',
                     wasDiscovered: true,
                     returnTime: returnTime,
-                    lastUpdateTime: now 
+                    lastUpdateTime: now
                 },
                 include: { owner: { select: { username: true } } }
             });
