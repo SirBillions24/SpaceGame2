@@ -512,9 +512,14 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                     {isExpanded && result.waveResults && (
                                         <div className="mail-wave-breakdown">
                                             {result.waveResults.map((wave: any, idx: number) => (
-                                                <div key={idx} className="mail-wave-row">
+                                        <div key={idx} className="mail-wave-row">
                                                     <div className="mail-wave-header">
                                                         <span>Wave {wave.waveIndex}</span>
+                                                        {wave.attackerTriangleBonus > 1 && (
+                                                            <span className="tactical-advantage positive" title={`+${((wave.attackerTriangleBonus - 1) * 100).toFixed(0)}% Tactical Advantage`}>
+                                                                📈 +{((wave.attackerTriangleBonus - 1) * 100).toFixed(0)}% Adv.
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <div className="mail-wave-body">
                                                         <div className="mail-wave-part att">
@@ -527,6 +532,11 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                                         <div className="mail-wave-part def">
                                                             <div className="wp-label">Def:</div>
                                                             <UnitList units={wave.defenderUnits} />
+                                                            {wave.defenderTriangleBonus > 1 && (
+                                                                <div className="tactical-advantage positive" style={{ fontSize: '0.7rem', marginTop: '2px' }}>
+                                                                    🛡️ +{((wave.defenderTriangleBonus - 1) * 100).toFixed(0)}% Counter-Adv.
+                                                                </div>
+                                                            )}
                                                             <div className="wp-loss">Lost: <UnitList units={wave.defenderLosses} colorClass="red" /></div>
                                                         </div>
                                                     </div>

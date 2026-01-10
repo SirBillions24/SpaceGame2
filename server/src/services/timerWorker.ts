@@ -2,6 +2,7 @@ import prisma from '../lib/prisma';
 import { resolveCombat } from './combatService';
 import { syncPlanetResources } from './planetService';
 import { updateProbes } from './espionageService';
+import { relocateNpc } from './pveService';
 
 const CHECK_INTERVAL = 5000; // Check every 5 seconds
 
@@ -97,6 +98,19 @@ async function processArrivedFleets() {
         if (fleet.type === 'attack') {
           // Resolve combat (This function now handles losses and tool deduction internally)
           const combatResult = await resolveCombat(fleet.id);
+
+          // Handle NPC attack count and relocation
+          const targetPlanet = await prisma.planet.findUnique({ where: { id: fleet.toPlanetId } });
+          if (targetPlanet && targetPlanet.isNpc) {
+            const updatedNpc = await prisma.planet.update({
+              where: { id: targetPlanet.id },
+              data: { attackCount: { increment: 1 } }
+            });
+
+            if (updatedNpc.attackCount >= (updatedNpc.maxAttacks || 15)) {
+              await relocateNpc(updatedNpc.id);
+            }
+          }
 
           // Handle Loot
           let resourcesJson = null;

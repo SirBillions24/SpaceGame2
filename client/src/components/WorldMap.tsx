@@ -265,10 +265,19 @@ export default function WorldMap({
           }
 
           const colonyTexture = await PIXI.Assets.load('/assets/castles/castlesprite.png');
-          const planetTexture = await PIXI.Assets.load('/assets/castles/castlesprite.png'); // Fallback naming
+          const meleeTexture = await PIXI.Assets.load('/assets/castles/melee_outpost.jpeg').catch(() => colonyTexture);
+          const rangedTexture = await PIXI.Assets.load('/assets/castles/ranged_den.jpeg').catch(() => colonyTexture);
+          const roboticTexture = await PIXI.Assets.load('/assets/castles/robotic_forge.jpeg').catch(() => colonyTexture);
 
           pData.planets.forEach(p => {
-            const s = new PIXI.Sprite(colonyTexture);
+            let texture = colonyTexture;
+            if (p.isNpc) {
+              if (p.npcClass === 'melee') texture = meleeTexture;
+              else if (p.npcClass === 'ranged') texture = rangedTexture;
+              else if (p.npcClass === 'robotic') texture = roboticTexture;
+            }
+
+            const s = new PIXI.Sprite(texture);
             s.anchor.set(0.5);
             s.scale.set(0.15);
             s.x = p.x;
@@ -279,7 +288,10 @@ export default function WorldMap({
 
             // Highlighting
             if (p.isNpc) {
-              s.tint = 0xff4444; // Red for Enemies
+              // Only tint if we are using the fallback texture
+              if (texture === colonyTexture) {
+                s.tint = 0xff4444; // Red for Enemies fallback
+              }
             } else if (sourcePlanetId === p.id) {
               s.tint = 0x00ff00; // distinct tint for selected source
             }

@@ -53,6 +53,9 @@ model Planet {
   // NPC / PVE
   isNpc    Boolean @default(false) @map("is_npc")
   npcLevel Int     @default(0) @map("npc_level")
+  npcClass String? @map("npc_class") // 'melee' | 'ranged' | 'robotic'
+  attackCount Int @default(0) @map("attack_count")
+  maxAttacks  Int @default(15) @map("max_attacks")
 
   // Economy State (Lazy Evaluation)
   lastResourceUpdate  DateTime @default(now()) @map("last_resource_update")

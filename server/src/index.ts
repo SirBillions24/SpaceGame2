@@ -11,6 +11,7 @@ import admiralRoutes from './routes/admiral';
 import espionageRoutes from './routes/espionage';
 import devRoutes from './routes/dev';
 import { startTimerWorker } from './services/timerWorker';
+import { migrateExistingNpcs } from './services/pveService';
 
 dotenv.config();
 
@@ -43,5 +44,8 @@ app.listen(PORT, '0.0.0.0', () => {
   
   // Start timer worker to process marches
   startTimerWorker();
+
+  // Run NPC migration once on startup
+  migrateExistingNpcs().catch(err => console.error('Failed to migrate NPCs:', err));
 });
 

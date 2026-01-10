@@ -15,7 +15,38 @@ interface LaneData {
     tools: ToolSlot[];
 }
 
-const UNIT_TYPES = ['marine', 'ranger', 'sentinel'];
+const UNIT_TYPES = ['marine', 'ranger', 'sentinel', 'interceptor', 'droid_decoy', 'heavy_automaton'];
+
+const getClassIcon = (unitClass: string) => {
+    switch (unitClass) {
+        case 'melee': return '🗡️';
+        case 'ranged': return '🎯';
+        case 'robotic': return '🤖';
+        default: return '❓';
+    }
+};
+
+const getUnitClass = (unitId: string) => {
+    // This should ideally match server side constants
+    const mapping: Record<string, string> = {
+        marine: 'melee',
+        sentinel: 'melee',
+        ranger: 'ranged',
+        interceptor: 'robotic',
+        droid_decoy: 'robotic',
+        heavy_automaton: 'robotic'
+    };
+    return mapping[unitId] || 'melee';
+};
+
+const getClassAdvantage = (unitClass: string) => {
+    switch (unitClass) {
+        case 'melee': return 'Robotic';
+        case 'ranged': return 'Melee';
+        case 'robotic': return 'Ranged';
+        default: return '';
+    }
+};
 
 export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
     const [currentPlanet, setCurrentPlanet] = useState<Planet>(planet);
@@ -335,7 +366,8 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
                         return (
                             <div key={unit} className="unit-slot-filled">
                                 <div className="unit-slot-info">
-                                    <span className="unit-name">{unit}</span>
+                                    <span className="unit-class-icon" style={{ marginRight: '5px' }}>{getClassIcon(getUnitClass(unit))}</span>
+                                    <span className="unit-name" style={{ fontSize: '0.8rem' }}>{unit.replace('_', ' ')}</span>
                                     <button className="remove-unit-btn" onClick={() => updateUnit(lane, unit, 0)}>×</button>
                                 </div>
                                 <div className="unit-qty-row">
@@ -679,9 +711,10 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
                                 const available = Math.max(0, owned - assigned);
 
                                 return (
-                                    <div key={unit} className="pool-item">
+                                    <div key={unit} className="pool-item" title={`${unit.replace('_', ' ').toUpperCase()} (${getUnitClass(unit).toUpperCase()}) - Strong vs ${getClassAdvantage(getUnitClass(unit))}`}>
                                         <div className="pool-item-info">
-                                            <span className="unit-name">{unit}</span>
+                                            <span className="unit-class-icon" style={{ marginRight: '8px' }}>{getClassIcon(getUnitClass(unit))}</span>
+                                            <span className="unit-name">{unit.replace('_', ' ')}</span>
                                             <span className="unit-available">{available} available</span>
                                         </div>
                                         <div className="pool-actions">

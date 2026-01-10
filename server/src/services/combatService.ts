@@ -49,6 +49,54 @@ const HUB_BREACH_REDUCTION = 0.15; // Each charge reduces Hub Bonus by 15%
 const ECM_POD_REDUCTION = 0.05;       // Each pod reduces Ranged Defense Power by 5%
 const FIELD_NEUTRALIZER_REDUCTION = 0; // Not fully defined yet, can be moat reduction.
 
+const TRIANGLE_BONUS = 0.10; // +10% Advantage bonus
+
+/**
+ * Calculate the weighted triangle multiplier for a force attacking another force.
+ * Ranged > Melee > Robotic > Ranged
+ */
+function calculateTriangleMultiplier(sourceUnits: FlankUnits, targetUnits: FlankUnits): number {
+  const ADVANTAGES: Record<string, string> = {
+    'melee': 'robotic',
+    'robotic': 'ranged',
+    'ranged': 'melee'
+  };
+
+  let totalSourceCount = 0;
+  const sourceClassDistribution: Record<string, number> = { melee: 0, ranged: 0, robotic: 0 };
+  for (const [u, count] of Object.entries(sourceUnits)) {
+    const stats = UNIT_DATA[u];
+    if (!stats) continue;
+    sourceClassDistribution[stats.unitClass] += count;
+    totalSourceCount += count;
+  }
+
+  let totalTargetCount = 0;
+  const targetClassDistribution: Record<string, number> = { melee: 0, ranged: 0, robotic: 0 };
+  for (const [u, count] of Object.entries(targetUnits)) {
+    const stats = UNIT_DATA[u];
+    if (!stats) continue;
+    targetClassDistribution[stats.unitClass] += count;
+    totalTargetCount += count;
+  }
+
+  if (totalSourceCount === 0 || totalTargetCount === 0) return 1.0;
+
+  let weightedBonus = 0;
+  for (const [sClass, sCount] of Object.entries(sourceClassDistribution)) {
+    const sClassLower = sClass as 'melee' | 'ranged' | 'robotic';
+    const advantageOver = ADVANTAGES[sClassLower];
+    const targetWeakCount = targetClassDistribution[advantageOver] || 0;
+    
+    const sourceWeight = sCount / totalSourceCount;
+    const targetWeight = targetWeakCount / totalTargetCount;
+    
+    weightedBonus += (sourceWeight * targetWeight * TRIANGLE_BONUS);
+  }
+
+  return 1.0 + weightedBonus;
+}
+
 // Interfaces
 interface FlankUnits {
   [unitType: string]: number;
@@ -67,6 +115,8 @@ interface WaveResult {
   attackerLosses: FlankUnits;
   defenderLosses: FlankUnits;
   winner: 'attacker' | 'defender';
+  attackerTriangleBonus?: number;
+  defenderTriangleBonus?: number;
 }
 
 interface SectorResult {
@@ -140,6 +190,8 @@ export function resolveWaveCollision(
   defenderLosses: FlankUnits;
   remainingAttackers: FlankUnits;
   remainingDefenders: FlankUnits;
+  attackerTriangleBonus?: number;
+  defenderTriangleBonus?: number;
 } {
   // 1. Calculate Attacker Power
   let attMelee = 0;
@@ -160,7 +212,9 @@ export function resolveWaveCollision(
   attMelee *= meleeMultiplier;
   attRanged *= rangedMultiplier;
 
-  const totalAttackerPower = attMelee + attRanged;
+  const totalAttackerPowerBase = attMelee + attRanged;
+  const attTriangleMult = calculateTriangleMultiplier(attackerUnits, defenderUnits);
+  const totalAttackerPower = totalAttackerPowerBase * attTriangleMult;
 
   // 2. Calculate Defender Power
   let defMelee = 0;
@@ -238,6 +292,9 @@ export function resolveWaveCollision(
   const totalBonusPct = canopyBonusPct + hubBonusPct + minefieldBonusPct;
   totalDefPower *= (1 + totalBonusPct);
 
+  // Apply Defender Triangle Multiplier (Defender is counter-striking Attacker)
+  const defTriangleMult = calculateTriangleMultiplier(defenderUnits, attackerUnits);
+  totalDefPower *= defTriangleMult;
 
   // 3. Resolve Winner
   const attackerWon = totalAttackerPower > totalDefPower;
@@ -275,6 +332,8 @@ export function resolveWaveCollision(
     defenderLosses: defLosses,
     remainingAttackers: remAtt,
     remainingDefenders: remDef,
+    attackerTriangleBonus: attTriangleMult,
+    defenderTriangleBonus: defTriangleMult
   };
 }
 
@@ -385,7 +444,9 @@ export function resolveSector(
       tools: { ...wave.tools },
       attackerLosses: result.attackerLosses,
       defenderLosses: result.defenderLosses,
-      winner: result.attackerWon ? 'attacker' : 'defender'
+      winner: result.attackerWon ? 'attacker' : 'defender',
+      attackerTriangleBonus: result.attackerTriangleBonus,
+      defenderTriangleBonus: result.defenderTriangleBonus
     });
 
     // Accumulate losses

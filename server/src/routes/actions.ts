@@ -9,6 +9,7 @@ import {
   deductUnits,
 } from '../services/fleetService';
 import { placeBuilding, recruitUnit, spawnPlanet, moveBuilding, syncPlanetResources, demolishBuilding } from '../services/planetService';
+import { UNIT_DATA } from '../constants/unitData';
 import { MAX_GRID_SIZE, EXPANSION_BASE_COST_CARBON, EXPANSION_BASE_COST_TITANIUM, EXPANSION_COST_MULTIPLIER, DEFENSE_TURRET_BUILD_TIME_SECONDS } from '../constants/mechanics';
 import { getDefenseTurrets, calculateDefenseCapacity } from '../services/defenseService';
 
@@ -292,7 +293,7 @@ router.post('/recruit', authenticateToken, async (req: AuthRequest, res: Respons
       return res.status(400).json({ error: 'Missing parameters' });
     }
 
-    if (!['marine', 'ranger', 'sentinel', 'interceptor'].includes(unitType)) {
+    if (!UNIT_DATA[unitType]) {
       return res.status(400).json({ error: 'Invalid unit type' });
     }
 

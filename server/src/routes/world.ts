@@ -35,6 +35,9 @@ router.get('/planets', optionalAuthenticateToken, async (req: AuthRequest, res: 
         taxRate: planet.taxRate,
         isNpc: planet.isNpc,
         npcLevel: planet.npcLevel,
+        npcClass: planet.npcClass,
+        attackCount: planet.attackCount,
+        maxAttacks: planet.maxAttacks,
         createdAt: planet.createdAt,
         buildings: isOwner ? planet.buildings.map(b => ({ type: b.type, status: b.status })) : [],
       };
@@ -87,6 +90,10 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
       ownerName: owner?.username || 'Unknown',
       taxRate: syncedPlanet.taxRate,
       isNpc: syncedPlanet.isNpc,
+      npcLevel: syncedPlanet.npcLevel,
+      npcClass: syncedPlanet.npcClass,
+      attackCount: syncedPlanet.attackCount,
+      maxAttacks: syncedPlanet.maxAttacks,
       createdAt: syncedPlanet.createdAt,
       defense: {
         canopy: syncedPlanet.energyCanopyLevel,
@@ -103,6 +110,8 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
       y: b.y,
       level: b.level,
       status: b.status,
+      stats: b.stats,
+      nextUpgrade: b.nextUpgrade,
     }));
 
     if (isOwner) {

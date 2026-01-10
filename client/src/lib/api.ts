@@ -24,6 +24,9 @@ export interface Planet {
   taxRate?: number;
   isNpc?: boolean;
   npcLevel?: number;
+  npcClass?: string;
+  attackCount?: number;
+  maxAttacks?: number;
   createdAt: string;
   stats?: {
     carbonRate: number;

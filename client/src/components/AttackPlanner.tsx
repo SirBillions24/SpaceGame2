@@ -2,11 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { type Planet, api } from '../lib/api';
 import './AttackPlanner.css';
 
-// Importing SVG placeholders directly as image sources
-import iconMarine from '../assets/placeholders/marine.svg';
-import iconRanger from '../assets/placeholders/ranger.svg';
-import iconSentinel from '../assets/placeholders/sentinel.svg';
-import iconInterceptor from '../assets/placeholders/interceptor.svg';
+// Import tool icons (SVGs from src/assets)
 import iconJammer from '../assets/placeholders/shield_jammer.svg';
 import iconBreach from '../assets/placeholders/hangar_breach.svg';
 import iconECM from '../assets/placeholders/ecm_pod.svg';
@@ -48,10 +44,42 @@ const TOOL_SLOTS_PER_LANE = 2; // GGE has 2 or 3 usually
 const SLOT_CAPACITY = 100;
 
 const UNIT_ICONS: Record<string, string> = {
-    marine: iconMarine,
-    ranger: iconRanger,
-    sentinel: iconSentinel,
-    interceptor: iconInterceptor,
+    marine: '/assets/units/marine.png',
+    ranger: '/assets/units/ranger.png',
+    sentinel: '/assets/units/sentinel.png',
+    interceptor: '/assets/units/interceptor.png',
+    droid_decoy: '/assets/units/droid_decoy.png',
+    heavy_automaton: '/assets/units/heavy_automaton.png',
+};
+
+const getClassIcon = (unitClass: string) => {
+    switch (unitClass) {
+        case 'melee': return '🗡️';
+        case 'ranged': return '🎯';
+        case 'robotic': return '🤖';
+        default: return '❓';
+    }
+};
+
+const getUnitClass = (unitId: string) => {
+    const mapping: Record<string, string> = {
+        marine: 'melee',
+        sentinel: 'melee',
+        ranger: 'ranged',
+        interceptor: 'robotic',
+        droid_decoy: 'robotic',
+        heavy_automaton: 'robotic'
+    };
+    return mapping[unitId] || 'melee';
+};
+
+const getClassAdvantage = (unitClass: string) => {
+    switch (unitClass) {
+        case 'melee': return 'Robotic';
+        case 'ranged': return 'Melee';
+        case 'robotic': return 'Ranged';
+        default: return '';
+    }
 };
 
 const TOOL_ICONS: Record<string, string> = {
@@ -60,7 +88,7 @@ const TOOL_ICONS: Record<string, string> = {
     stealth_field_pods: iconECM,
 };
 
-const ALL_UNITS = ['marine', 'ranger', 'sentinel', 'interceptor'];
+const ALL_UNITS = ['marine', 'ranger', 'sentinel', 'interceptor', 'droid_decoy', 'heavy_automaton'];
 const ALL_TOOLS = ['invasion_anchors', 'plasma_breachers', 'stealth_field_pods'];
 
 // Initial State Generator
@@ -262,9 +290,33 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
             <div className="ap-header">
                 <div className="ap-header-left">
                     <h2>Orbital Assault Planning</h2>
-                    <div className="target-info">
-                        Target: <strong>{toPlanet.name}</strong>
-                        {toPlanet.isNpc && <span className="npc-tag"> (Sector {toPlanet.x},{toPlanet.y})</span>}
+                    <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        <div className="target-info">
+                            Target: <strong>{toPlanet.name}</strong>
+                            {toPlanet.isNpc && (
+                                <div className="npc-stability-container" style={{ display: 'inline-flex', alignItems: 'center', marginLeft: '10px', gap: '8px' }}>
+                                    <span style={{ fontSize: '0.7rem', color: '#888' }}>STABILITY:</span>
+                                    <div className="stability-bar-bg" style={{ width: '60px', height: '6px', background: '#222', borderRadius: '3px', position: 'relative', overflow: 'hidden', border: '1px solid #444' }}>
+                                        <div 
+                                            className="stability-bar-fill" 
+                                            style={{ 
+                                                width: `${Math.max(0, 100 - ((toPlanet.attackCount || 0) / (toPlanet.maxAttacks || 15) * 100))}%`, 
+                                                height: '100%', 
+                                                background: (toPlanet.attackCount || 0) / (toPlanet.maxAttacks || 15) > 0.7 ? '#ff4d4d' : '#00ff88',
+                                                transition: 'width 0.3s ease'
+                                            }} 
+                                        />
+                                    </div>
+                                    <span style={{ fontSize: '0.7rem', color: '#00f3ff' }}>{Math.max(0, (toPlanet.maxAttacks || 15) - (toPlanet.attackCount || 0))} Hits Left</span>
+                                </div>
+                            )}
+                            {toPlanet.isNpc && <span className="npc-tag"> (Sector {toPlanet.x},{toPlanet.y})</span>}
+                        </div>
+                        <div className="triangle-legend-mini" style={{ display: 'flex', gap: '10px', fontSize: '0.75rem', background: 'rgba(0,0,0,0.3)', padding: '5px 10px', borderRadius: '4px', border: '1px solid rgba(0,243,255,0.2)' }}>
+                            <span>🎯 &gt; 🗡️</span>
+                            <span>🗡️ &gt; 🤖</span>
+                            <span>🤖 &gt; 🎯</span>
+                        </div>
                     </div>
                 </div>
                 <div className="ap-header-right">
@@ -354,10 +406,28 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                                         key={slot.id}
                                                         className={`ap-slot unit ${slot.itemId ? 'filled' : ''}`}
                                                         onClick={() => handleSlotClick(wIdx, lane, 'unitSlots', sIdx)}
+                                                        title={slot.itemId ? `${slot.itemId.replace('_', ' ').toUpperCase()} (${getUnitClass(slot.itemId).toUpperCase()})` : 'Empty Slot'}
                                                     >
                                                         {slot.itemId ? (
                                                             <>
-                                                                <img src={UNIT_ICONS[slot.itemId]} alt={slot.itemId} />
+                                                                <div className="slot-image-wrapper" style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                    <img 
+                                                                        src={UNIT_ICONS[slot.itemId]} 
+                                                                        alt={slot.itemId} 
+                                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                                        onError={(e) => {
+                                                                            (e.target as HTMLImageElement).style.display = 'none';
+                                                                            const fallback = (e.target as HTMLImageElement).nextElementSibling;
+                                                                            if (fallback) (fallback as HTMLElement).style.display = 'block';
+                                                                        }}
+                                                                    />
+                                                                    <div className="unit-fallback-emoji" style={{ display: 'none', fontSize: '1.2rem' }}>
+                                                                        {getClassIcon(getUnitClass(slot.itemId))}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="slot-unit-name" style={{ position: 'absolute', top: '2px', left: '2px', fontSize: '8px', background: 'rgba(0,0,0,0.7)', padding: '1px 3px', borderRadius: '2px', pointerEvents: 'none', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                    {slot.itemId.split('_')[0]}
+                                                                </div>
                                                                 <span className="count">{slot.count}</span>
                                                                 <div className="slot-remove" onClick={(e) => clearSlot(wIdx, lane, 'unitSlots', sIdx, e)}>×</div>
                                                             </>
@@ -373,10 +443,25 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                                         key={slot.id}
                                                         className={`ap-slot tool ${slot.itemId ? 'filled' : ''}`}
                                                         onClick={() => handleSlotClick(wIdx, lane, 'toolSlots', sIdx)}
+                                                        title={slot.itemId ? slot.itemId.replace('_', ' ').toUpperCase() : 'Empty Tool Slot'}
                                                     >
                                                         {slot.itemId ? (
                                                             <>
-                                                                <img src={TOOL_ICONS[slot.itemId]} alt={slot.itemId} />
+                                                                <div className="slot-image-wrapper" style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                    <img 
+                                                                        src={TOOL_ICONS[slot.itemId]} 
+                                                                        alt={slot.itemId} 
+                                                                        style={{ width: '80%', height: '80%', objectFit: 'contain' }}
+                                                                        onError={(e) => {
+                                                                            (e.target as HTMLImageElement).style.display = 'none';
+                                                                            const fallback = (e.target as HTMLImageElement).nextElementSibling;
+                                                                            if (fallback) (fallback as HTMLElement).style.display = 'block';
+                                                                        }}
+                                                                    />
+                                                                    <div className="tool-fallback-emoji" style={{ display: 'none', fontSize: '1rem' }}>
+                                                                        🛠️
+                                                                    </div>
+                                                                </div>
                                                                 <span className="count">{slot.count}</span>
                                                                 <div className="slot-remove" onClick={(e) => clearSlot(wIdx, lane, 'toolSlots', sIdx, e)}>×</div>
                                                             </>
@@ -427,12 +512,27 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                 return (
                                     <div
                                         key={u}
-                                        className={`palette-item ${selectedItem?.id === u ? 'selected' : ''} ${remaining <= 0 ? 'disabled' : ''}`}
+                                        className={`palette-item unit ${selectedItem?.id === u ? 'selected' : ''} ${remaining <= 0 ? 'disabled' : ''}`}
                                         onClick={() => remaining > 0 && setSelectedItem({ type: 'unit', id: u })}
+                                        title={`${u.replace('_', ' ').toUpperCase()} (${getUnitClass(u).toUpperCase()}) - Strong vs ${getClassAdvantage(getUnitClass(u))}`}
                                     >
-                                        <img src={UNIT_ICONS[u]} alt={u} />
+                                        <div className="unit-icon-wrapper" style={{ position: 'relative', width: '40px', height: '40px', marginBottom: '0.5rem' }}>
+                                            <img 
+                                                src={UNIT_ICONS[u]} 
+                                                alt={u} 
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} 
+                                                onError={(e) => {
+                                                    (e.target as HTMLImageElement).style.display = 'none';
+                                                    const parent = (e.target as HTMLImageElement).parentElement;
+                                                    if (parent) parent.textContent = getClassIcon(getUnitClass(u));
+                                                }}
+                                            />
+                                            <span className="class-tag" style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#000', borderRadius: '50%', width: '16px', height: '16px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyCenter: 'center', border: '1px solid #00f3ff' }}>
+                                                {getClassIcon(getUnitClass(u))}
+                                            </span>
+                                        </div>
                                         <div className="p-info">
-                                            <div className="p-name">{u}</div>
+                                            <div className="p-name" style={{ fontSize: '0.7rem' }}>{u.replace('_', ' ')}</div>
                                             <div className="p-count">{remaining}</div>
                                         </div>
                                     </div>
@@ -455,7 +555,15 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                         className={`palette-item ${selectedItem?.id === t ? 'selected' : ''} ${remaining <= 0 ? 'disabled' : ''}`}
                                         onClick={() => remaining > 0 && setSelectedItem({ type: 'tool', id: t })}
                                     >
-                                        <img src={TOOL_ICONS[t]} alt={t} />
+                                        <img 
+                                            src={TOOL_ICONS[t]} 
+                                            alt={t} 
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).style.display = 'none';
+                                                const parent = (e.target as HTMLImageElement).parentElement;
+                                                if (parent) parent.textContent = '🛠️';
+                                            }}
+                                        />
                                         <div className="p-info">
                                             <div className="p-name">{t.replace('_', ' ')}</div>
                                             <div className="p-count">{remaining}</div>

@@ -6,6 +6,7 @@ interface UnitStats {
   id: string;
   name: string;
   description: string;
+  unitClass: 'melee' | 'ranged' | 'robotic';
   type: string;
   meleeAtk: number;
   rangedAtk: number;
@@ -30,6 +31,7 @@ const UNIT_DATA: Record<string, UnitStats> = {
     id: 'marine',
     name: 'Space Marine',
     description: 'Standard multi-purpose infantry unit. Balanced melee and defense.',
+    unitClass: 'melee',
     type: 'melee',
     meleeAtk: 12,
     rangedAtk: 0,
@@ -45,6 +47,7 @@ const UNIT_DATA: Record<string, UnitStats> = {
     id: 'ranger',
     name: 'Scout Ranger',
     description: 'Light infantry specializing in long-range engagement.',
+    unitClass: 'ranged',
     type: 'ranged',
     meleeAtk: 4,
     rangedAtk: 14,
@@ -60,6 +63,7 @@ const UNIT_DATA: Record<string, UnitStats> = {
     id: 'sentinel',
     name: 'Sentinel Heavy',
     description: 'Heavy armored unit designed to hold ground and absorb fire.',
+    unitClass: 'melee',
     type: 'heavy',
     meleeAtk: 6,
     rangedAtk: 2,
@@ -75,6 +79,7 @@ const UNIT_DATA: Record<string, UnitStats> = {
     id: 'interceptor',
     name: 'Void Interceptor',
     description: 'High-speed attack craft designed for shock tactics.',
+    unitClass: 'robotic',
     type: 'support',
     meleeAtk: 16,
     rangedAtk: 0,
@@ -82,8 +87,40 @@ const UNIT_DATA: Record<string, UnitStats> = {
     rangedDef: 8,
     capacity: 15,
     upkeep: 10,
-    cost: { carbon: 500, titanium: 250 },
+    cost: { carbon: 300, titanium: 450, credits: 50 },
     time: 120,
+    requiredGarrisonLevel: 5
+  },
+  droid_decoy: {
+    id: 'droid_decoy',
+    name: 'Droid Decoy',
+    description: 'Automated high-durability robot designed to soak up damage.',
+    unitClass: 'robotic',
+    type: 'heavy',
+    meleeAtk: 2,
+    rangedAtk: 0,
+    meleeDef: 25,
+    rangedDef: 25,
+    capacity: 10,
+    upkeep: 5,
+    cost: { carbon: 150, titanium: 300, credits: 20 },
+    time: 60,
+    requiredGarrisonLevel: 3
+  },
+  heavy_automaton: {
+    id: 'heavy_automaton',
+    name: 'Heavy Automaton',
+    description: 'Tier 2 robotic combatant with heavy kinetic shielding.',
+    unitClass: 'robotic',
+    type: 'heavy',
+    meleeAtk: 20,
+    rangedAtk: 10,
+    meleeDef: 20,
+    rangedDef: 30,
+    capacity: 30,
+    upkeep: 15,
+    cost: { carbon: 800, titanium: 1200, credits: 200 },
+    time: 300,
     requiredGarrisonLevel: 5
   }
 };
@@ -146,6 +183,24 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
 
   const selectedUnit = selectedUnitId ? UNIT_DATA[selectedUnitId] : null;
 
+  const getClassIcon = (unitClass: string) => {
+    switch (unitClass) {
+      case 'melee': return '🗡️';
+      case 'ranged': return '🎯';
+      case 'robotic': return '🤖';
+      default: return '❓';
+    }
+  };
+
+  const getClassAdvantage = (unitClass: string) => {
+    switch (unitClass) {
+      case 'melee': return 'Robotic';
+      case 'ranged': return 'Melee';
+      case 'robotic': return 'Ranged';
+      default: return '';
+    }
+  };
+
   return (
     <div className="recruitment-panel">
       <div className="recruitment-panel-header">
@@ -155,6 +210,15 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
 
       <div className="recruitment-panel-content">
         <div className="units-selection-area">
+          <div className="triangle-legend-container" style={{ textAlign: 'center', padding: '15px', background: 'rgba(0,0,0,0.4)', borderRadius: '8px', border: '1px solid rgba(0, 243, 255, 0.2)', marginBottom: '10px' }}>
+            <h4 style={{ color: '#00ff88', marginBottom: '10px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Combat Triangle Advantage</h4>
+            <div className="triangle-flow" style={{ display: 'flex', justifyContent: 'center', gap: '15px', alignItems: 'center', fontSize: '0.8rem' }}>
+              <div className="triangle-node">🎯 Ranged <span style={{ color: '#00ff88' }}>+10% vs</span> 🗡️ Melee</div>
+              <div className="triangle-node">🗡️ Melee <span style={{ color: '#00ff88' }}>+10% vs</span> 🤖 Robotic</div>
+              <div className="triangle-node">🤖 Robotic <span style={{ color: '#00ff88' }}>+10% vs</span> 🎯 Ranged</div>
+            </div>
+          </div>
+
           {Object.values(UNIT_DATA).map((unit) => {
             const isLocked = garrisonLevel < unit.requiredGarrisonLevel;
             return (
@@ -164,15 +228,18 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
                 onClick={() => !isLocked && setSelectedUnitId(unit.id)}
               >
                 <div className="unit-image-container">
-                  <img src={`/assets/units/${unit.id}.jpeg`} alt={unit.name} onError={(e) => {
+                  <img src={`/assets/units/${unit.id}.png`} alt={unit.name} onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none';
                     const parent = (e.target as HTMLImageElement).parentElement;
-                    if (parent) parent.textContent = '⚔️';
+                    if (parent) parent.textContent = getClassIcon(unit.unitClass);
                   }} />
                 </div>
                 <div className="unit-main-info">
                   <div className="unit-name-row">
                     <h4>{unit.name}</h4>
+                    <span className="unit-class-icon" title={`Class: ${unit.unitClass} (+10% vs ${getClassAdvantage(unit.unitClass)})`}>
+                      {getClassIcon(unit.unitClass)}
+                    </span>
                     <span className="unit-type-tag">{unit.type}</span>
                   </div>
                   <div className="unit-desc-short">{unit.description}</div>
@@ -211,13 +278,18 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
             <div className="unit-detail-view">
               <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '20px' }}>
                 <div className="unit-image-container" style={{ width: '60px', height: '60px' }}>
-                  <img src={`/assets/units/${selectedUnit.id}.jpeg`} alt={selectedUnit.name} onError={(e) => {
+                  <img src={`/assets/units/${selectedUnit.id}.png`} alt={selectedUnit.name} onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none';
                     const parent = (e.target as HTMLImageElement).parentElement;
-                    if (parent) parent.textContent = '⚔️';
+                    if (parent) parent.textContent = getClassIcon(selectedUnit.unitClass);
                   }} />
                 </div>
-                <h4 style={{ margin: 0 }}>{selectedUnit.name}</h4>
+                <div>
+                  <h4 style={{ margin: 0 }}>{selectedUnit.name}</h4>
+                  <div style={{ fontSize: '0.8rem', color: '#aaa', marginTop: '2px' }}>
+                    {getClassIcon(selectedUnit.unitClass)} {selectedUnit.unitClass.toUpperCase()} (+10% vs {getClassAdvantage(selectedUnit.unitClass)})
+                  </div>
+                </div>
               </div>
               <div className="stat-grid-full">
                 <div className="full-stat-item">
@@ -320,8 +392,11 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
               )}
             </div>
           ) : (
-            <div className="detail-placeholder">
-              Select a unit from the left to view details and begin training.
+            <div className="detail-placeholder" style={{ flexDirection: 'column', gap: '15px' }}>
+              <div style={{ fontSize: '3rem', opacity: 0.2 }}>⚔️</div>
+              <div style={{ color: '#666' }}>
+                Select a unit from the left to view details and begin training.
+              </div>
             </div>
           )}
         </div>
