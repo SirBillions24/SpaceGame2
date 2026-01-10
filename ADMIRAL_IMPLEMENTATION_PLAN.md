@@ -3,7 +3,7 @@
 ## 🎯 Overview
 
 Implement a Commander/Admiral system where:
-- Admirals are **required** for all fleet movements (attack, support, scout)
+- Admirals are **optional** for all fleet movements (attack, support, scout)
 - Admirals consist of **4 pieces** (gear slots)
 - Pieces are obtained by **attacking NPC planets** (loot drops)
 - Admirals provide combat bonuses when equipped

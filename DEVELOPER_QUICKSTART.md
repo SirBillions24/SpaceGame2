@@ -95,7 +95,3 @@ If you are new to the project, follow this path to get up to speed:
     -   Look at `GlobalHUD.tsx` to see how we consume and display real-time data.
     -   Look at `PlanetInterior.tsx` to see how we handle grid interactions (Canvas/Div hybrid).
 
-5.  **First Task**:
-    -   Try creating a new "Decoration" building in `mechanics.ts`, add it to `BUILDING_LABELS`, and verify it affects Stability in-game.
-
-Happy Coding!

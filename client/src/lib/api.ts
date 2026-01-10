@@ -99,6 +99,18 @@ export const getCurrentUser = (): { userId: string; username: string } | null =>
 };
 
 export const api = {
+  async getUnitTypes(): Promise<{ units: Record<string, any> }> {
+    const response = await fetch(`${API_BASE_URL}/world/unit-types`);
+    if (!response.ok) throw new Error('Failed to fetch unit types');
+    return response.json();
+  },
+
+  async getToolTypes(): Promise<{ tools: Record<string, any> }> {
+    const response = await fetch(`${API_BASE_URL}/world/tool-types`);
+    if (!response.ok) throw new Error('Failed to fetch tool types');
+    return response.json();
+  },
+
   async getPlanets(): Promise<WorldPlanetsResponse> {
     const response = await fetch(`${API_BASE_URL}/world/planets`, {
       headers: getHeaders(true)

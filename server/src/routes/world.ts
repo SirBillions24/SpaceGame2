@@ -2,8 +2,20 @@ import { Router, Response } from 'express';
 import prisma from '../lib/prisma';
 import { syncPlanetResources, calculatePlanetRates } from '../services/planetService';
 import { optionalAuthenticateToken, AuthRequest } from '../middleware/auth';
+import { UNIT_DATA } from '../constants/unitData';
+import { TOOL_DATA } from '../constants/toolData';
 
 const router = Router();
+
+// Get all unit types and their stats (for UI rendering)
+router.get('/unit-types', (req, res: Response) => {
+  res.json({ units: UNIT_DATA });
+});
+
+// Get all tool types and their stats (for module assignment)
+router.get('/tool-types', (req, res: Response) => {
+  res.json({ tools: TOOL_DATA });
+});
 
 // Get all planets with their positions and owners
 router.get('/planets', optionalAuthenticateToken, async (req: AuthRequest, res: Response) => {
