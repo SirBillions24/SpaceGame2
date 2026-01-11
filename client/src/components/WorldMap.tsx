@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import { api, type Planet, type Fleet } from '../lib/api';
+import { ProceduralBackgroundManager } from './ProceduralBackground';
 
 interface Probe {
   id: string;
@@ -15,7 +16,7 @@ interface Probe {
 }
 
 interface WorldMapProps {
-  mapImageUrl: string;
+  mapImageUrl?: string; // Optional - no longer used for background
   onPlanetClick?: (planet: Planet) => void;
   sourcePlanetId?: string | null;
   onMapContainerReady?: (container: PIXI.Container) => void;
@@ -24,15 +25,13 @@ interface WorldMapProps {
   onEspionageModeChange?: (active: boolean) => void;
 }
 
-// Tile configuration
-const TILE_SIZE = 1024; // Size of each tile in world units
-const RENDER_PADDING = 1;
+// Tile configuration (kept for camera scale calculation)
+const TILE_SIZE = 1024;
 
-export default function WorldMap({ 
-  mapImageUrl, 
-  onPlanetClick, 
-  sourcePlanetId, 
-  onMapContainerReady, 
+export default function WorldMap({
+  onPlanetClick,
+  sourcePlanetId,
+  onMapContainerReady,
   currentUserId,
   isEspionageMode: controlledEspionageMode,
   onEspionageModeChange
@@ -42,7 +41,6 @@ export default function WorldMap({
   const mapContainerRef = useRef<PIXI.Container | null>(null);
 
   // Storage for map objects
-  const tileCacheRef = useRef<Map<string, PIXI.Sprite>>(new Map());
   const planetSpritesRef = useRef<Map<string, PIXI.Sprite>>(new Map());
 
   // Storage for fleet animation objects [fleetId -> { sprite, graphics }]
@@ -55,7 +53,7 @@ export default function WorldMap({
   const [planets, setPlanets] = useState<Planet[]>([]);
   const [localEspionageMode, setLocalEspionageMode] = useState(false);
   const [selectedProbeType, setSelectedProbeType] = useState('recon_probe');
-  
+
   useEffect(() => {
     if (ghostProbeRef.current) {
       ghostProbeRef.current.clear();
@@ -150,9 +148,11 @@ export default function WorldMap({
           onMapContainerReady(mapContainer);
         }
 
-        const bgLayer = new PIXI.Container();
-        bgLayer.zIndex = 0;
-        mapContainer.addChild(bgLayer);
+        // Procedural Background (replaces tiled PNG)
+        const proceduralBg = new ProceduralBackgroundManager(mapContainer);
+
+        // Add initial black hole at center of starting map area
+        proceduralBg.addBlackHole({ id: 'main', x: 5000, y: 5000 });
 
         // Fleets below planets? Or above? Above makes them visible.
         const fleetLayer = new PIXI.Container();
@@ -167,8 +167,7 @@ export default function WorldMap({
         espionageLayer.zIndex = 30;
         mapContainer.addChild(espionageLayer);
 
-        // Map Texture
-        const mapTexture = await PIXI.Assets.load(mapImageUrl);
+        // Note: mapImageUrl no longer used for background (procedural generation)
 
         // Load Fleet Texture (placeholder for now)
         const fleetTexture = await PIXI.Assets.load('/assets/map_icons/fleet_ship.png').catch(() => {
@@ -183,46 +182,16 @@ export default function WorldMap({
           scale: Math.min(app.screen.width / TILE_SIZE, app.screen.height / TILE_SIZE) * 0.8,
         };
 
-        // Render Tiles
-        const renderTiles = () => {
-          if (!bgLayer) return;
-          // ... (keep tile rendering logic mostly same, simplified for brevity here if needed)
+        // Update procedural background based on camera
+        const updateBackground = () => {
           const camera = cameraRef.current;
-          const screenW = app.screen.width;
-          const screenH = app.screen.height;
-          const worldLeft = camera.x - (screenW / 2) / camera.scale;
-          const worldTop = camera.y - (screenH / 2) / camera.scale;
-          const worldRight = camera.x + (screenW / 2) / camera.scale;
-          const worldBottom = camera.y + (screenH / 2) / camera.scale;
-
-          const tileX0 = Math.floor(worldLeft / TILE_SIZE) - RENDER_PADDING;
-          const tileY0 = Math.floor(worldTop / TILE_SIZE) - RENDER_PADDING;
-          const tileX1 = Math.floor(worldRight / TILE_SIZE) + RENDER_PADDING;
-          const tileY1 = Math.floor(worldBottom / TILE_SIZE) + RENDER_PADDING;
-
-          const currentTiles = new Set<string>();
-
-          for (let ty = tileY0; ty <= tileY1; ty++) {
-            for (let tx = tileX0; tx <= tileX1; tx++) {
-              const key = `${tx},${ty}`;
-              currentTiles.add(key);
-              if (!tileCacheRef.current.has(key)) {
-                const s = new PIXI.Sprite(mapTexture);
-                s.x = tx * TILE_SIZE;
-                s.y = ty * TILE_SIZE;
-                bgLayer.addChild(s);
-                tileCacheRef.current.set(key, s);
-              }
-            }
-          }
-
-          for (const [key, sprite] of tileCacheRef.current.entries()) {
-            if (!currentTiles.has(key)) {
-              bgLayer.removeChild(sprite);
-              sprite.destroy();
-              tileCacheRef.current.delete(key);
-            }
-          }
+          proceduralBg.update(
+            camera.x,
+            camera.y,
+            camera.scale,
+            app.screen.width,
+            app.screen.height
+          );
         };
 
         const updateCamera = () => {
@@ -309,7 +278,7 @@ export default function WorldMap({
         // --- GAME LOOP ---
         app.ticker.add(() => {
           updateCamera();
-          renderTiles();
+          updateBackground();
 
           // --- RENDER FLEETS ---
           const currentFleets = latestFleetsRef.current;
@@ -439,21 +408,21 @@ export default function WorldMap({
               const end = new Date(probe.arrivalTime).getTime();
               const nowMs = Date.now();
               const progress = Math.max(0, Math.min(1, (nowMs - start) / (end - start)));
-              
+
               posX = probe.fromPlanet.x + (probe.targetX - probe.fromPlanet.x) * progress;
               posY = probe.fromPlanet.y + (probe.targetY - probe.fromPlanet.y) * progress;
-              
+
               objects.sprite.alpha = 0.6;
             } else if (probe.status === 'returning') {
               const start = new Date(probe.lastUpdateTime).getTime(); // Recall started
               const end = new Date(probe.returnTime!).getTime();
               const nowMs = Date.now();
               const progress = Math.max(0, Math.min(1, (nowMs - start) / (end - start)));
-              
+
               // Move from target back to home
               posX = probe.targetX + (probe.fromPlanet.x - probe.targetX) * progress;
               posY = probe.targetY + (probe.fromPlanet.y - probe.targetY) * progress;
-              
+
               objects.sprite.alpha = 0.4;
               objects.sprite.tint = 0xff0000; // Red for returning
             } else {
@@ -466,7 +435,7 @@ export default function WorldMap({
 
             // Draw Radius and Connection Line
             objects.graphics.clear();
-            
+
             // Draw tether line to home colony
             objects.graphics.moveTo(probe.fromPlanet.x, probe.fromPlanet.y);
             objects.graphics.lineTo(posX, posY);
@@ -592,7 +561,7 @@ export default function WorldMap({
 
       {hasIntelHub && (
         <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '10px' }}>
-          <button 
+          <button
             onClick={() => setIsEspionageMode(!isEspionageMode)}
             style={{
               padding: '10px 20px',
@@ -611,14 +580,14 @@ export default function WorldMap({
       )}
 
       {isEspionageMode && (
-        <div style={{ 
-          position: 'absolute', 
-          top: 80, 
-          left: '50%', 
-          transform: 'translateX(-50%)', 
-          color: '#00f2ff', 
-          background: 'rgba(0,0,0,0.85)', 
-          padding: '15px 30px', 
+        <div style={{
+          position: 'absolute',
+          top: 80,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          color: '#00f2ff',
+          background: 'rgba(0,0,0,0.85)',
+          padding: '15px 30px',
           borderRadius: '10px',
           border: '1px solid #00f2ff',
           display: 'flex',
@@ -629,7 +598,7 @@ export default function WorldMap({
         }}>
           <div style={{ fontWeight: 'bold', letterSpacing: '1px' }}>SELECT PROBE TYPE & CLICK ON MAP</div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
+            <button
               onClick={(e) => { e.stopPropagation(); setSelectedProbeType('recon_probe'); }}
               style={{
                 padding: '5px 15px',
@@ -643,7 +612,7 @@ export default function WorldMap({
             >
               BASIC (150 Radius)
             </button>
-            <button 
+            <button
               onClick={(e) => { e.stopPropagation(); setSelectedProbeType('advanced_probe'); }}
               style={{
                 padding: '5px 15px',

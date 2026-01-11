@@ -38,11 +38,11 @@ function App() {
   // Periodic user & planet status check
   useEffect(() => {
     if (!isLoggedIn) return;
-    
+
     const interval = setInterval(() => {
       checkUserStatus();
     }, 10000); // Check every 10 seconds for XP/Level/Planet changes
-    
+
     return () => clearInterval(interval);
   }, [isLoggedIn, hudPlanet?.id]);
 
@@ -129,8 +129,6 @@ function App() {
     setCurrentUser(null);
   };
 
-  const mapImageUrl = '/assets/world-map.png';
-
   // Show login panel if not logged in
   if (!isLoggedIn) {
     return <LoginPanel onLogin={handleLogin} />;
@@ -141,7 +139,6 @@ function App() {
       <GlobalHUD user={currentUser || getCurrentUser()} currentPlanet={hudPlanet} />
 
       <WorldMap
-        mapImageUrl={mapImageUrl}
         onPlanetClick={handlePlanetClick}
         sourcePlanetId={sourcePlanet?.id}
         onMapContainerReady={handleMapContainerReady}
@@ -152,15 +149,15 @@ function App() {
 
       <div className="hud-overlay" style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', gap: '10px', zIndex: 1000 }}>
         {hasIntelHub && (
-          <button 
-            onClick={() => setIsEspionageMode(!isEspionageMode)} 
-            style={{ 
-              background: isEspionageMode ? '#00f2ff' : '#1e3a3d', 
-              color: isEspionageMode ? '#000' : '#00f2ff', 
-              border: '2px solid #00f2ff', 
-              padding: '10px 20px', 
-              cursor: 'pointer', 
-              borderRadius: '4px', 
+          <button
+            onClick={() => setIsEspionageMode(!isEspionageMode)}
+            style={{
+              background: isEspionageMode ? '#00f2ff' : '#1e3a3d',
+              color: isEspionageMode ? '#000' : '#00f2ff',
+              border: '2px solid #00f2ff',
+              padding: '10px 20px',
+              cursor: 'pointer',
+              borderRadius: '4px',
               fontWeight: 'bold',
               boxShadow: isEspionageMode ? '0 0 15px #00f2ff' : 'none'
             }}
