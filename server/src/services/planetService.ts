@@ -200,7 +200,8 @@ export function calculatePlanetRates(planet: any) {
     population,
     publicOrder,
     productivity,
-    maxStorage
+    maxStorage,
+    darkMatterRate: calculateDarkMatterProduction(planet.buildings)
   };
 }
 
@@ -353,12 +354,29 @@ export async function syncPlanetResources(planetId: string) {
     newFood = 0;
   }
 
-  // Credits
-  let newCredits = planet.credits + (stats.creditRate * diffHours);
+  // Credits - Shared across all planets (Global User Resource)
+  const creditsProduced = stats.creditRate * diffHours;
 
-  // Dark Matter (from Horizon Harvester generators)
+  // Dark Matter (from Horizon Harvester generators) - Shared across all planets (Global User Resource)
   const darkMatterRate = calculateDarkMatterProduction(planet.buildings);
-  let newDarkMatter = (planet as any).darkMatter + (darkMatterRate * diffHours);
+  const darkMatterProduced = darkMatterRate * diffHours;
+
+  // Only accumulate global resources for player-owned planets (not NPCs)
+  if (!planet.isNpc && planet.ownerId) {
+    if (creditsProduced > 0 || darkMatterProduced > 0) {
+      await prisma.user.update({
+        where: { id: planet.ownerId },
+        data: {
+          credits: { increment: creditsProduced },
+          darkMatter: { increment: darkMatterProduced }
+        }
+      });
+    }
+  }
+
+  // Keep internal planet credits and darkMatter at 0 to avoid confusion
+  let newCredits = 0;
+  let newDarkMatter = 0;
 
   // 7. Queue Processing
   let updatedRecruitmentQueue = planet.recruitmentQueue;
@@ -402,7 +420,7 @@ export async function syncPlanetResources(planetId: string) {
       titanium: newTitanium,
       food: newFood,
       credits: newCredits,
-      darkMatter: newDarkMatter,
+      darkMatter: newDarkMatter, // Always 0 as production moves to user
       stability: Math.round(stats.publicOrder),
       population: stats.population,
       lastResourceUpdate: now,
@@ -427,6 +445,11 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
 
   // Building Limits
   if (type === 'colony_hub') throw new Error('Additional Colony Hubs cannot be constructed.');
+
+  const bType = BUILDING_DATA[type];
+  if (bType?.nonConstructable) {
+    throw new Error(`${bType.name} cannot be constructed; it must be discovered or captured.`);
+  }
 
   const limitedBuildings = ['storage_depot', 'naval_academy', 'orbital_garrison', 'tavern', 'defense_workshop', 'siege_workshop', 'orbital_minefield', 'docking_hub'];
   if (limitedBuildings.includes(type)) {
@@ -471,7 +494,10 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
   const titaniumCost = stats.cost.titanium;
   const time = stats.time;
 
-  if (planet.carbon < carbonCost || planet.titanium < titaniumCost) {
+  // Check for Free Build mode (dev tool)
+  const isFreeBuild = (global as any).isFreeBuildEnabled?.(planet.ownerId) || false;
+
+  if (!isFreeBuild && (planet.carbon < carbonCost || planet.titanium < titaniumCost)) {
     throw new Error('Insufficient resources');
   }
 
@@ -490,12 +516,12 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
     }
   });
 
-  // Set Planet Construction State
+  // Set Planet Construction State (skip deduction in Free Build mode)
   await prisma.planet.update({
     where: { id: planet.id },
     data: {
-      carbon: { decrement: carbonCost },
-      titanium: { decrement: titaniumCost },
+      carbon: isFreeBuild ? planet.carbon : { decrement: carbonCost },
+      titanium: isFreeBuild ? planet.titanium : { decrement: titaniumCost },
       isBuilding: true,
       activeBuildId: building.id,
       buildFinishTime: finishTime

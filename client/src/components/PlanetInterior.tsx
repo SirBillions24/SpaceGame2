@@ -21,6 +21,7 @@ interface BuildingTypeStats {
   name: string;
   size: number;
   category: 'civil' | 'military' | 'decoration';
+  nonConstructable?: boolean;
   levels: Record<number, {
     level: number;
     requiredPlayerLevel: number;
@@ -126,13 +127,13 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
   // Derived category building lists
   const militaryBuildings = useMemo(() => {
     return Object.entries(buildingTypes)
-      .filter(([_, data]) => data.category === 'military')
+      .filter(([_, data]) => data.category === 'military' && !data.nonConstructable)
       .map(([type]) => type);
   }, [buildingTypes]);
 
   const civilBuildings = useMemo(() => {
     return Object.entries(buildingTypes)
-      .filter(([_, data]) => data.category === 'civil' || data.category === 'decoration')
+      .filter(([_, data]) => (data.category === 'civil' || data.category === 'decoration') && !data.nonConstructable)
       .map(([type]) => type);
   }, [buildingTypes]);
 
@@ -693,8 +694,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                               return (
                                 <div
                                   key={type}
-                                  className={`building-card ${buildMode === type ? 'active' : ''} ${!canAfford ? 'disabled' : ''} ${type === 'colony_hub' ? 'hidden' : ''}`}
-                                  style={{ display: type === 'colony_hub' ? 'none' : 'flex' }}
+                                  className={`building-card ${buildMode === type ? 'active' : ''} ${!canAfford ? 'disabled' : ''}`}
                                   onClick={() => {
                                     if (isLimited && existingB) {
                                       setShowUpgradeMenu({ building: existingB });

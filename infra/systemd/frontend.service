@@ -1,0 +1,16 @@
+[Unit]
+Description=Galactic Conquest Frontend (Vite)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/bone/oldschoolempire/client
+ExecStart=/usr/bin/npm run dev
+Restart=always
+RestartSec=3
+Environment=PATH=/usr/bin:/usr/local/bin
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -4,6 +4,148 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
+// --- COMBAT REPORT MASKING FOR DEFEATED ATTACKERS ---
+// When an attacker loses, they should not see the defender's stationed troop positions.
+// They can only see:
+// - Their own losses
+// - What they killed (defenderLosses per sector)
+// - If they breached any flank: the surface/courtyard troops they fought against
+
+interface FlankUnits {
+  [unitType: string]: number;
+}
+
+interface SectorData {
+  winner: 'attacker' | 'defender';
+  initialAttackerUnits?: FlankUnits | null;
+  initialDefenderUnits?: FlankUnits | null;
+  survivingAttackers?: FlankUnits | null;
+  survivingDefenders?: FlankUnits | null;
+  attackerLosses?: FlankUnits;
+  defenderLosses?: FlankUnits;
+  waveResults?: any[];
+  attackerToolsByWave?: any[];
+  defenderTools?: any;
+  wavesFought?: number;
+}
+
+interface SurfaceData {
+  winner: 'attacker' | 'defender';
+  attackerBonus?: number;
+  defenderBonus?: number;
+  initialAttackerUnits?: FlankUnits | null;
+  initialDefenderUnits?: FlankUnits | null;
+  attackerLosses?: FlankUnits;
+  defenderLosses?: FlankUnits;
+}
+
+interface LaneResults {
+  sectors?: Record<string, SectorData>;
+  surface?: SurfaceData | null;
+  admirals?: any;
+  // Legacy format support
+  left?: SectorData;
+  center?: SectorData;
+  front?: SectorData;
+  right?: SectorData;
+}
+
+function hasUnits(units: FlankUnits | null | undefined): boolean {
+  if (!units) return false;
+  return Object.values(units).reduce((a, b) => a + b, 0) > 0;
+}
+
+function maskReportForDefeatedAttacker(laneResults: LaneResults): LaneResults {
+  // Extract sectors (handle both new and legacy format)
+  // Use Record<string, SectorData | undefined> to allow string indexing
+  const sectors: Record<string, SectorData | undefined> = laneResults.sectors ?
+    { ...laneResults.sectors } :
+    {
+      left: laneResults.left,
+      center: laneResults.center || laneResults.front,
+      front: laneResults.front,
+      right: laneResults.right
+    };
+  const surface = laneResults.surface;
+
+  // Determine which sectors were breached (attacker won AND sent units)
+  const getSector = (key: string): SectorData | undefined => {
+    if (sectors[key]) return sectors[key];
+    if (key === 'center' && sectors['front']) return sectors['front'];
+    return undefined;
+  };
+
+  const leftSector = getSector('left');
+  const centerSector = getSector('center');
+  const rightSector = getSector('right');
+
+  const leftBreached = leftSector?.winner === 'attacker' && hasUnits(leftSector?.initialAttackerUnits);
+  const centerBreached = centerSector?.winner === 'attacker' && hasUnits(centerSector?.initialAttackerUnits);
+  const rightBreached = rightSector?.winner === 'attacker' && hasUnits(rightSector?.initialAttackerUnits);
+
+  const anyBreached = leftBreached || centerBreached || rightBreached;
+
+  // Mask sectors - hide defender stationed positions for non-breached sectors
+  const maskSector = (sector: SectorData | undefined, wasBreached: boolean): SectorData | undefined => {
+    if (!sector) return undefined;
+
+    if (wasBreached) {
+      // Full visibility for breached sectors
+      return sector;
+    }
+
+    // Hide defender positions, keep losses visible
+    return {
+      ...sector,
+      initialDefenderUnits: null,
+      survivingDefenders: null,
+      // Keep defenderLosses - this is what the attacker killed
+      // Keep defenderTools visible as intelligence
+    };
+  };
+
+  const maskedSectors: Record<string, SectorData | undefined> = {
+    left: maskSector(leftSector, leftBreached),
+    center: maskSector(centerSector, centerBreached),
+    right: maskSector(rightSector, rightBreached)
+  };
+
+  // Handle legacy format (front vs center)
+  if (laneResults.front && !laneResults.center) {
+    maskedSectors['front'] = maskedSectors['center'];
+    delete maskedSectors['center'];
+  }
+
+  // Mask surface if no breach occurred
+  let maskedSurface = surface;
+  if (surface && !anyBreached) {
+    maskedSurface = {
+      ...surface,
+      initialDefenderUnits: null,
+      // Keep attacker data and losses visible
+    };
+  }
+
+  // Reconstruct the result
+  if (laneResults.sectors) {
+    return {
+      ...laneResults,
+      sectors: maskedSectors as Record<string, SectorData>,
+      surface: maskedSurface
+    };
+  }
+
+  // Legacy format
+  return {
+    ...laneResults,
+    left: maskedSectors.left,
+    center: maskedSectors.center,
+    front: maskedSectors.front,
+    right: maskedSectors.right,
+    surface: maskedSurface
+  };
+}
+
 // Get all battle reports for the authenticated user
 router.get('/battles', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
@@ -36,10 +178,16 @@ router.get('/battles', authenticateToken, async (req: AuthRequest, res: Response
 
     const result = reports.map((report) => {
       const isAttacker = report.attackerId === userId;
-      const laneResults = JSON.parse(report.laneResultsJson);
+      let laneResults = JSON.parse(report.laneResultsJson);
       const attackerLosses = JSON.parse(report.attackerTotalLossesJson);
       const defenderLosses = JSON.parse(report.defenderTotalLossesJson);
-      
+
+      // Mask defender positions if attacker lost
+      const attackerLost = report.winner === 'defender';
+      if (isAttacker && attackerLost) {
+        laneResults = maskReportForDefeatedAttacker(laneResults);
+      }
+
       const admirals = laneResults.admirals || { attacker: null, defender: null };
 
       return {
@@ -101,11 +249,17 @@ router.get('/battles/:id', authenticateToken, async (req: AuthRequest, res: Resp
     }
 
     const isAttacker = report.attackerId === userId;
-    const laneResults = JSON.parse(report.laneResultsJson);
+    let laneResults = JSON.parse(report.laneResultsJson);
     const attackerLosses = JSON.parse(report.attackerTotalLossesJson);
     const defenderLosses = JSON.parse(report.defenderTotalLossesJson);
     const loot = report.resourcesJson ? JSON.parse(report.resourcesJson) : null;
-    
+
+    // Mask defender positions if attacker lost
+    const attackerLost = report.winner === 'defender';
+    if (isAttacker && attackerLost) {
+      laneResults = maskReportForDefeatedAttacker(laneResults);
+    }
+
     // Extract admiral information from laneResults (if present)
     const admirals = laneResults.admirals || { attacker: null, defender: null };
 

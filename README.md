@@ -81,6 +81,35 @@ npm run dev
 # API: http://localhost:3000
 ```
 
+### Running in the Background (Recommended)
+
+To run the frontend and backend in the background so you can close your terminal, use the provided `systemd` user services. These handle auto-restarts and log rotation automatically.
+
+**Management Commands:**
+```bash
+# Start both services
+systemctl --user start frontend backend
+
+# Restart services (useful after code changes if not auto-detected)
+systemctl --user restart frontend backend
+
+# Check status
+systemctl --user status frontend backend
+
+# Stop services
+systemctl --user stop frontend backend
+```
+
+**Viewing Logs:**
+Logs are managed by `journald` and will not fill up your disk.
+```bash
+# Tail frontend logs
+journalctl --user -u frontend -f
+
+# Tail backend logs
+journalctl --user -u backend -f
+```
+
 ### Environment Variables
 
 Create `server/.env`:

@@ -25,6 +25,7 @@ export interface BuildingTypeStats {
     name: string;
     size: number;
     category: 'civil' | 'military' | 'decoration';
+    nonConstructable?: boolean;
     levels: Record<number, BuildingLevelStats>;
 }
 
@@ -184,6 +185,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
         name: 'Colony Hub',
         size: 7,
         category: 'civil',
+        nonConstructable: true,
         levels: {
             1: { level: 1, requiredPlayerLevel: 1, cost: { carbon: 0, titanium: 0 }, stability: 100, time: 0, xp: 0 },
             2: { level: 2, requiredPlayerLevel: 11, cost: { carbon: 1000, titanium: 500 }, stability: 150, time: 3600, xp: 50 },
@@ -247,6 +249,7 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
         name: 'Dark Matter Generator',
         size: 5,
         category: 'civil',
+        nonConstructable: true,
         levels: {
             1: {
                 level: 1,

@@ -99,14 +99,14 @@ export default function Mailbox({ onClose }: MailboxProps) {
                                 <div className="empty-state">No messages in buffer.</div>
                             ) : (
                                 items.map(item => (
-                                    <div 
-                                        key={item.id} 
-                                        className={`report-item ${item.type} ${item.type === 'message' && !item.isRead ? 'unread' : ''}`} 
+                                    <div
+                                        key={item.id}
+                                        className={`report-item ${item.type} ${item.type === 'message' && !item.isRead ? 'unread' : ''}`}
                                         onClick={() => handleSelect(item)}
                                     >
                                         <div className="report-icon">
-                                            {item.type === 'battle' ? (item.isAttacker ? '⚔️' : '🛡️') : 
-                                             item.type === 'espionage' ? '🛰️' : '✉️'}
+                                            {item.type === 'battle' ? (item.isAttacker ? '⚔️' : '🛡️') :
+                                                item.type === 'espionage' ? '🛰️' : '✉️'}
                                         </div>
                                         <div className="report-summary">
                                             <div className="report-title">{item.title}</div>
@@ -239,9 +239,126 @@ function EspionageReportView({ id, onBack }: { id: string, onBack: () => void })
     );
 }
 
+// Gear rarity colors
+const RARITY_COLORS: Record<string, string> = {
+    common: '#9ca3af',
+    uncommon: '#22c55e',
+    rare: '#3b82f6',
+    epic: '#a855f7',
+    legendary: '#f59e0b'
+};
+
+// Gear slot icons
+const SLOT_ICONS: Record<string, string> = {
+    weapon: '⚔️',
+    helmet: '🪖',
+    spacesuit: '🧥',
+    shield: '🛡️'
+};
+
+interface GearDropData {
+    gearId: string;
+    name: string;
+    slotType: string;
+    rarity: string;
+    level: number;
+    meleeStrengthBonus: number;
+    rangedStrengthBonus: number;
+    canopyReductionBonus: number;
+    planetName: string;
+    iconName?: string;
+}
+
+function GearDropMessageView({ message, onBack }: { message: any, onBack: () => void }) {
+    let gearData: GearDropData | null = null;
+    try {
+        gearData = JSON.parse(message.content);
+    } catch (e) {
+        // Fall back to text display
+    }
+
+    if (!gearData) {
+        return (
+            <div className="message-view">
+                <div className="br-nav">
+                    <button className="back-btn" onClick={onBack}>← Back</button>
+                </div>
+                <div className="message-header">
+                    <h3>{message.title}</h3>
+                    <div className="message-date">{new Date(message.createdAt).toLocaleString()}</div>
+                </div>
+                <div className="message-body">
+                    {message.content}
+                </div>
+            </div>
+        );
+    }
+
+    const rarityColor = RARITY_COLORS[gearData.rarity] || RARITY_COLORS.common;
+    const slotIcon = SLOT_ICONS[gearData.slotType] || '📦';
+
+    return (
+        <div className="message-view gear-drop-view">
+            <div className="br-nav">
+                <button className="back-btn" onClick={onBack}>← Back</button>
+            </div>
+            <div className="report-header victory">
+                <h3>GEAR RECOVERED!</h3>
+                <div className="sub-status">Combat Salvage from {gearData.planetName}</div>
+            </div>
+            <div className="gear-card" style={{ borderColor: rarityColor }}>
+                <div className="gear-header">
+                    <span className="gear-icon">{slotIcon}</span>
+                    <div className="gear-title">
+                        <span className="gear-name" style={{ color: rarityColor }}>{gearData.name}</span>
+                        <span className="gear-rarity" style={{ color: rarityColor }}>
+                            {gearData.rarity.charAt(0).toUpperCase() + gearData.rarity.slice(1)} {gearData.slotType.charAt(0).toUpperCase() + gearData.slotType.slice(1)}
+                        </span>
+                    </div>
+                    <span className="gear-level">Lv. {gearData.level}</span>
+                </div>
+                <div className="gear-stats">
+                    {gearData.meleeStrengthBonus > 0 && (
+                        <div className="gear-stat melee">
+                            <span className="stat-icon">⚔️</span>
+                            <span className="stat-label">Melee Strength</span>
+                            <span className="stat-value">+{gearData.meleeStrengthBonus}%</span>
+                        </div>
+                    )}
+                    {gearData.rangedStrengthBonus > 0 && (
+                        <div className="gear-stat ranged">
+                            <span className="stat-icon">🎯</span>
+                            <span className="stat-label">Ranged Strength</span>
+                            <span className="stat-value">+{gearData.rangedStrengthBonus}%</span>
+                        </div>
+                    )}
+                    {gearData.canopyReductionBonus !== 0 && (
+                        <div className="gear-stat canopy">
+                            <span className="stat-icon">🛡️</span>
+                            <span className="stat-label">Canopy Reduction</span>
+                            <span className="stat-value">{gearData.canopyReductionBonus}%</span>
+                        </div>
+                    )}
+                    {gearData.meleeStrengthBonus === 0 && gearData.rangedStrengthBonus === 0 && gearData.canopyReductionBonus === 0 && (
+                        <div className="gear-stat none">No stat bonuses</div>
+                    )}
+                </div>
+            </div>
+            <div className="gear-info">
+                <p>This gear has been added to your inventory. Visit the Admiral page to equip it.</p>
+            </div>
+        </div>
+    );
+}
+
 function MessageView({ id, items, onBack }: { id: string, items: any[], onBack: () => void }) {
     const message = items.find(i => i.id === id);
     if (!message) return <div>Message not found.</div>;
+
+    // Handle gear drop messages with special styling
+    if (message.subType === 'gear_drop') {
+        return <GearDropMessageView message={message} onBack={onBack} />;
+    }
 
     return (
         <div className="message-view">
@@ -368,11 +485,11 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                             {admirals.attacker.canopyReductionBonus < 0 && (
                                                 <span className="bonus defense">{admirals.attacker.canopyReductionBonus}% Canopy Reduc.</span>
                                             )}
-                                            {admirals.attacker.meleeStrengthBonus === 0 && 
-                                             admirals.attacker.rangedStrengthBonus === 0 && 
-                                             admirals.attacker.canopyReductionBonus === 0 && (
-                                                <span className="no-bonus">No bonuses</span>
-                                            )}
+                                            {admirals.attacker.meleeStrengthBonus === 0 &&
+                                                admirals.attacker.rangedStrengthBonus === 0 &&
+                                                admirals.attacker.canopyReductionBonus === 0 && (
+                                                    <span className="no-bonus">No bonuses</span>
+                                                )}
                                         </>
                                     ) : (
                                         <span className="no-bonus">No bonuses applied to this fleet</span>
@@ -400,11 +517,11 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                             {admirals.defender.canopyReductionBonus < 0 && (
                                                 <span className="bonus defense">{admirals.defender.canopyReductionBonus}% Canopy Reduc.</span>
                                             )}
-                                            {(!admirals.defender.meleeStrengthBonus && 
-                                              !admirals.defender.rangedStrengthBonus && 
-                                              !admirals.defender.canopyReductionBonus) && (
-                                                <span className="no-bonus">No bonuses</span>
-                                            )}
+                                            {(!admirals.defender.meleeStrengthBonus &&
+                                                !admirals.defender.rangedStrengthBonus &&
+                                                !admirals.defender.canopyReductionBonus) && (
+                                                    <span className="no-bonus">No bonuses</span>
+                                                )}
                                         </>
                                     ) : (
                                         <span className="no-bonus">No defensive bonuses active</span>
@@ -496,7 +613,11 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                     <div className="flank-side defender">
                                         <div className="fs-title">Defender</div>
                                         <div className="fs-content">
-                                            <UnitList units={result.initialDefenderUnits} colorClass="neutral" />
+                                            {result.initialDefenderUnits === null ? (
+                                                <div className="intel-masked">Intelligence Unavailable</div>
+                                            ) : (
+                                                <UnitList units={result.initialDefenderUnits} colorClass="neutral" />
+                                            )}
                                             <ToolList tools={result.defenderTools} />
                                             <div className="losses">
                                                 {wasUnopposed ? (
@@ -512,7 +633,7 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                     {isExpanded && result.waveResults && (
                                         <div className="mail-wave-breakdown">
                                             {result.waveResults.map((wave: any, idx: number) => (
-                                        <div key={idx} className="mail-wave-row">
+                                                <div key={idx} className="mail-wave-row">
                                                     <div className="mail-wave-header">
                                                         <span>Wave {wave.waveIndex}</span>
                                                         {wave.attackerTriangleBonus > 1 && (
@@ -581,7 +702,11 @@ function BattleReportView({ id, onBack }: { id: string, onBack: () => void }) {
                                 <div className="cy-vs">VS</div>
                                 <div className="cy-side">
                                     <h5>Defender Force</h5>
-                                    <div>Deployed: <UnitList units={surfaceResult.initialDefenderUnits} colorClass="neutral" /></div>
+                                    <div>Deployed: {surfaceResult.initialDefenderUnits === null ? (
+                                        <span className="intel-masked">Intelligence Unavailable</span>
+                                    ) : (
+                                        <UnitList units={surfaceResult.initialDefenderUnits} colorClass="neutral" />
+                                    )}</div>
                                     <div className="bonus-breakdown">
                                         Sector Bonus: +{(surfaceResult.defenderBonus * 100).toFixed(0)}%
                                         {admirals.defender ? (

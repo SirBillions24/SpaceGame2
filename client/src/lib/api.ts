@@ -8,7 +8,7 @@ export interface Planet {
   ownerId: string;
   ownerName: string;
   units?: Record<string, number>;
-  resources?: { carbon: number; titanium: number; food: number; credits: number };
+  resources?: { carbon: number; titanium: number; food: number; credits: number; darkMatter: number };
   production?: { carbon: number; titanium: number; food: number };
   gridSize?: number; // Legacy, use gridSizeX/gridSizeY
   gridSizeX?: number;
@@ -38,6 +38,7 @@ export interface Planet {
     population: number;
     publicOrder: number;
     productivity: number;
+    darkMatterRate: number;
   };
 }
 
@@ -470,6 +471,94 @@ export const api = {
       method: 'POST',
       headers: getHeaders(true),
       body: JSON.stringify({ planetId, amount }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Dev tool failed');
+    }
+    return response.json();
+  },
+
+  async devAddDarkMatter(amount: number = 1000) {
+    const response = await fetch(`${API_BASE_URL}/dev/add-dark-matter`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ amount }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Dev tool failed');
+    }
+    return response.json();
+  },
+
+  async devMaxUpgradeBuilding(planetId: string, buildingId: string) {
+    const response = await fetch(`${API_BASE_URL}/dev/max-upgrade-building`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId, buildingId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Dev tool failed');
+    }
+    return response.json();
+  },
+
+  async devToggleFreeBuild() {
+    const response = await fetch(`${API_BASE_URL}/dev/toggle-free-build`, {
+      method: 'POST',
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Dev tool failed');
+    }
+    return response.json();
+  },
+
+  async devGetFreeBuildStatus() {
+    const response = await fetch(`${API_BASE_URL}/dev/free-build-status`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Dev tool failed');
+    }
+    return response.json();
+  },
+
+  async devAddUnits(planetId: string, unitType: string, count: number) {
+    const response = await fetch(`${API_BASE_URL}/dev/add-units`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId, unitType, count }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Dev tool failed');
+    }
+    return response.json();
+  },
+
+  async devAddArmy(planetId: string, count: number = 100) {
+    const response = await fetch(`${API_BASE_URL}/dev/add-army`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId, count }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Dev tool failed');
+    }
+    return response.json();
+  },
+
+  async devLevelUp(levels: number = 10) {
+    const response = await fetch(`${API_BASE_URL}/dev/level-up`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ levels }),
     });
     if (!response.ok) {
       const error = await response.json();

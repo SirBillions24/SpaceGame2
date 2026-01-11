@@ -107,25 +107,6 @@ model Fleet {
 
 ## 🎮 Gameplay Flow
 
-### 1. Obtaining Pieces (NPC Loot)
-
-**When attacking NPC planets:**
-- After successful combat, roll for loot drops
-- Pieces drop based on NPC level:
-  - Level 1-5 NPCs: Common/Uncommon pieces
-  - Level 6-10 NPCs: Rare pieces
-  - Level 11-15 NPCs: Epic pieces
-  - Level 16+ NPCs: Legendary pieces
-
-**Loot Drop Logic:**
-```typescript
-// After NPC combat victory
-const dropChance = 0.3; // 30% chance to drop a piece
-const pieceType = random(['helmet', 'armor', 'weapon', 'shield']);
-const rarity = calculateRarity(npcLevel);
-const level = randomLevel(npcLevel);
-```
-
 ### 2. Assembling Admiral
 
 **Requirements:**

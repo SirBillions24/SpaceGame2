@@ -88,6 +88,11 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
                     const roll = Math.random();
 
                     if (roll < dropChance) {
+                        // Fetch gear details before transfer for the message
+                        const gear = await prisma.gearPiece.findUnique({
+                            where: { id: updatedNpc.npcLootGearId }
+                        });
+
                         await prisma.gearPiece.update({
                             where: { id: updatedNpc.npcLootGearId },
                             data: { userId: fleet.ownerId },
@@ -96,6 +101,30 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
                             where: { id: updatedNpc.id },
                             data: { npcLootGearId: null },
                         });
+
+                        // Send inbox message about gear drop
+                        if (gear) {
+                            await prisma.inboxMessage.create({
+                                data: {
+                                    userId: fleet.ownerId,
+                                    type: 'gear_drop',
+                                    title: `${gear.name} Recovered!`,
+                                    content: JSON.stringify({
+                                        gearId: gear.id,
+                                        name: gear.name,
+                                        slotType: gear.slotType,
+                                        rarity: gear.rarity,
+                                        level: gear.level,
+                                        meleeStrengthBonus: gear.meleeStrengthBonus,
+                                        rangedStrengthBonus: gear.rangedStrengthBonus,
+                                        canopyReductionBonus: gear.canopyReductionBonus,
+                                        planetName: targetPlanet.name,
+                                        iconName: (gear as any).iconName || null
+                                    })
+                                }
+                            });
+                        }
+
                         console.log(`🎁 Gear ${updatedNpc.npcLootGearId} dropped (hit ${newCount}/${maxHits}, ${Math.round(dropChance * 100)}% chance)`);
                     }
                 }

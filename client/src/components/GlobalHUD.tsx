@@ -43,7 +43,8 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
     const xpInLevel = Math.max(0, xp - prevThreshold);
     const xpPercent = range > 0 ? (xpInLevel / range) * 100 : 0;
 
-    const rubies = 250; // Placeholder for Dark Matter
+    const darkMatter = planet?.resources?.darkMatter || 0;
+    const darkMatterRate = planet?.stats?.darkMatterRate || 0;
 
     const credits = planet?.resources?.credits || 0;
     const carbon = planet?.resources?.carbon || 0;
@@ -270,24 +271,25 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                     <span className="icon coin-icon">C</span>
                     <span>{Math.floor(credits).toLocaleString()}</span>
                     <div className="resource-dropdown coin-dropdown">
-                        <h5>Colony Credits</h5>
-                        <div className="military-row">
-                            <span className="unit-name">Population:</span>
-                            <span className="unit-count">{pop}</span>
-                        </div>
-                        <div className="military-row">
-                            <span className="unit-name">Tax Revenue:</span>
-                            <span className="unit-count">+{taxRev.toFixed(1)}/h</span>
+                        <h5>Credits</h5>
+                        <p>Taxation revenue from all your colonies. This is a <strong>Global Resource</strong> shared across all your planets.</p>
+                        <div className="military-row" style={{ borderTop: '1px solid #444', marginTop: '5px', paddingTop: '5px' }}>
+                            <span className="unit-name">Total Rate:</span>
+                            <span className="unit-count" style={{ color: '#f1c40f' }}>+{taxRev.toFixed(1)}/h</span>
                         </div>
                     </div>
                 </div>
 
                 <div className="currency-pill premium">
                     <span className="icon dm-icon">DM</span>
-                    <span>{rubies}</span>
+                    <span>{Math.floor(darkMatter).toLocaleString()}</span>
                     <div className="resource-dropdown dm-dropdown">
                         <h5>Dark Matter</h5>
-                        <p>Premium currency for high-tech upgrades and instant processing.</p>
+                        <p>Exotic energy harvested from Horizon Harvesters. This is a <strong>Global Resource</strong> shared across all your colonies.</p>
+                        <div className="military-row" style={{ borderTop: '1px solid #444', marginTop: '5px', paddingTop: '5px' }}>
+                            <span className="unit-name">Total Rate:</span>
+                            <span className="unit-count" style={{ color: '#9b59b6' }}>+{darkMatterRate.toFixed(2)}/h</span>
+                        </div>
                     </div>
                 </div>
                 <div className="hud-icon-btn mail-icon" onClick={() => setMailboxOpen(true)}>
@@ -305,15 +307,16 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                             <h3>COMMANDER DEV TOOLS</h3>
                             <button className="close-btn" onClick={() => setDevToolsOpen(false)}>×</button>
                         </div>
-                        <div className="dev-content">
+                        <div className="dev-content" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            {/* Resources */}
                             <button onClick={async () => {
                                 try {
-                                    await api.devAddResources(planet.id, 1000);
+                                    await api.devAddResources(planet.id, 10000);
                                     api.getPlanet(planet.id).then(setPlanet);
-                                    alert('1,000 resources added');
+                                    alert('10,000 resources added');
                                 } catch (e: any) { alert(e.message); }
                             }}>
-                                Add 1,000 All Currencies
+                                +10K Resources
                             </button>
                             <button onClick={async () => {
                                 try {
@@ -322,17 +325,84 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                                     alert('1,000,000 resources added');
                                 } catch (e: any) { alert(e.message); }
                             }}>
-                                Add 1,000,000 All Currencies
+                                +1M Resources
                             </button>
+
+                            {/* Global Currencies */}
+                            <button onClick={async () => {
+                                try {
+                                    await api.devAddDarkMatter(1000);
+                                    api.getPlanet(planet.id).then(setPlanet);
+                                    alert('1,000 Dark Matter added');
+                                } catch (e: any) { alert(e.message); }
+                            }} style={{ background: '#9b59b6' }}>
+                                +1K Dark Matter
+                            </button>
+                            <button onClick={async () => {
+                                try {
+                                    await api.devAddDarkMatter(100000);
+                                    api.getPlanet(planet.id).then(setPlanet);
+                                    alert('100,000 Dark Matter added');
+                                } catch (e: any) { alert(e.message); }
+                            }} style={{ background: '#8e44ad' }}>
+                                +100K Dark Matter
+                            </button>
+
+                            {/* Timers */}
                             <button onClick={async () => {
                                 try {
                                     await api.devFastForward(planet.id);
                                     api.getPlanet(planet.id).then(setPlanet);
                                     alert('All crafts completed');
                                 } catch (e: any) { alert(e.message); }
-                            }}>
-                                Instantly Complete All Crafts
+                            }} style={{ background: '#e67e22' }}>
+                                ⏩ Complete All Crafts
                             </button>
+
+                            {/* Level Up */}
+                            <button onClick={async () => {
+                                try {
+                                    await api.devLevelUp(10);
+                                    window.location.reload();
+                                } catch (e: any) { alert(e.message); }
+                            }} style={{ background: '#27ae60' }}>
+                                +10 Levels
+                            </button>
+
+                            {/* Units */}
+                            <button onClick={async () => {
+                                try {
+                                    await api.devAddArmy(planet.id, 100);
+                                    api.getPlanet(planet.id).then(setPlanet);
+                                    alert('100 of each unit added');
+                                } catch (e: any) { alert(e.message); }
+                            }} style={{ background: '#c0392b' }}>
+                                +100 All Units
+                            </button>
+                            <button onClick={async () => {
+                                try {
+                                    await api.devAddArmy(planet.id, 1000);
+                                    api.getPlanet(planet.id).then(setPlanet);
+                                    alert('1,000 of each unit added');
+                                } catch (e: any) { alert(e.message); }
+                            }} style={{ background: '#e74c3c' }}>
+                                +1K All Units
+                            </button>
+
+                            {/* Free Build Toggle */}
+                            <button onClick={async () => {
+                                try {
+                                    const result = await api.devToggleFreeBuild();
+                                    alert(result.message);
+                                } catch (e: any) { alert(e.message); }
+                            }} style={{ background: '#1abc9c', gridColumn: 'span 2' }}>
+                                🔧 Toggle Free Build Mode
+                            </button>
+
+                            {/* Help Text */}
+                            <div style={{ gridColumn: 'span 2', fontSize: '11px', color: '#888', marginTop: '8px', textAlign: 'center' }}>
+                                Triple-click profile to open. Free Build requires server restart to take effect.
+                            </div>
                         </div>
                     </div>
                 </div>

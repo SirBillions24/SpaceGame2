@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 // 300 requests per minute per IP (5 per second average)
 export const globalLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
-    max: 300,
+    max: 400,
     message: { error: 'Too many requests, please slow down' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -26,7 +26,7 @@ export const authLimiter = rateLimit({
 // These are read-heavy with the GET /fleets endpoint being called frequently
 export const heavyActionLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
-    max: 60,
+    max: 120,
     message: { error: 'Too many actions, please wait before sending more fleets' },
     standardHeaders: true,
     legacyHeaders: false,

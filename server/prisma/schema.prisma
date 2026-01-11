@@ -29,6 +29,8 @@ model User {
   reconProbes ReconProbe[]
   inboxMessages InboxMessage[]
   espionageReports EspionageReport[]
+  darkMatter       Float             @default(0) @map("dark_matter")
+  credits          Float             @default(0) @map("credits")
 
   @@map("users")
 }

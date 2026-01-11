@@ -159,13 +159,32 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
     }));
 
     if (isOwner) {
+      // Fetch global user resources
+      const user = await prisma.user.findUnique({
+        where: { id: syncedPlanet.ownerId },
+        select: { darkMatter: true, credits: true }
+      });
+
+      // Calculate cumulative dark matter rate from ALL owned planets
+      const allOwnedPlanets = await prisma.planet.findMany({
+        where: { ownerId: syncedPlanet.ownerId, isNpc: false },
+        include: { buildings: true }
+      });
+      let totalDarkMatterRate = 0;
+      let totalCreditRate = 0;
+      for (const p of allOwnedPlanets) {
+        const pStats = calculatePlanetRates(p);
+        totalDarkMatterRate += pStats.darkMatterRate || 0;
+        totalCreditRate += pStats.creditRate || 0;
+      }
+
       responseData.units = units;
       responseData.resources = {
         carbon: syncedPlanet.carbon,
         titanium: syncedPlanet.titanium,
         food: syncedPlanet.food,
-        credits: syncedPlanet.credits,
-        darkMatter: (syncedPlanet as any).darkMatter || 0,
+        credits: user?.credits || 0,
+        darkMatter: user?.darkMatter || 0,
       };
       responseData.production = {
         carbon: planetStats.carbonRate,
@@ -185,7 +204,12 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
       responseData.turretConstructionQueue = Array.isArray((syncedPlanet as any).turretConstructionQueue) ? (syncedPlanet as any).turretConstructionQueue : ((syncedPlanet as any).turretConstructionQueue ? JSON.parse((syncedPlanet as any).turretConstructionQueue) : []);
       responseData.defenseTurretsJson = (syncedPlanet as any).defenseTurretsJson;
       responseData.tools = (syncedPlanet as any).tools || [];
-      responseData.stats = planetStats;
+      // Override stats with global rates
+      responseData.stats = {
+        ...planetStats,
+        creditRate: totalCreditRate,
+        darkMatterRate: totalDarkMatterRate
+      };
     } else {
       // Non-owners can't see units or resources (until espionage is implemented)
       responseData.units = {};
