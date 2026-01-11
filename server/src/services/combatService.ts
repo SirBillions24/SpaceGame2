@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { UNIT_DATA } from '../constants/unitData';
 import { TOOL_DATA, getToolStats } from '../constants/toolData';
 import { BUILDING_DATA, getBuildingStats } from '../constants/buildingData';
+import { FACTION_TRIANGLE, COMBAT_MODIFIERS, DEFENSE_BONUSES, Faction } from '../constants/combatBalanceData';
 
 // --- CONSTANTS & STATS ---
 
@@ -38,60 +39,57 @@ function calculateLoot(survivingUnits: FlankUnits, planetResources: { carbon: nu
   return loot;
 }
 
-// Defense Building Bonuses (per level)
-const CANOPY_GENERATOR_BONUS = 50; // +50 Defense Power per level (Global or Front?) - Applies to Canopy (Energy Canopy)
-const MINEFIELD_BONUS = 30;        // +30 Defense Power per level? Or %? Let's use flat power for MVP stability.
-const DOCKING_HUB_BONUS = 100;     // Central Docking Hub gives massive bonus to Center Sector.
+// Legacy constants (being migrated to combatBalanceData.ts)
+// Defense Building Bonuses now come from buildingData.ts and combatBalanceData.ts
+const CANOPY_GENERATOR_BONUS = 50; // Legacy - actual bonuses from buildingData
+const MINEFIELD_BONUS = 30;
+const DOCKING_HUB_BONUS = 100;
 
-// Tool Effects (Max Reductions)
-const CANOPY_REDUCTION = 0.10; // Each anchor reduces Canopy Bonus by 10%
-const HUB_BREACH_REDUCTION = 0.15; // Each charge reduces Hub Bonus by 15%
-const ECM_POD_REDUCTION = 0.05;       // Each pod reduces Ranged Defense Power by 5%
-const FIELD_NEUTRALIZER_REDUCTION = 0; // Not fully defined yet, can be moat reduction.
-
-const TRIANGLE_BONUS = 0.10; // +10% Advantage bonus
+// Tool reductions now come from toolData.ts bonusValue
+const CANOPY_REDUCTION = 0.15;
+const HUB_BREACH_REDUCTION = 0.15;
+const ECM_POD_REDUCTION = 0.05;
+const FIELD_NEUTRALIZER_REDUCTION = 0;
 
 /**
- * Calculate the weighted triangle multiplier for a force attacking another force.
- * Ranged > Melee > Robotic > Ranged
+ * Calculate the weighted faction multiplier for a force attacking another force.
+ * Faction Triangle: Human > Mech > Exo > Human
+ * Bonus is weighted by faction distribution on both sides.
  */
 function calculateTriangleMultiplier(sourceUnits: FlankUnits, targetUnits: FlankUnits): number {
-  const ADVANTAGES: Record<string, string> = {
-    'melee': 'robotic',
-    'robotic': 'ranged',
-    'ranged': 'melee'
-  };
+  const ADVANTAGES = FACTION_TRIANGLE.advantages;
+  const BONUS = FACTION_TRIANGLE.bonus;
 
   let totalSourceCount = 0;
-  const sourceClassDistribution: Record<string, number> = { melee: 0, ranged: 0, robotic: 0 };
+  const sourceFactionDistribution: Record<Faction, number> = { human: 0, mech: 0, exo: 0 };
   for (const [u, count] of Object.entries(sourceUnits)) {
     const stats = UNIT_DATA[u];
     if (!stats) continue;
-    sourceClassDistribution[stats.unitClass] += count;
+    sourceFactionDistribution[stats.unitFaction] += count;
     totalSourceCount += count;
   }
 
   let totalTargetCount = 0;
-  const targetClassDistribution: Record<string, number> = { melee: 0, ranged: 0, robotic: 0 };
+  const targetFactionDistribution: Record<Faction, number> = { human: 0, mech: 0, exo: 0 };
   for (const [u, count] of Object.entries(targetUnits)) {
     const stats = UNIT_DATA[u];
     if (!stats) continue;
-    targetClassDistribution[stats.unitClass] += count;
+    targetFactionDistribution[stats.unitFaction] += count;
     totalTargetCount += count;
   }
 
   if (totalSourceCount === 0 || totalTargetCount === 0) return 1.0;
 
   let weightedBonus = 0;
-  for (const [sClass, sCount] of Object.entries(sourceClassDistribution)) {
-    const sClassLower = sClass as 'melee' | 'ranged' | 'robotic';
-    const advantageOver = ADVANTAGES[sClassLower];
-    const targetWeakCount = targetClassDistribution[advantageOver] || 0;
-    
-    const sourceWeight = sCount / totalSourceCount;
+  for (const faction of ['human', 'mech', 'exo'] as Faction[]) {
+    const advantageOver = ADVANTAGES[faction] as Faction;
+    const sourceCount = sourceFactionDistribution[faction];
+    const targetWeakCount = targetFactionDistribution[advantageOver] || 0;
+
+    const sourceWeight = sourceCount / totalSourceCount;
     const targetWeight = targetWeakCount / totalTargetCount;
-    
-    weightedBonus += (sourceWeight * targetWeight * TRIANGLE_BONUS);
+
+    weightedBonus += (sourceWeight * targetWeight * BONUS);
   }
 
   return 1.0 + weightedBonus;
@@ -244,7 +242,7 @@ export function resolveWaveCollision(
     // Docking Hub bonus - 35% per level
     hubBonusPct = defenseLevels.hub * 0.35;
   }
-  
+
   // Orbital Minefield/Perimeter
   let minefieldBonusPct = defenseLevels.minefield * 0.10;
 
@@ -265,7 +263,7 @@ export function resolveWaveCollision(
     if (s.bonusType === 'hub_reduction' && isCenter) hubBonusPct = Math.max(0, hubBonusPct - (s.bonusValue * count));
     if (s.bonusType === 'ranged_reduction') {
       const reduction = Math.min(1.0, s.bonusValue * count);
-    defRanged *= (1 - reduction);
+      defRanged *= (1 - reduction);
     }
   }
 
@@ -364,7 +362,7 @@ export function resolveSector(
   let currentDefenders = { ...initialDefenderLane.units };
   // Clone defender tools (Deep copy array of objects)
   const currentDefenderTools = initialDefenderLane.tools ? initialDefenderLane.tools.map(t => ({ ...t })) : [];
-  
+
   // Track initial defender tools for the report UI
   const initialDefenderTools: Record<string, number> = {};
   if (initialDefenderLane.tools) {
@@ -393,7 +391,7 @@ export function resolveSector(
     if (defCount <= 0) {
       const attCount = Object.values(wave.units).reduce((a, b) => a + b, 0);
       if (attCount > 0) {
-      winner = 'attacker';
+        winner = 'attacker';
       }
       for (const [u, c] of Object.entries(wave.units)) {
         survivingAttackers[u] = (survivingAttackers[u] || 0) + c;
@@ -523,11 +521,11 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     rangedStrengthBonus: 0,
     canopyReductionBonus: 0,
   };
-  
+
   // Defender admiral
   const defenderAdmiral = fleet.toPlanet.owner.admiral;
   const isDefenderAdmiralStationed = defenderAdmiral && (defenderAdmiral as any).stationedPlanetId === fleet.toPlanetId;
-  
+
   const defenderBonuses = (defenderAdmiral && isDefenderAdmiralStationed) ? {
     meleeStrengthBonus: (defenderAdmiral as any).meleeStrengthBonus || 0,
     rangedStrengthBonus: (defenderAdmiral as any).rangedStrengthBonus || 0,
@@ -623,7 +621,7 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
 
   // 3. Courtyard Invasion Logic
   let attackerSectorsWon = 0;
-  
+
   // A lane is only breached if the attacker won AND actually sent units there.
   const checkBreach = (result: SectorResult, waves: Wave[]) => {
     if (result.winner !== 'attacker') return false;
@@ -661,41 +659,41 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   addUnits(finalCourtyardDefenders, rightResult.survivingDefenders);
 
   // Courtyard Battle
-    let attackerWonSurface = false;
-    let attLosses: FlankUnits = {};
-    let defLosses: FlankUnits = {};
+  let attackerWonSurface = false;
+  let attLosses: FlankUnits = {};
+  let defLosses: FlankUnits = {};
 
   const attCount = Object.values(surfAtt).reduce((a, b) => a + b, 0);
   const defCount = Object.values(finalCourtyardDefenders).reduce((a, b) => a + b, 0);
 
-    if (attCount > 0) {
-      if (defCount === 0) {
-        attackerWonSurface = true;
-      } else {
+  if (attCount > 0) {
+    if (defCount === 0) {
+      attackerWonSurface = true;
+    } else {
       // Apply bonuses to stats for the courtyard fight
-        const finalBat = resolveWaveCollision(
-          surfAtt,
+      const finalBat = resolveWaveCollision(
+        surfAtt,
         finalCourtyardDefenders,
         {}, // No tools in courtyard
         { canopy: 0, hub: 0, minefield: 0 }, // No walls in courtyard
-          false,
-          {},
-        { 
-          meleeStrengthBonus: attackerBonuses.meleeStrengthBonus + (attBonus * 100), 
-          rangedStrengthBonus: attackerBonuses.rangedStrengthBonus + (attBonus * 100), 
-          canopyReductionBonus: 0 
+        false,
+        {},
+        {
+          meleeStrengthBonus: attackerBonuses.meleeStrengthBonus + (attBonus * 100),
+          rangedStrengthBonus: attackerBonuses.rangedStrengthBonus + (attBonus * 100),
+          canopyReductionBonus: 0
         },
-        { 
-          meleeStrengthBonus: (defBonus * 100) + defenderBonuses.meleeStrengthBonus, 
-          rangedStrengthBonus: (defBonus * 100) + defenderBonuses.rangedStrengthBonus, 
-          canopyReductionBonus: 0 
+        {
+          meleeStrengthBonus: (defBonus * 100) + defenderBonuses.meleeStrengthBonus,
+          rangedStrengthBonus: (defBonus * 100) + defenderBonuses.rangedStrengthBonus,
+          canopyReductionBonus: 0
         }
-        );
-        attackerWonSurface = finalBat.attackerWon;
-        attLosses = finalBat.attackerLosses;
-        defLosses = finalBat.defenderLosses;
-      }
+      );
+      attackerWonSurface = finalBat.attackerWon;
+      attLosses = finalBat.attackerLosses;
+      defLosses = finalBat.defenderLosses;
     }
+  }
 
   const surfaceResult: {
     winner: 'attacker' | 'defender';
@@ -706,13 +704,13 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     attackerLosses: FlankUnits;
     defenderLosses: FlankUnits;
   } = {
-      winner: attackerWonSurface ? 'attacker' : 'defender',
-      attackerBonus: attBonus,
-      defenderBonus: defBonus,
-      initialAttackerUnits: { ...surfAtt },
+    winner: attackerWonSurface ? 'attacker' : 'defender',
+    attackerBonus: attBonus,
+    defenderBonus: defBonus,
+    initialAttackerUnits: { ...surfAtt },
     initialDefenderUnits: { ...finalCourtyardDefenders },
-      attackerLosses: attLosses,
-      defenderLosses: defLosses
+    attackerLosses: attLosses,
+    defenderLosses: defLosses
   };
 
   const finalWinner = (surfaceResult.winner === 'attacker') ? 'attacker' : 'defender';
@@ -834,7 +832,7 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
           await prisma.toolInventory.update({
             where: { id: currentTool.id },
             data: { count: newCount }
-        });
+          });
         }
       }
     }
@@ -847,13 +845,13 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
       const currentUnit = await prisma.planetUnit.findUnique({
         where: { planetId_unitType: { planetId: fleet.toPlanetId, unitType } }
       });
-      
+
       if (currentUnit) {
         const newCount = Math.max(0, currentUnit.count - (lossCount as number));
         await prisma.planetUnit.update({
           where: { id: currentUnit.id },
           data: { count: newCount }
-      });
+        });
       }
     }
   }

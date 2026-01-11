@@ -54,7 +54,7 @@ export const TOOL_DATA: Record<string, ToolStats> = {
         time: 30,
         workshop: 'siege_workshop',
         bonusType: 'canopy_reduction',
-        bonusValue: 0.10 // -10% per tool
+        bonusValue: 0.15 // -15% per tool
     },
     'plasma_breachers': {
         id: 'plasma_breachers',
@@ -64,7 +64,7 @@ export const TOOL_DATA: Record<string, ToolStats> = {
         time: 60,
         workshop: 'siege_workshop',
         bonusType: 'hub_reduction',
-        bonusValue: 0.10 // -10% per tool
+        bonusValue: 0.15 // -15% per tool
     },
     'stealth_field_pods': {
         id: 'stealth_field_pods',
@@ -74,7 +74,7 @@ export const TOOL_DATA: Record<string, ToolStats> = {
         time: 60,
         workshop: 'siege_workshop',
         bonusType: 'ranged_reduction',
-        bonusValue: 0.10 // -10% per tool
+        bonusValue: 0.15 // -15% per tool
     }
 };
 

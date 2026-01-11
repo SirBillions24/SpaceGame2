@@ -6,7 +6,7 @@ interface UnitStats {
   id: string;
   name: string;
   description: string;
-  unitClass: 'melee' | 'ranged' | 'robotic';
+  unitFaction: 'human' | 'mech' | 'exo';
   type: string;
   meleeAtk: number;
   rangedAtk: number;
@@ -24,105 +24,143 @@ interface UnitStats {
   requiredGarrisonLevel: number;
 }
 
-// These should ideally come from an API endpoint, but for now we define them here
-// to match the server-side constants.
+// Unit data matching server-side constants
 const UNIT_DATA: Record<string, UnitStats> = {
+  // Human Faction
   marine: {
     id: 'marine',
-    name: 'Space Marine',
-    description: 'Standard multi-purpose infantry unit. Balanced melee and defense.',
-    unitClass: 'melee',
+    name: 'Marine',
+    description: 'Standard infantry. Balanced melee combat specialist.',
+    unitFaction: 'human',
     type: 'melee',
-    meleeAtk: 12,
-    rangedAtk: 0,
-    meleeDef: 12,
-    rangedDef: 6,
-    capacity: 10,
-    upkeep: 4,
+    meleeAtk: 12, rangedAtk: 0, meleeDef: 12, rangedDef: 6,
+    capacity: 10, upkeep: 4,
     cost: { carbon: 0, titanium: 0, credits: 10 },
-    time: 20,
-    requiredGarrisonLevel: 1
+    time: 20, requiredGarrisonLevel: 1,
   },
-  ranger: {
-    id: 'ranger',
-    name: 'Scout Ranger',
-    description: 'Light infantry specializing in long-range engagement.',
-    unitClass: 'ranged',
+  sniper: {
+    id: 'sniper',
+    name: 'Sniper',
+    description: 'Precision marksman. High ranged damage, low survivability.',
+    unitFaction: 'human',
     type: 'ranged',
-    meleeAtk: 4,
-    rangedAtk: 14,
-    meleeDef: 4,
-    rangedDef: 10,
-    capacity: 5,
-    upkeep: 3,
-    cost: { carbon: 41, titanium: 0 },
-    time: 30,
-    requiredGarrisonLevel: 2
+    meleeAtk: 2, rangedAtk: 16, meleeDef: 4, rangedDef: 8,
+    capacity: 5, upkeep: 5,
+    cost: { carbon: 60, titanium: 30 },
+    time: 35, requiredGarrisonLevel: 2,
+  },
+  guardian: {
+    id: 'guardian',
+    name: 'Guardian',
+    description: 'Heavy infantry in powered armor. High defense, low mobility.',
+    unitFaction: 'human',
+    type: 'heavy',
+    meleeAtk: 8, rangedAtk: 4, meleeDef: 20, rangedDef: 16,
+    capacity: 15, upkeep: 8,
+    cost: { carbon: 200, titanium: 150, credits: 25 },
+    time: 60, requiredGarrisonLevel: 4,
+  },
+  commando: {
+    id: 'commando',
+    name: 'Commando',
+    description: 'Elite special forces. Devastating offensive capability.',
+    unitFaction: 'human',
+    type: 'elite',
+    meleeAtk: 18, rangedAtk: 12, meleeDef: 10, rangedDef: 10,
+    capacity: 20, upkeep: 12,
+    cost: { carbon: 400, titanium: 300, credits: 100 },
+    time: 120, requiredGarrisonLevel: 5,
+  },
+  // Mech Faction
+  drone: {
+    id: 'drone',
+    name: 'Drone',
+    description: 'Basic reconnaissance bot. Cheap and disposable.',
+    unitFaction: 'mech',
+    type: 'support',
+    meleeAtk: 4, rangedAtk: 4, meleeDef: 6, rangedDef: 6,
+    capacity: 5, upkeep: 2,
+    cost: { carbon: 20, titanium: 40 },
+    time: 15, requiredGarrisonLevel: 1,
+  },
+  automaton: {
+    id: 'automaton',
+    name: 'Automaton',
+    description: 'Combat robot optimized for close-quarters engagement.',
+    unitFaction: 'mech',
+    type: 'melee',
+    meleeAtk: 10, rangedAtk: 2, meleeDef: 10, rangedDef: 6,
+    capacity: 8, upkeep: 4,
+    cost: { carbon: 50, titanium: 80 },
+    time: 30, requiredGarrisonLevel: 2,
   },
   sentinel: {
     id: 'sentinel',
-    name: 'Sentinel Heavy',
-    description: 'Heavy armored unit designed to hold ground and absorb fire.',
-    unitClass: 'melee',
+    name: 'Sentinel',
+    description: 'Heavy defense platform. Absorbs massive damage.',
+    unitFaction: 'mech',
     type: 'heavy',
-    meleeAtk: 6,
-    rangedAtk: 2,
-    meleeDef: 18,
-    rangedDef: 18,
-    capacity: 20,
-    upkeep: 6,
-    cost: { carbon: 200, titanium: 0 },
-    time: 40,
-    requiredGarrisonLevel: 4
+    meleeAtk: 6, rangedAtk: 2, meleeDef: 22, rangedDef: 22,
+    capacity: 12, upkeep: 6,
+    cost: { carbon: 150, titanium: 200, credits: 20 },
+    time: 50, requiredGarrisonLevel: 3,
   },
   interceptor: {
     id: 'interceptor',
-    name: 'Void Interceptor',
-    description: 'High-speed attack craft designed for shock tactics.',
-    unitClass: 'robotic',
-    type: 'support',
-    meleeAtk: 16,
-    rangedAtk: 0,
-    meleeDef: 8,
-    rangedDef: 8,
-    capacity: 15,
-    upkeep: 10,
+    name: 'Interceptor',
+    description: 'High-speed assault craft. Devastating shock attacks.',
+    unitFaction: 'mech',
+    type: 'elite',
+    meleeAtk: 20, rangedAtk: 8, meleeDef: 8, rangedDef: 8,
+    capacity: 15, upkeep: 10,
     cost: { carbon: 300, titanium: 450, credits: 50 },
-    time: 120,
-    requiredGarrisonLevel: 5
+    time: 100, requiredGarrisonLevel: 5,
   },
-  droid_decoy: {
-    id: 'droid_decoy',
-    name: 'Droid Decoy',
-    description: 'Automated high-durability robot designed to soak up damage.',
-    unitClass: 'robotic',
-    type: 'heavy',
-    meleeAtk: 2,
-    rangedAtk: 0,
-    meleeDef: 25,
-    rangedDef: 25,
-    capacity: 10,
-    upkeep: 5,
-    cost: { carbon: 150, titanium: 300, credits: 20 },
-    time: 60,
-    requiredGarrisonLevel: 3
+  // Exo Faction
+  stalker: {
+    id: 'stalker',
+    name: 'Stalker',
+    description: 'Fast alien predator. Strikes from the shadows.',
+    unitFaction: 'exo',
+    type: 'melee',
+    meleeAtk: 10, rangedAtk: 0, meleeDef: 6, rangedDef: 4,
+    capacity: 6, upkeep: 3,
+    cost: { carbon: 30, titanium: 20 },
+    time: 20, requiredGarrisonLevel: 1,
   },
-  heavy_automaton: {
-    id: 'heavy_automaton',
-    name: 'Heavy Automaton',
-    description: 'Tier 2 robotic combatant with heavy kinetic shielding.',
-    unitClass: 'robotic',
+  spitter: {
+    id: 'spitter',
+    name: 'Spitter',
+    description: 'Ranged bioform. Projects corrosive acid at distance.',
+    unitFaction: 'exo',
+    type: 'ranged',
+    meleeAtk: 2, rangedAtk: 14, meleeDef: 4, rangedDef: 10,
+    capacity: 5, upkeep: 4,
+    cost: { carbon: 45, titanium: 35 },
+    time: 30, requiredGarrisonLevel: 2,
+  },
+  brute: {
+    id: 'brute',
+    name: 'Brute',
+    description: 'Massive alien beast. Incredible resilience.',
+    unitFaction: 'exo',
     type: 'heavy',
-    meleeAtk: 20,
-    rangedAtk: 10,
-    meleeDef: 20,
-    rangedDef: 30,
-    capacity: 30,
-    upkeep: 15,
-    cost: { carbon: 800, titanium: 1200, credits: 200 },
-    time: 300,
-    requiredGarrisonLevel: 5
-  }
+    meleeAtk: 10, rangedAtk: 0, meleeDef: 18, rangedDef: 14,
+    capacity: 18, upkeep: 7,
+    cost: { carbon: 120, titanium: 100, credits: 15 },
+    time: 55, requiredGarrisonLevel: 3,
+  },
+  ravager: {
+    id: 'ravager',
+    name: 'Ravager',
+    description: 'Apex predator. Unmatched killing efficiency.',
+    unitFaction: 'exo',
+    type: 'elite',
+    meleeAtk: 22, rangedAtk: 6, meleeDef: 12, rangedDef: 10,
+    capacity: 25, upkeep: 14,
+    cost: { carbon: 350, titanium: 250, credits: 80 },
+    time: 110, requiredGarrisonLevel: 5,
+  },
 };
 
 interface RecruitmentPanelProps {
@@ -183,20 +221,20 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
 
   const selectedUnit = selectedUnitId ? UNIT_DATA[selectedUnitId] : null;
 
-  const getClassIcon = (unitClass: string) => {
-    switch (unitClass) {
-      case 'melee': return '🗡️';
-      case 'ranged': return '🎯';
-      case 'robotic': return '🤖';
+  const getFactionIcon = (faction: string) => {
+    switch (faction) {
+      case 'human': return '�';
+      case 'mech': return '🤖';
+      case 'exo': return '👽';
       default: return '❓';
     }
   };
 
-  const getClassAdvantage = (unitClass: string) => {
-    switch (unitClass) {
-      case 'melee': return 'Robotic';
-      case 'ranged': return 'Melee';
-      case 'robotic': return 'Ranged';
+  const getFactionAdvantage = (faction: string) => {
+    switch (faction) {
+      case 'human': return 'Mech';
+      case 'mech': return 'Exo';
+      case 'exo': return 'Human';
       default: return '';
     }
   };
@@ -211,11 +249,11 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
       <div className="recruitment-panel-content">
         <div className="units-selection-area">
           <div className="triangle-legend-container" style={{ textAlign: 'center', padding: '15px', background: 'rgba(0,0,0,0.4)', borderRadius: '8px', border: '1px solid rgba(0, 243, 255, 0.2)', marginBottom: '10px' }}>
-            <h4 style={{ color: '#00ff88', marginBottom: '10px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Combat Triangle Advantage</h4>
+            <h4 style={{ color: '#00ff88', marginBottom: '10px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Faction Triangle (+25% Advantage)</h4>
             <div className="triangle-flow" style={{ display: 'flex', justifyContent: 'center', gap: '15px', alignItems: 'center', fontSize: '0.8rem' }}>
-              <div className="triangle-node">🎯 Ranged <span style={{ color: '#00ff88' }}>+10% vs</span> 🗡️ Melee</div>
-              <div className="triangle-node">🗡️ Melee <span style={{ color: '#00ff88' }}>+10% vs</span> 🤖 Robotic</div>
-              <div className="triangle-node">🤖 Robotic <span style={{ color: '#00ff88' }}>+10% vs</span> 🎯 Ranged</div>
+              <div className="triangle-node">👤 Human <span style={{ color: '#00ff88' }}>beats</span> 🤖 Mech</div>
+              <div className="triangle-node">🤖 Mech <span style={{ color: '#00ff88' }}>beats</span> 👽 Exo</div>
+              <div className="triangle-node">👽 Exo <span style={{ color: '#00ff88' }}>beats</span> 👤 Human</div>
             </div>
           </div>
 
@@ -231,14 +269,14 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
                   <img src={`/assets/units/${unit.id}.png`} alt={unit.name} onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none';
                     const parent = (e.target as HTMLImageElement).parentElement;
-                    if (parent) parent.textContent = getClassIcon(unit.unitClass);
+                    if (parent) parent.textContent = getFactionIcon(unit.unitFaction);
                   }} />
                 </div>
                 <div className="unit-main-info">
                   <div className="unit-name-row">
                     <h4>{unit.name}</h4>
-                    <span className="unit-class-icon" title={`Class: ${unit.unitClass} (+10% vs ${getClassAdvantage(unit.unitClass)})`}>
-                      {getClassIcon(unit.unitClass)}
+                    <span className="unit-class-icon" title={`Faction: ${unit.unitFaction.toUpperCase()} (+25% vs ${getFactionAdvantage(unit.unitFaction)})`}>
+                      {getFactionIcon(unit.unitFaction)}
                     </span>
                     <span className="unit-type-tag">{unit.type}</span>
                   </div>
@@ -281,13 +319,13 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
                   <img src={`/assets/units/${selectedUnit.id}.png`} alt={selectedUnit.name} onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none';
                     const parent = (e.target as HTMLImageElement).parentElement;
-                    if (parent) parent.textContent = getClassIcon(selectedUnit.unitClass);
+                    if (parent) parent.textContent = getFactionIcon(selectedUnit.unitFaction);
                   }} />
                 </div>
                 <div>
                   <h4 style={{ margin: 0 }}>{selectedUnit.name}</h4>
                   <div style={{ fontSize: '0.8rem', color: '#aaa', marginTop: '2px' }}>
-                    {getClassIcon(selectedUnit.unitClass)} {selectedUnit.unitClass.toUpperCase()} (+10% vs {getClassAdvantage(selectedUnit.unitClass)})
+                    {getFactionIcon(selectedUnit.unitFaction)} {selectedUnit.unitFaction.toUpperCase()} (+25% vs {getFactionAdvantage(selectedUnit.unitFaction)})
                   </div>
                 </div>
               </div>
@@ -320,7 +358,7 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
 
               <div className="recruitment-controls">
                 {error && <div className="error-notification">{error}</div>}
-                
+
                 <div className="cost-row">
                   {selectedUnit.cost.carbon > 0 && (
                     <div className={`cost-item ${planet.resources && planet.resources.carbon < (selectedUnit.cost.carbon * recruitCount) ? 'insufficient' : ''}`}>
@@ -358,8 +396,8 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
                   <button
                     className="train-button"
                     disabled={
-                      loading || 
-                      (selectedUnit.cost.carbon > 0 && planet.resources && planet.resources.carbon < (selectedUnit.cost.carbon * recruitCount)) || 
+                      loading ||
+                      (selectedUnit.cost.carbon > 0 && planet.resources && planet.resources.carbon < (selectedUnit.cost.carbon * recruitCount)) ||
                       (selectedUnit.cost.titanium > 0 && planet.resources && planet.resources.titanium < (selectedUnit.cost.titanium * recruitCount)) ||
                       (selectedUnit.cost.credits && selectedUnit.cost.credits > 0 && planet.resources && planet.resources.credits < (selectedUnit.cost.credits * recruitCount))
                     }
@@ -378,7 +416,7 @@ export default function RecruitmentPanel({ planet, onClose, onUpdate }: Recruitm
                       if (!q || !q.finishTime) return null;
                       const finish = new Date(q.finishTime).getTime();
                       if (isNaN(finish)) return null;
-                      
+
                       const diff = Math.max(0, Math.ceil((finish - now.getTime()) / 1000));
                       return (
                         <div key={`${q.unit}-${i}`} className="queue-item-modern">

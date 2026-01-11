@@ -20,7 +20,8 @@ import prisma from '../lib/prisma';
 import { resolveCombat } from '../services/combatService';
 import { syncPlanetResources } from '../services/planetService';
 import { relocateNpc } from '../services/pveService';
-import { FleetArrivalJob, FleetReturnJob, redisConnectionOptions } from '../lib/jobQueue';
+import { FleetArrivalJob, FleetReturnJob, NpcRespawnJob, redisConnectionOptions, queueNpcRespawn } from '../lib/jobQueue';
+import { NPC_BALANCE } from '../constants/npcBalanceData';
 
 /**
  * Process fleet arrival at destination
@@ -58,7 +59,7 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
         // Resolve combat
         const combatResult = await resolveCombat(fleetId);
 
-        // Handle NPC attack count and relocation
+        // Handle NPC attack count, gear drop, and respawn queuing
         const targetPlanet = await prisma.planet.findUnique({ where: { id: fleet.toPlanetId } });
         if (targetPlanet && targetPlanet.isNpc) {
             const updatedNpc = await prisma.planet.update({
@@ -66,8 +67,37 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
                 data: { attackCount: { increment: 1 } },
             });
 
+            // Handle gear drop on victory (probabilistic based on remaining hits)
+            // Chance increases as hits remaining decreases, guaranteed on final hit
+            if (combatResult.winner === 'attacker' && updatedNpc.npcLootGearId) {
+                const maxHits = updatedNpc.maxAttacks || 15;
+                const currentHit = updatedNpc.attackCount;
+                const hitsRemaining = maxHits - currentHit;
+
+                // Drop probability: 1/(remaining_hits + 1) - guarantees drop on last hit
+                // Hit 1 of 15: 1/15 = 6.7% chance
+                // Hit 7 of 15: 1/9 = 11% chance  
+                // Hit 14 of 15: 1/2 = 50% chance
+                // Hit 15 of 15: 1/1 = 100% chance
+                const dropChance = 1 / (hitsRemaining + 1);
+                const roll = Math.random();
+
+                if (roll < dropChance) {
+                    await prisma.gearPiece.update({
+                        where: { id: updatedNpc.npcLootGearId },
+                        data: { userId: fleet.ownerId },
+                    });
+                    await prisma.planet.update({
+                        where: { id: updatedNpc.id },
+                        data: { npcLootGearId: null },
+                    });
+                    console.log(`🎁 Gear ${updatedNpc.npcLootGearId} dropped (hit ${currentHit}/${maxHits}, ${Math.round(dropChance * 100)}% chance)`);
+                }
+            }
+
+            // Queue respawn after delay when max attacks reached
             if (updatedNpc.attackCount >= (updatedNpc.maxAttacks || 15)) {
-                await relocateNpc(updatedNpc.id);
+                await queueNpcRespawn({ planetId: updatedNpc.id }, NPC_BALANCE.respawn.delaySeconds);
             }
         }
 
@@ -329,6 +359,18 @@ async function processFleetReturn(job: Job<FleetReturnJob>) {
 }
 
 /**
+ * Process NPC respawn after delay
+ */
+async function processNpcRespawn(job: Job<NpcRespawnJob>) {
+    const { planetId } = job.data;
+    console.log(`🔄 Processing NPC respawn: ${planetId}`);
+
+    await relocateNpc(planetId);
+
+    console.log(`✅ NPC ${planetId} respawned successfully`);
+}
+
+/**
  * Create and start the worker
  */
 export function createGameEventsWorker() {
@@ -342,6 +384,9 @@ export function createGameEventsWorker() {
                         break;
                     case 'fleet:return':
                         await processFleetReturn(job as Job<FleetReturnJob>);
+                        break;
+                    case 'npc:respawn':
+                        await processNpcRespawn(job as Job<NpcRespawnJob>);
                         break;
                     default:
                         console.warn(`Unknown job type: ${job.name}`);

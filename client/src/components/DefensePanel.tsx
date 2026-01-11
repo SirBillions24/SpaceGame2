@@ -22,7 +22,7 @@ interface UnitStats {
     id: string;
     name: string;
     description: string;
-    unitClass: string;
+    unitFaction: string;
 }
 
 interface ToolStats {
@@ -46,11 +46,11 @@ const BONUS_TYPE_LABELS: Record<string, string> = {
     'ranged_def': 'Ranged Defense'
 };
 
-const getClassIcon = (unitClass: string) => {
-    switch (unitClass) {
-        case 'melee': return '🗡️';
-        case 'ranged': return '🎯';
-        case 'robotic': return '🤖';
+const getFactionIcon = (unitFaction: string) => {
+    switch (unitFaction) {
+        case 'human': return '👤';
+        case 'mech': return '🤖';
+        case 'exo': return '👽';
         default: return '⚔️';
     }
 };
@@ -445,7 +445,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
                                 const uData = unitData[unit];
                                 return (
                                     <div key={unit} className="sector-unit-row">
-                                        <span className="unit-icon">{getClassIcon(uData?.unitClass || 'melee')}</span>
+                                        <span className="unit-icon">{getFactionIcon(uData?.unitFaction || 'human')}</span>
                                         <span className="unit-name">{uData?.name || unit}</span>
                                         <input
                                             type="number"
@@ -541,7 +541,7 @@ export default function DefensePanel({ planet, onClose }: DefensePanelProps) {
                             return (
                                 <div key={unitId} className="allocation-row">
                                     <div className="allocation-unit-info">
-                                        <span className="unit-icon">{getClassIcon(uData.unitClass)}</span>
+                                        <span className="unit-icon">{getFactionIcon(uData.unitFaction)}</span>
                                         <span className="unit-name">{uData.name}</span>
                                     </div>
                                     <div className="allocation-controls">

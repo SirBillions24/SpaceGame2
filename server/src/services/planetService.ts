@@ -6,10 +6,10 @@ import { UNIT_DATA } from '../constants/unitData';
 import { BASE_PRODUCTION } from '../constants/mechanics';
 import { BUILDING_DATA, getBuildingStats } from '../constants/buildingData';
 import { addXp } from './progressionService';
+import { getWorldBounds, getQuadrantCenter, maybeExpandWorld, Quadrant } from './worldService';
+import { MAP_CONFIG } from '../constants/npcBalanceData';
 
-const WORLD_SIZE_X = parseInt(process.env.WORLD_SIZE_X || '5000');
-const WORLD_SIZE_Y = parseInt(process.env.WORLD_SIZE_Y || '5000');
-const MIN_PLANET_DISTANCE = parseInt(process.env.MIN_PLANET_DISTANCE || '120'); // Increased to prevent visual overlap
+const MIN_PLANET_DISTANCE = MAP_CONFIG.minPlanetDistance;
 
 interface UnitCounts {
   [unitType: string]: number;
@@ -57,30 +57,28 @@ async function isPositionValid(x: number, y: number): Promise<boolean> {
 
 /**
  * Generate a random valid position for a new planet, optionally in a specific quadrant
+ * Uses dynamic world bounds from database
  */
-async function generatePlanetPosition(quadrant?: 'NW' | 'NE' | 'SW' | 'SE'): Promise<{ x: number; y: number }> {
-  let attempts = 0;
+async function generatePlanetPosition(quadrant?: Quadrant): Promise<{ x: number; y: number }> {
+  const bounds = await getWorldBounds();
   const maxAttempts = 200;
+  let attempts = 0;
 
-  // Quadrant Centers (World 5000x5000)
-  // NW: 0-2500, 0-2500 -> Center 1250, 1250
-  // NE: 2500-5000, 0-2500 -> Center 3750, 1250
-  // SW: 0-2500, 2500-5000 -> Center 1250, 3750
-  // SE: 2500-5000, 2500-5000 -> Center 3750, 3750
+  // Calculate centers and ranges based on current world size
+  const midX = bounds.maxX / 2;
+  const midY = bounds.maxY / 2;
 
-  let baseX = 2500, baseY = 2500, rangeX = 2500, rangeY = 2500;
+  let baseX = midX, baseY = midY;
+  let rangeX = midX - 500, rangeY = midY - 500;  // Leave margin from edges
 
   if (quadrant) {
-    if (quadrant === 'NW') { baseX = 1250; baseY = 1250; }
-    if (quadrant === 'NE') { baseX = 3750; baseY = 1250; }
-    if (quadrant === 'SW') { baseX = 1250; baseY = 3750; }
-    if (quadrant === 'SE') { baseX = 3750; baseY = 3750; }
-    // Constrain random range to roughly the quadrant size but allow some chaos
-    rangeX = 1200;
-    rangeY = 1200;
-  } else {
-    // Global random if no quadrant specified (legacy fallback)
-    baseX = 2500; baseY = 2500; rangeX = 2500; rangeY = 2500;
+    // Dynamic quadrant centers based on current world size
+    const center = await getQuadrantCenter(quadrant);
+    baseX = center.x;
+    baseY = center.y;
+    // Spawn within quadrant with margin from edges (quadrant is midX x midY sized)
+    rangeX = midX / 2 - 200;
+    rangeY = midY / 2 - 200;
   }
 
   while (attempts < maxAttempts) {
@@ -92,8 +90,8 @@ async function generatePlanetPosition(quadrant?: 'NW' | 'NE' | 'SW' | 'SE'): Pro
     let y = Math.floor(baseY + offsetY);
 
     // Clamp to world bounds
-    x = Math.max(50, Math.min(WORLD_SIZE_X - 50, x));
-    y = Math.max(50, Math.min(WORLD_SIZE_Y - 50, y));
+    x = Math.max(50, Math.min(bounds.maxX - 50, x));
+    y = Math.max(50, Math.min(bounds.maxY - 50, y));
 
     if (await isPositionValid(x, y)) {
       return { x, y };
@@ -104,8 +102,8 @@ async function generatePlanetPosition(quadrant?: 'NW' | 'NE' | 'SW' | 'SE'): Pro
 
   console.warn('Could not find valid position after max attempts, using random backup');
   return {
-    x: Math.floor(Math.random() * WORLD_SIZE_X),
-    y: Math.floor(Math.random() * WORLD_SIZE_Y),
+    x: Math.floor(Math.random() * bounds.maxX),
+    y: Math.floor(Math.random() * bounds.maxY),
   };
 }
 
@@ -133,7 +131,7 @@ export function calculatePlanetRates(planet: any) {
         if (stats) {
           // Attach stats to building object for UI
           (b as any).stats = stats;
-          
+
           // Get next level stats for upgrade cost display
           const nextLevelStats = BUILDING_DATA[b.type]?.levels[b.level + 1];
           if (nextLevelStats) {
@@ -182,11 +180,11 @@ export function calculatePlanetRates(planet: any) {
   // Consumption
   let foodConsumption = 0;
   if (planet.units) {
-      planet.units.forEach((u: any) => {
-        const stats = UNIT_DATA[u.unitType];
-        const upkeep = stats ? stats.upkeep : 1;
-        foodConsumption += (u.count * upkeep);
-      });
+    planet.units.forEach((u: any) => {
+      const stats = UNIT_DATA[u.unitType];
+      const upkeep = stats ? stats.upkeep : 1;
+      foodConsumption += (u.count * upkeep);
+    });
   }
 
   const creditRate = population * ((planet.taxRate || 10) / 100) * 5;
@@ -234,10 +232,10 @@ export async function syncPlanetResources(planetId: string) {
 
         // Also check if it was an energy canopy generator to decrease canopy level
         if (building.type === 'canopy_generator') {
-            await prisma.planet.update({
-                where: { id: planetId },
-                data: { energyCanopyLevel: { decrement: 1 } }
-            });
+          await prisma.planet.update({
+            where: { id: planetId },
+            data: { energyCanopyLevel: { decrement: 1 } }
+          });
         }
       } else {
         const isUpgrade = building.status === 'upgrading';
@@ -259,10 +257,10 @@ export async function syncPlanetResources(planetId: string) {
 
         // Handle Energy Canopy Unlock Hook
         if (building.type === 'canopy_generator') {
-            await prisma.planet.update({
-                where: { id: planetId },
-                data: { energyCanopyLevel: { increment: 1 } }
-            });
+          await prisma.planet.update({
+            where: { id: planetId },
+            data: { energyCanopyLevel: { increment: 1 } }
+          });
         }
       }
     }
@@ -300,7 +298,7 @@ export async function syncPlanetResources(planetId: string) {
   newFood = Math.min(newFood, stats.maxStorage);
 
   // Apply Consumption (Consumption happens AFTER production and clamping? 
-    // Food can go to 0 regardless of storage cap.
+  // Food can go to 0 regardless of storage cap.
   // Production fills the storage, but consumption takes from it.)
   const consumed = stats.foodConsumption * diffHours;
   newFood -= consumed;
@@ -532,7 +530,7 @@ async function upgradeBuilding(planet: any, building: any) {
   // Next Level
   const nextLevel = building.level + 1;
   const stats = BUILDING_DATA[building.type]?.levels[nextLevel];
-  
+
   if (!stats) {
     throw new Error(`Max level reached for ${building.type}`);
   }
@@ -572,7 +570,15 @@ async function upgradeBuilding(planet: any, building: any) {
 /**
  * Spawn a new planet for a user with starting units
  */
-export async function spawnPlanet(userId: string, username: string, quadrant?: 'NW' | 'NE' | 'SW' | 'SE'): Promise<void> {
+export async function spawnPlanet(userId: string, username: string, quadrant?: Quadrant): Promise<void> {
+  // Check if quadrant expansion is needed (only player spawns trigger expansion)
+  if (quadrant) {
+    const expanded = await maybeExpandWorld(quadrant);
+    if (expanded) {
+      console.log(`Map expanded before spawning player in ${quadrant}`);
+    }
+  }
+
   const position = await generatePlanetPosition(quadrant);
   const planetName = `${username}'s Colony`;
 
@@ -672,7 +678,7 @@ export async function recruitUnit(planetId: string, unitType: string, count: num
   // Calculate Speed Bonus from Garrison
   const garrisonStats = getBuildingStats('orbital_garrison', garrisonLevel);
   const speedBonus = garrisonStats?.recruitmentSpeedBonus || 0;
-  
+
   // Formula: Time / (1 + Bonus)
   const durationPerUnit = unitData.time / (1 + speedBonus);
   const totalDuration = durationPerUnit * count;

@@ -76,6 +76,10 @@ export interface CombatResolveJob {
     defenderPlanetId: string;
 }
 
+export interface NpcRespawnJob {
+    planetId: string;
+}
+
 /**
  * Queue job to process a fleet arrival
  */
@@ -102,6 +106,18 @@ export async function queueFleetReturn(data: FleetReturnJob, arriveAt: Date) {
     });
 
     console.log(`📤 Queued fleet return: ${data.fleetId} (delay: ${Math.round(delay / 1000)}s)`);
+}
+
+/**
+ * Queue job to respawn an NPC after delay
+ */
+export async function queueNpcRespawn(data: NpcRespawnJob, delaySeconds: number) {
+    await gameEventsQueue.add('npc:respawn', data, {
+        delay: delaySeconds * 1000,
+        jobId: `npc-respawn-${data.planetId}-${Date.now()}`, // Allow multiple respawn jobs over time
+    });
+
+    console.log(`📤 Queued NPC respawn: ${data.planetId} (delay: ${delaySeconds}s)`);
 }
 
 /**

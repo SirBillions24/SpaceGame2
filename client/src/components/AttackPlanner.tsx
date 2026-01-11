@@ -45,39 +45,51 @@ const SLOT_CAPACITY = 100;
 
 const UNIT_ICONS: Record<string, string> = {
     marine: '/assets/units/marine.png',
-    ranger: '/assets/units/ranger.png',
+    sniper: '/assets/units/sniper.png',
+    guardian: '/assets/units/guardian.png',
+    commando: '/assets/units/commando.png',
+    drone: '/assets/units/drone.png',
+    automaton: '/assets/units/automaton.png',
     sentinel: '/assets/units/sentinel.png',
     interceptor: '/assets/units/interceptor.png',
-    droid_decoy: '/assets/units/droid_decoy.png',
-    heavy_automaton: '/assets/units/heavy_automaton.png',
+    stalker: '/assets/units/stalker.png',
+    spitter: '/assets/units/spitter.png',
+    brute: '/assets/units/brute.png',
+    ravager: '/assets/units/ravager.png',
 };
 
-const getClassIcon = (unitClass: string) => {
-    switch (unitClass) {
-        case 'melee': return '🗡️';
-        case 'ranged': return '🎯';
-        case 'robotic': return '🤖';
+const getFactionIcon = (faction: string) => {
+    switch (faction) {
+        case 'human': return '👤';
+        case 'mech': return '🤖';
+        case 'exo': return '👽';
         default: return '❓';
     }
 };
 
-const getUnitClass = (unitId: string) => {
+const getUnitFaction = (unitId: string) => {
     const mapping: Record<string, string> = {
-        marine: 'melee',
-        sentinel: 'melee',
-        ranger: 'ranged',
-        interceptor: 'robotic',
-        droid_decoy: 'robotic',
-        heavy_automaton: 'robotic'
+        marine: 'human',
+        sniper: 'human',
+        guardian: 'human',
+        commando: 'human',
+        drone: 'mech',
+        automaton: 'mech',
+        sentinel: 'mech',
+        interceptor: 'mech',
+        stalker: 'exo',
+        spitter: 'exo',
+        brute: 'exo',
+        ravager: 'exo',
     };
-    return mapping[unitId] || 'melee';
+    return mapping[unitId] || 'human';
 };
 
-const getClassAdvantage = (unitClass: string) => {
-    switch (unitClass) {
-        case 'melee': return 'Robotic';
-        case 'ranged': return 'Melee';
-        case 'robotic': return 'Ranged';
+const getFactionAdvantage = (faction: string) => {
+    switch (faction) {
+        case 'human': return 'Mech';
+        case 'mech': return 'Exo';
+        case 'exo': return 'Human';
         default: return '';
     }
 };
@@ -88,7 +100,7 @@ const TOOL_ICONS: Record<string, string> = {
     stealth_field_pods: iconECM,
 };
 
-const ALL_UNITS = ['marine', 'ranger', 'sentinel', 'interceptor', 'droid_decoy', 'heavy_automaton'];
+const ALL_UNITS = ['marine', 'sniper', 'guardian', 'commando', 'drone', 'automaton', 'sentinel', 'interceptor', 'stalker', 'spitter', 'brute', 'ravager'];
 const ALL_TOOLS = ['invasion_anchors', 'plasma_breachers', 'stealth_field_pods'];
 
 // Initial State Generator
@@ -382,9 +394,9 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                             {toPlanet.isNpc && <span className="npc-tag"> (Sector {toPlanet.x},{toPlanet.y})</span>}
                         </div>
                         <div className="triangle-legend-mini" style={{ display: 'flex', gap: '10px', fontSize: '0.75rem', background: 'rgba(0,0,0,0.3)', padding: '5px 10px', borderRadius: '4px', border: '1px solid rgba(0,243,255,0.2)' }}>
-                            <span>🎯 &gt; 🗡️</span>
-                            <span>🗡️ &gt; 🤖</span>
-                            <span>🤖 &gt; 🎯</span>
+                            <span>👤 &gt; 🤖</span>
+                            <span>🤖 &gt; 👽</span>
+                            <span>👽 &gt; 👤</span>
                         </div>
                     </div>
                 </div>
@@ -485,7 +497,7 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                                         key={slot.id}
                                                         className={`ap-slot unit ${slot.itemId ? 'filled' : ''}`}
                                                         onClick={() => handleSlotClick(wIdx, lane, 'unitSlots', sIdx)}
-                                                        title={slot.itemId ? `${slot.itemId.replace('_', ' ').toUpperCase()} (${getUnitClass(slot.itemId).toUpperCase()})` : 'Empty Slot'}
+                                                        title={slot.itemId ? `${slot.itemId.replace('_', ' ').toUpperCase()} (${getUnitFaction(slot.itemId).toUpperCase()})` : 'Empty Slot'}
                                                     >
                                                         {slot.itemId ? (
                                                             <>
@@ -501,7 +513,7 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                                                         }}
                                                                     />
                                                                     <div className="unit-fallback-emoji" style={{ display: 'none', fontSize: '1.2rem' }}>
-                                                                        {getClassIcon(getUnitClass(slot.itemId))}
+                                                                        {getFactionIcon(getUnitFaction(slot.itemId))}
                                                                     </div>
                                                                 </div>
                                                                 <div className="slot-unit-name" style={{ position: 'absolute', top: '2px', left: '2px', fontSize: '8px', background: 'rgba(0,0,0,0.7)', padding: '1px 3px', borderRadius: '2px', pointerEvents: 'none', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -593,7 +605,7 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                         key={u}
                                         className={`palette-item unit ${selectedItem?.id === u ? 'selected' : ''} ${remaining <= 0 ? 'disabled' : ''}`}
                                         onClick={() => remaining > 0 && setSelectedItem({ type: 'unit', id: u })}
-                                        title={`${u.replace('_', ' ').toUpperCase()} (${getUnitClass(u).toUpperCase()}) - Strong vs ${getClassAdvantage(getUnitClass(u))}`}
+                                        title={`${u.replace('_', ' ').toUpperCase()} (${getUnitFaction(u).toUpperCase()}) - Strong vs ${getFactionAdvantage(getUnitFaction(u))}`}
                                     >
                                         <div className="unit-icon-wrapper" style={{ position: 'relative', width: '40px', height: '40px', marginBottom: '0.5rem' }}>
                                             <img
@@ -603,11 +615,11 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                                 onError={(e) => {
                                                     (e.target as HTMLImageElement).style.display = 'none';
                                                     const parent = (e.target as HTMLImageElement).parentElement;
-                                                    if (parent) parent.textContent = getClassIcon(getUnitClass(u));
+                                                    if (parent) parent.textContent = getFactionIcon(getUnitFaction(u));
                                                 }}
                                             />
                                             <span className="class-tag" style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#000', borderRadius: '50%', width: '16px', height: '16px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyCenter: 'center', border: '1px solid #00f3ff' }}>
-                                                {getClassIcon(getUnitClass(u))}
+                                                {getFactionIcon(getUnitFaction(u))}
                                             </span>
                                         </div>
                                         <div className="p-info">

@@ -56,6 +56,8 @@ model Planet {
   npcClass String? @map("npc_class") // 'melee' | 'ranged' | 'robotic'
   attackCount Int @default(0) @map("attack_count")
   maxAttacks  Int @default(15) @map("max_attacks")
+  npcLootGearId String? @map("npc_loot_gear_id")  // Unclaimed gear drop for this NPC life
+  npcRespawnCount Int @default(0) @map("npc_respawn_count")  // Tracking for level scaling
 
   // Economy State (Lazy Evaluation)
   lastResourceUpdate  DateTime @default(now()) @map("last_resource_update")
@@ -337,4 +339,17 @@ model InboxMessage {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("inbox_messages")
+}
+
+// World configuration - dynamic bounds and expansion tracking
+model WorldConfig {
+  id              String   @id @default("singleton")  // Single row
+  sizeX           Int      @default(10000) @map("size_x")
+  sizeY           Int      @default(10000) @map("size_y")
+  expansionCount  Int      @default(0) @map("expansion_count")
+  lastExpansion   DateTime? @map("last_expansion")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  @@map("world_config")
 }

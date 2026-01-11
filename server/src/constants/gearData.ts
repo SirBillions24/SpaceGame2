@@ -25,108 +25,170 @@ export interface GearItemDefinition {
 }
 
 /**
- * Starter Gear Set
- * These 4 items are given to all new players on account creation.
- * They total exactly: +100% melee, +100% ranged, -100% wall
+ * Unique gear drop filter
+ * Allows restricting unique drops to specific archetypes or minimum levels
  */
+export interface UniqueGearEntry extends GearItemDefinition {
+  archetypeFilter?: string[];  // null/undefined = can drop from any archetype
+  minLevel?: number;           // null/undefined = can drop from any level NPC
+}
+
+// =============================================================================
+// STARTER GEAR - Common rarity, single stat each, minimal bonuses
+// Given to all new players on account creation for a fair start
+// =============================================================================
+
 export const STARTER_GEAR: GearItemDefinition[] = [
   {
     slotType: 'weapon',
-    name: 'Plasma Rifle',
-    rarity: 'legendary',
-    level: 10,
-    meleeStrengthBonus: 50,
-    rangedStrengthBonus: 50,
-    canopyReductionBonus: -50,
+    name: 'Recruit Pistol',
+    rarity: 'common',
+    level: 1,
+    meleeStrengthBonus: 0,
+    rangedStrengthBonus: 1,
+    canopyReductionBonus: 0,
+    setName: 'Recruit',
     iconName: 'weapon',
   },
   {
     slotType: 'helmet',
-    name: 'Command Helmet',
-    rarity: 'epic',
-    level: 7,
-    meleeStrengthBonus: 25,
-    rangedStrengthBonus: 25,
-    canopyReductionBonus: -25,
+    name: 'Recruit Visor',
+    rarity: 'common',
+    level: 1,
+    meleeStrengthBonus: 1,
+    rangedStrengthBonus: 0,
+    canopyReductionBonus: 0,
+    setName: 'Recruit',
     iconName: 'helmet',
   },
   {
     slotType: 'spacesuit',
-    name: 'Combat Spacesuit',
-    rarity: 'rare',
-    level: 5,
-    meleeStrengthBonus: 15,
-    rangedStrengthBonus: 15,
-    canopyReductionBonus: -15,
+    name: 'Recruit Flightsuit',
+    rarity: 'common',
+    level: 1,
+    meleeStrengthBonus: 0,
+    rangedStrengthBonus: 0,
+    canopyReductionBonus: -1,
+    setName: 'Recruit',
     iconName: 'spacesuit',
   },
   {
     slotType: 'shield',
-    name: 'Defense Matrix',
-    rarity: 'uncommon',
-    level: 3,
-    meleeStrengthBonus: 10,
-    rangedStrengthBonus: 10,
-    canopyReductionBonus: -10,
+    name: 'Recruit Buckler',
+    rarity: 'common',
+    level: 1,
+    meleeStrengthBonus: 1,
+    rangedStrengthBonus: 0,
+    canopyReductionBonus: 0,
+    setName: 'Recruit',
     iconName: 'shield',
   },
 ];
 
-/**
- * All Available Gear Items
- * Add new gear items here. They can be dropped from NPCs or given as rewards.
- * 
- * To add a new item:
- * 1. Copy an existing item below
- * 2. Change the stats as needed
- * 3. Ensure bonuses don't exceed caps when combined
- */
-export const ALL_GEAR_ITEMS: GearItemDefinition[] = [
-  // Starter Gear (included in all gear list)
-  ...STARTER_GEAR,
+// =============================================================================
+// INFINITY SET - Ultra-rare unique drops with max stats (100% all bonuses)
+// =============================================================================
 
-  // Example: Additional gear items can be added here
+export const INFINITY_SET: GearItemDefinition[] = [
+  {
+    slotType: 'weapon',
+    name: 'Infinity Blade',
+    rarity: 'legendary',
+    level: 100,
+    meleeStrengthBonus: 100,
+    rangedStrengthBonus: 100,
+    canopyReductionBonus: -100,
+    setName: 'Infinity',
+    iconName: 'infinity_weapon',
+  },
+  {
+    slotType: 'helmet',
+    name: 'Infinity Helm',
+    rarity: 'legendary',
+    level: 100,
+    meleeStrengthBonus: 100,
+    rangedStrengthBonus: 100,
+    canopyReductionBonus: -100,
+    setName: 'Infinity',
+    iconName: 'infinity_helmet',
+  },
+  {
+    slotType: 'spacesuit',
+    name: 'Infinity Armor',
+    rarity: 'legendary',
+    level: 100,
+    meleeStrengthBonus: 100,
+    rangedStrengthBonus: 100,
+    canopyReductionBonus: -100,
+    setName: 'Infinity',
+    iconName: 'infinity_spacesuit',
+  },
+  {
+    slotType: 'shield',
+    name: 'Infinity Barrier',
+    rarity: 'legendary',
+    level: 100,
+    meleeStrengthBonus: 100,
+    rangedStrengthBonus: 100,
+    canopyReductionBonus: -100,
+    setName: 'Infinity',
+    iconName: 'infinity_shield',
+  },
+];
+
+// =============================================================================
+// UNIQUE GEAR DROP TABLE
+// Uniques can be filtered by archetype and/or minimum NPC level
+// Add future uniques here with specific drop conditions
+// =============================================================================
+
+export const UNIQUE_GEAR_TABLE: UniqueGearEntry[] = [
+  // Infinity Set - drops from level 50+ NPCs of any archetype
+  ...INFINITY_SET.map(g => ({
+    ...g,
+    archetypeFilter: undefined, // Any archetype
+    minLevel: 50,               // Must be level 50+ NPC
+  })),
+
+  // Future uniques can be added here with specific filters:
   // {
-  //   slotType: 'weapon',
-  //   name: 'Quantum Blaster',
-  //   rarity: 'legendary',
-  //   level: 15,
-  //   meleeStrengthBonus: 60,
-  //   rangedStrengthBonus: 60,
-  //   wallReductionBonus: -60,
-  //   iconName: 'weapon',
-  // },
-  // {
-  //   slotType: 'helmet',
-  //   name: 'Neural Interface',
-  //   rarity: 'epic',
-  //   level: 12,
-  //   meleeStrengthBonus: 30,
-  //   rangedStrengthBonus: 30,
-  //   wallReductionBonus: -30,
-  //   iconName: 'helmet',
+  //   ...someGearDef,
+  //   archetypeFilter: ['robotic'],  // Only drops from robotic NPCs
+  //   minLevel: 30,
   // },
 ];
 
-/**
- * Get gear items by slot type
- */
+// =============================================================================
+// ALL AVAILABLE GEAR (for reference/lookup)
+// =============================================================================
+
+export const ALL_GEAR_ITEMS: GearItemDefinition[] = [
+  ...STARTER_GEAR,
+  ...INFINITY_SET,
+];
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
 export function getGearBySlot(slotType: GearSlot): GearItemDefinition[] {
   return ALL_GEAR_ITEMS.filter(item => item.slotType === slotType);
 }
 
-/**
- * Get gear items by rarity
- */
 export function getGearByRarity(rarity: string): GearItemDefinition[] {
   return ALL_GEAR_ITEMS.filter(item => item.rarity === rarity);
 }
 
-/**
- * Get starter gear items
- */
 export function getStarterGear(): GearItemDefinition[] {
   return STARTER_GEAR;
 }
 
-
+/**
+ * Get eligible unique gear for a given NPC archetype and level
+ */
+export function getEligibleUniques(npcClass: string, npcLevel: number): UniqueGearEntry[] {
+  return UNIQUE_GEAR_TABLE.filter(u =>
+    (!u.minLevel || npcLevel >= u.minLevel) &&
+    (!u.archetypeFilter || u.archetypeFilter.includes(npcClass))
+  );
+}
