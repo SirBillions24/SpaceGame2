@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { api, type Planet, getCurrentUser } from '../lib/api';
 import DefensePanel from './DefensePanel';
 import WorkshopPanel from './WorkshopPanel';
@@ -15,222 +15,55 @@ interface PlanetInteriorProps {
   onUpdate?: () => void;
 }
 
-const BUILDING_LABELS: Record<string, string> = {
-  'colony_hub': 'Colony Hub',
-  'carbon_processor': 'Carbon Processor',
-  'titanium_extractor': 'Titanium Extractor',
-  'hydroponics': 'Hydroponics',
-  'naval_academy': 'Naval Academy',
-  'orbital_garrison': 'Orbital Garrison',
-  'tavern': 'Intelligence Hub',
-  'defense_workshop': 'Systems Workshop',
-  'siege_workshop': 'Munitions Factory',
-  'monument': 'Holo-Monument',
-  'housing_unit': 'Residential Block',
-  'canopy_generator': 'Energy Canopy',
-  'storage_depot': 'Automated Storage Depot'
-};
-
-const BUILDING_SIZES: Record<string, number> = {
-  'colony_hub': 7,
-  'carbon_processor': 3,
-  'titanium_extractor': 3,
-  'hydroponics': 3,
-  'naval_academy': 3,
-  'orbital_garrison': 4,
-  'tavern': 3,
-  'defense_workshop': 3,
-  'siege_workshop': 3,
-  'monument': 1,
-  'housing_unit': 3,
-  'canopy_generator': 3,
-  'storage_depot': 3
-};
-
-const BUILDING_COSTS: Record<string, { c: number, t: number }> = {
-  'colony_hub': { c: 0, t: 0 },
-  'carbon_processor': { c: 13, t: 0 },
-  'titanium_extractor': { c: 14, t: 0 },
-  'hydroponics': { c: 30, t: 0 },
-  'naval_academy': { c: 100, t: 100 },
-  'orbital_garrison': { c: 40, t: 20 },
-  'tavern': { c: 145, t: 95 },
-  'defense_workshop': { c: 61, t: 30 },
-  'siege_workshop': { c: 118, t: 63 },
-  'monument': { c: 50, t: 20 },
-  'housing_unit': { c: 20, t: 10 },
-  'canopy_generator': { c: 1000, t: 1000 },
-  'storage_depot': { c: 79, t: 42 }
-};
-
-const BUILDING_INFO: Record<string, {
+// Server-side building data type matching our buildingData.ts structure
+interface BuildingTypeStats {
+  type: string;
   name: string;
-  description: string;
-  purpose: string[];
-  unlocks?: string[];
-  size: string;
-  cost: { c: number; t: number };
-}> = {
-  'carbon_processor': {
-    name: 'Carbon Processor',
-    description: 'Extracts and processes carbon from planetary resources.',
-    purpose: [
-      'Produces Carbon resource',
-      'Base production rate: 8/h at Level 1',
-      'Scales with Stability/Productivity'
-    ],
-    size: '2×2 tiles',
-    cost: { c: 13, t: 0 }
-  },
-  'titanium_extractor': {
-    name: 'Titanium Extractor',
-    description: 'Mines and refines titanium ore for advanced construction.',
-    purpose: [
-      'Produces Titanium resource',
-      'Base production rate: 8/h at Level 1',
-      'Scales with Stability/Productivity'
-    ],
-    size: '2×2 tiles',
-    cost: { c: 14, t: 0 }
-  },
-  'hydroponics': {
-    name: 'Hydroponics',
-    description: 'Automated agricultural facility producing nutrient paste.',
-    purpose: [
-      'Produces Food (Nutrient Paste)',
-      'Base production rate: 16/h at Level 1',
-      'Scales with Stability/Productivity',
-      'Required for unit upkeep'
-    ],
-    size: '2×2 tiles',
-    cost: { c: 30, t: 0 }
-  },
-  'housing_unit': {
-    name: 'Residential Block',
-    description: 'Housing complex for colony population.',
-    purpose: [
-      'Increases population capacity',
-      'Enables higher tax revenue',
-      'Reduces Stability (Public Order)'
-    ],
-    size: '2×2 tiles',
-    cost: { c: 20, t: 10 }
-  },
-  'naval_academy': {
-    name: 'Naval Academy',
-    description: 'Military training facility for fleet operations and command leaders.',
-    purpose: [
-      'Unlocks Admiral Panel (Command Leaders)',
-      'Unlocks Defense Panel (Defensive Strategy)',
-      'Unlocks Defense Turret management'
-    ],
-    unlocks: [
-      'Admiral Command access',
-      'Defense Panel access',
-      'Defense Turret system'
-    ],
-    size: '3×3 tiles',
-    cost: { c: 100, t: 100 }
-  },
-  'orbital_garrison': {
-    name: 'Orbital Garrison',
-    description: 'The primary staging area and barracks for your planetary ground forces.',
-    purpose: [
-      'Enables Unit Recruitment',
-      'Increases recruitment speed (5% per level)',
-      'Required for higher tier soldiers'
-    ],
-    unlocks: [
-      'Recruitment Console',
-      'Ground defense coordination'
-    ],
-    size: '4×4 tiles',
-    cost: { c: 40, t: 20 }
-  },
-  'tavern': {
-    name: 'Intelligence Hub',
-    description: 'Covert operations center for espionage and intelligence gathering.',
-    purpose: [
-      'Generates Spies/Infiltrators',
-      'Spy count = Building level'
-    ],
-    size: '2×2 tiles',
-    cost: { c: 145, t: 95 }
-  },
-  'defense_workshop': {
-    name: 'Systems Workshop',
-    description: 'Manufacturing facility for defensive equipment and systems.',
-    purpose: [
-      'Manufactures Defense Tools',
-      'Unlocks Systems Workshop panel'
-    ],
-    size: '2×2 tiles',
-    cost: { c: 61, t: 30 }
-  },
-  'siege_workshop': {
-    name: 'Munitions Factory',
-    description: 'Production facility for siege weapons and attack equipment.',
-    purpose: [
-      'Manufactures Siege Tools',
-      'Unlocks Munitions Factory panel'
-    ],
-    size: '2×2 tiles',
-    cost: { c: 118, t: 63 }
-  },
-  'monument': {
-    name: 'Holo-Monument',
-    description: 'Decorative holographic monument celebrating colony achievements.',
-    purpose: [
-      'Increases Stability',
-      'Improves Productivity modifier'
-    ],
-    size: '1×1 tile',
-    cost: { c: 50, t: 20 }
-  },
-  'canopy_generator': {
-    name: 'Energy Canopy',
-    description: 'Centralized shield generator that projects a defensive Energy Canopy over the colony.',
-    purpose: [
-      'Provides base defensive power (Lvl 1: +30%, Lvl 2: +50%, Lvl 3: +70%, Lvl 4: +90%)',
-      'Reinforced by Sentry Drones'
-    ],
-    size: '3×3 tiles',
-    cost: { c: 1000, t: 1000 }
-  },
-  'storage_depot': {
-    name: 'Automated Storage Depot',
-    description: 'Centralized storage for colony resources.',
-    purpose: [
-      'Increases maximum resource storage capacity'
-    ],
-    size: '2×2 tiles',
-    cost: { c: 79, t: 42 }
-  },
-  'colony_hub': {
-    name: 'Colony Hub',
-    description: 'The central command structure of your planetary colony.',
-    purpose: [
-      'Main colony building',
-      'Starting structure',
-      'Provides base Stability'
-    ],
-    size: '4×4 tiles',
-    cost: { c: 0, t: 0 }
-  }
+  size: number;
+  category: 'civil' | 'military' | 'decoration';
+  levels: Record<number, {
+    level: number;
+    requiredPlayerLevel: number;
+    cost: { carbon: number; titanium: number };
+    time: number;
+    xp: number;
+    defenseBonus?: number;
+    production?: number;
+    population?: number;
+    stability?: number;
+    storage?: number;
+  }>;
+}
+
+// Building purpose descriptions (static, for tooltip display)
+const BUILDING_PURPOSE: Record<string, string[]> = {
+  'carbon_processor': ['Produces Carbon resource', 'Base production rate: 8/h at Level 1', 'Scales with Stability/Productivity'],
+  'titanium_extractor': ['Produces Titanium resource', 'Base production rate: 8/h at Level 1', 'Scales with Stability/Productivity'],
+  'hydroponics': ['Produces Food (Nutrient Paste)', 'Base production rate: 16/h at Level 1', 'Required for unit upkeep'],
+  'housing_unit': ['Increases population capacity', 'Enables higher tax revenue', 'Reduces Stability (Public Order)'],
+  'naval_academy': ['Unlocks Admiral Panel (Command Leaders)', 'Unlocks Defense Panel', 'Unlocks Defense Turret management'],
+  'orbital_garrison': ['Enables Unit Recruitment', 'Increases recruitment speed (5% per level)', 'Required for higher tier soldiers'],
+  'tavern': ['Generates Spies/Infiltrators', 'Spy count = Building level'],
+  'defense_workshop': ['Manufactures Defense Tools', 'Unlocks Systems Workshop panel'],
+  'siege_workshop': ['Manufactures Siege Tools', 'Unlocks Munitions Factory panel'],
+  'monument': ['Increases Stability', 'Improves Productivity modifier'],
+  'canopy_generator': ['Provides base defensive power (Lvl 1: +30%, Lvl 2: +50%, Lvl 3: +70%, Lvl 4: +90%)', 'Reinforced by Sentry Drones'],
+  'storage_depot': ['Increases maximum resource storage capacity'],
+  'colony_hub': ['Main colony building', 'Starting structure', 'Provides base Stability'],
+  'orbital_minefield': ['Provides +10% defense per level (all sectors)', 'Passive protection against all attackers'],
+  'docking_hub': ['Provides +35% defense per level (center sector only)', 'Reinforced by Hardened Bulkheads']
 };
 
-// Organized building categories
+// Organized building categories (building lists derived from server data)
 const BUILDING_CATEGORIES = {
   structures: {
     label: 'Structures',
     subsections: {
       military: {
-        label: 'Military',
-        buildings: ['naval_academy', 'orbital_garrison', 'canopy_generator', 'tavern', 'defense_workshop', 'siege_workshop']
+        label: 'Military'
       },
       civil: {
-        label: 'Civil',
-        buildings: ['carbon_processor', 'titanium_extractor', 'hydroponics', 'housing_unit', 'monument', 'colony_hub', 'storage_depot']
+        label: 'Civil'
       }
     }
   },
@@ -259,6 +92,49 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
   const [planetData, setPlanetData] = useState<Planet | null>(null);
   const [taxRate, setTaxRate] = useState<number>(planet.taxRate || 10);
   const [loading, setLoading] = useState(true);
+
+  // Building types from server
+  const [buildingTypes, setBuildingTypes] = useState<Record<string, BuildingTypeStats>>({});
+  const [limitedBuildings, setLimitedBuildings] = useState<string[]>([]);
+
+  // Derived building data from server response
+  const BUILDING_LABELS = useMemo(() => {
+    const labels: Record<string, string> = {};
+    Object.entries(buildingTypes).forEach(([type, data]) => {
+      labels[type] = data.name;
+    });
+    return labels;
+  }, [buildingTypes]);
+
+  const BUILDING_SIZES = useMemo(() => {
+    const sizes: Record<string, number> = {};
+    Object.entries(buildingTypes).forEach(([type, data]) => {
+      sizes[type] = data.size;
+    });
+    return sizes;
+  }, [buildingTypes]);
+
+  const BUILDING_COSTS = useMemo(() => {
+    const costs: Record<string, { c: number; t: number }> = {};
+    Object.entries(buildingTypes).forEach(([type, data]) => {
+      const level1 = data.levels[1];
+      costs[type] = level1 ? { c: level1.cost.carbon, t: level1.cost.titanium } : { c: 0, t: 0 };
+    });
+    return costs;
+  }, [buildingTypes]);
+
+  // Derived category building lists
+  const militaryBuildings = useMemo(() => {
+    return Object.entries(buildingTypes)
+      .filter(([_, data]) => data.category === 'military')
+      .map(([type]) => type);
+  }, [buildingTypes]);
+
+  const civilBuildings = useMemo(() => {
+    return Object.entries(buildingTypes)
+      .filter(([_, data]) => data.category === 'civil' || data.category === 'decoration')
+      .map(([type]) => type);
+  }, [buildingTypes]);
 
   // Interaction State
   const [hoveredTile, setHoveredTile] = useState<{ x: number, y: number } | null>(null);
@@ -305,6 +181,20 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
       setIsOwner(currentUser?.userId === planetData.ownerId);
     }
   }, [planetData, currentUser?.userId]);
+
+  // Load building types from server
+  useEffect(() => {
+    const loadBuildingTypes = async () => {
+      try {
+        const data = await api.getBuildingTypes();
+        setBuildingTypes(data.buildings as Record<string, BuildingTypeStats>);
+        setLimitedBuildings(data.limitedBuildings);
+      } catch (error) {
+        console.error('Failed to load building types:', error);
+      }
+    };
+    loadBuildingTypes();
+  }, []);
 
   // Initial Load
   const loadPlanetData = async () => {
@@ -371,7 +261,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
   buildings.forEach(b => {
     // If we are moving a building, it doesn't "occupy" its old spot for the ghost/placement check
     if (movingBuildingId && b.id === movingBuildingId) return;
-    
+
     const size = BUILDING_SIZES[b.type] || 2;
     for (let dx = 0; dx < size; dx++) {
       for (let dy = 0; dy < size; dy++) {
@@ -568,7 +458,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
     // Allow zoom with scroll wheel (no Ctrl needed)
     e.preventDefault();
     setAutoZoom(false);
-    
+
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setZoomLevel(prev => {
       const newZoom = prev * delta;
@@ -663,7 +553,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
 
     window.addEventListener('mouseup', handleGlobalMouseUp);
     window.addEventListener('mousemove', handleGlobalMouseMove);
-    
+
     return () => {
       window.removeEventListener('mouseup', handleGlobalMouseUp);
       window.removeEventListener('mousemove', handleGlobalMouseMove);
@@ -792,12 +682,11 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                       {isExpanded && (
                         <div className="subsection-content">
                           <div className="building-grid">
-                            {subsection.buildings.map(type => {
-                              const cost = BUILDING_COSTS[type];
+                            {(subKey === 'military' ? militaryBuildings : subKey === 'civil' ? civilBuildings : []).map(type => {
+                              const cost = BUILDING_COSTS[type] || { c: 0, t: 0 };
                               const canAfford = resources && resources.carbon >= cost.c && resources.titanium >= cost.t;
-                              
+
                               // Check if limited building already exists
-                              const limitedBuildings = ['storage_depot', 'naval_academy', 'orbital_garrison', 'tavern', 'defense_workshop', 'siege_workshop'];
                               const isLimited = limitedBuildings.includes(type);
                               const existingB = buildings.find(b => b.type === type);
 
@@ -817,7 +706,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                                   onMouseLeave={() => setHoveredBuildingType(null)}
                                 >
                                   <div className="building-card-header">
-                                    <span className="building-card-name">{BUILDING_LABELS[type]}</span>
+                                    <span className="building-card-name">{BUILDING_LABELS[type] || type}</span>
                                   </div>
                                   <div className="building-card-cost">
                                     {isLimited && existingB ? 'LIMIT 1 (UPGRADE)' : `${cost.c}C ${cost.t}Ti`}
@@ -865,11 +754,11 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                 <div className="resource-item">
                   <div className="res-cap-label">Grid Size</div>
                   <div className="res-cap-value">{gridSizeX} × {gridSizeY}</div>
-                  
+
                   {/* Zoom Controls */}
                   <div className="zoom-controls-compact">
-                    <button 
-                      className="zoom-btn-small" 
+                    <button
+                      className="zoom-btn-small"
                       onClick={handleZoomOut}
                       title="Zoom Out"
                     >
@@ -879,15 +768,15 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                       {Math.round(zoomLevel * 100)}%
                       {autoZoom && <span className="auto-badge-small">AUTO</span>}
                     </span>
-                    <button 
-                      className="zoom-btn-small" 
+                    <button
+                      className="zoom-btn-small"
                       onClick={handleZoomIn}
                       title="Zoom In"
                     >
                       +
                     </button>
-                    <button 
-                      className="zoom-btn-small reset-btn-small" 
+                    <button
+                      className="zoom-btn-small reset-btn-small"
                       onClick={handleResetZoom}
                       title="Reset to Auto Zoom"
                     >
@@ -919,7 +808,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
             </div>
 
             {/* Grid Container */}
-            <div 
+            <div
               ref={gridContainerRef}
               className="planet-grid-container"
               key={`grid-${gridSizeX}-${gridSizeY}`}
@@ -928,7 +817,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseLeave}
             >
-              <div 
+              <div
                 className="planet-grid"
                 style={{
                   gridTemplateColumns: `repeat(${gridSizeX}, 50px)`,
@@ -970,7 +859,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                     <div className="subsection-content">
                       <div className="action-grid">
                         {buildings.some(b => b.type === 'defense_workshop' && b.status === 'active') && (
-                          <button 
+                          <button
                             className="action-card"
                             onClick={() => setShowWorkshop('defense_workshop')}
                           >
@@ -979,7 +868,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                           </button>
                         )}
                         {buildings.some(b => b.type === 'siege_workshop' && b.status === 'active') && (
-                          <button 
+                          <button
                             className="action-card"
                             onClick={() => setShowWorkshop('siege_workshop')}
                           >
@@ -1013,7 +902,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                     <div className="subsection-content">
                       <div className="action-grid">
                         {/* Base Action: Defensive Strategy is always available */}
-                        <button 
+                        <button
                           className="action-card"
                           onClick={() => setShowDefensePanel(true)}
                         >
@@ -1022,7 +911,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                         </button>
 
                         {buildings.some(b => b.type === 'orbital_garrison' && b.status === 'active') && (
-                          <button 
+                          <button
                             className="action-card"
                             onClick={() => setShowRecruitmentPanel(true)}
                           >
@@ -1032,7 +921,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                         )}
                         {buildings.some(b => b.type === 'naval_academy' && b.status === 'active') && (
                           <>
-                            <button 
+                            <button
                               className="action-card"
                               onClick={() => setShowAdmiralPanel(true)}
                             >
@@ -1042,7 +931,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                           </>
                         )}
                         {buildings.some(b => b.type === 'tavern' && b.status === 'active') && (
-                          <button 
+                          <button
                             className="action-card"
                             onClick={() => setShowEspionagePanel(true)}
                           >
@@ -1059,8 +948,8 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
           )}
 
           {/* Global Hover Tooltip (Conditional) */}
-          {hoveredBuildingType && BUILDING_INFO[hoveredBuildingType] && (
-            <div 
+          {hoveredBuildingType && buildingTypes[hoveredBuildingType] && (
+            <div
               className="building-tooltip-hover"
               style={{
                 top: tooltipPos.y,
@@ -1069,41 +958,25 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                 transform: tooltipPos.x + 300 > window.innerWidth ? 'translateX(-100%) translateX(-30px)' : 'none'
               }}
             >
-              <h5>{BUILDING_INFO[hoveredBuildingType].name}</h5>
-              <div className="tooltip-section">
-                <div className="tooltip-description">
-                  {BUILDING_INFO[hoveredBuildingType].description}
-                </div>
-              </div>
+              <h5>{buildingTypes[hoveredBuildingType].name}</h5>
               <div className="tooltip-section">
                 <div className="tooltip-label">Purpose:</div>
-                {BUILDING_INFO[hoveredBuildingType].purpose.map((p, i) => (
+                {(BUILDING_PURPOSE[hoveredBuildingType] || ['No description available']).map((p, i) => (
                   <div key={i} className="tooltip-row">
                     <span className="tooltip-bullet">•</span>
                     <span className="tooltip-text">{p}</span>
                   </div>
                 ))}
               </div>
-              {BUILDING_INFO[hoveredBuildingType].unlocks && BUILDING_INFO[hoveredBuildingType].unlocks!.length > 0 && (
-                <div className="tooltip-section">
-                  <div className="tooltip-label">Unlocks:</div>
-                  {BUILDING_INFO[hoveredBuildingType].unlocks!.map((u, i) => (
-                    <div key={i} className="tooltip-row">
-                      <span className="tooltip-bullet">→</span>
-                      <span className="tooltip-text">{u}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
               <div className="tooltip-section" style={{ borderTop: '1px solid #444', marginTop: '5px', paddingTop: '5px' }}>
                 <div className="tooltip-row">
                   <span className="tooltip-label">Size:</span>
-                  <span className="tooltip-value">{BUILDING_INFO[hoveredBuildingType].size}</span>
+                  <span className="tooltip-value">{buildingTypes[hoveredBuildingType].size}×{buildingTypes[hoveredBuildingType].size} tiles</span>
                 </div>
                 <div className="tooltip-row">
                   <span className="tooltip-label">Cost:</span>
                   <span className="tooltip-value">
-                    {BUILDING_COSTS[hoveredBuildingType].c}C {BUILDING_COSTS[hoveredBuildingType].t}Ti
+                    {(BUILDING_COSTS[hoveredBuildingType]?.c || 0)}C {(BUILDING_COSTS[hoveredBuildingType]?.t || 0)}Ti
                   </span>
                 </div>
               </div>
@@ -1118,7 +991,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                   <h3>{BUILDING_LABELS[showUpgradeMenu.building.type]} (Lvl {showUpgradeMenu.building.level})</h3>
                   <button className="close-btn" onClick={() => setShowUpgradeMenu(null)}>×</button>
                 </div>
-                
+
                 <div className="upgrade-stats-comparison">
                   <div className="stat-column">
                     <div className="stat-label">Current Level</div>
@@ -1137,7 +1010,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                       <div className="stat-value">
                         {showUpgradeMenu.building.nextUpgrade.production !== undefined && (
                           <div className="stat-diff">
-                            Production: {showUpgradeMenu.building.nextUpgrade.production}/h 
+                            Production: {showUpgradeMenu.building.nextUpgrade.production}/h
                             <span className="diff-val"> (+{showUpgradeMenu.building.nextUpgrade.production - (showUpgradeMenu.building.stats?.production || 0)})</span>
                           </div>
                         )}
@@ -1198,8 +1071,8 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                         <span className="cost-val">{showUpgradeMenu.building.nextUpgrade.time}s</span>
                       </div>
                     </div>
-                    <button 
-                      className="upgrade-btn" 
+                    <button
+                      className="upgrade-btn"
                       disabled={!resources || resources.carbon < showUpgradeMenu.building.nextUpgrade.cost.carbon || resources.titanium < (showUpgradeMenu.building.nextUpgrade.cost.titanium || 0)}
                       onClick={async () => {
                         try {
@@ -1222,16 +1095,16 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                     <div className="salvage-info" style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '8px', textAlign: 'center' }}>
                       Salvaging will refund 10% of construction costs and take 50% of build time.
                     </div>
-                    <button 
+                    <button
                       className="salvage-btn"
-                      style={{ 
-                        width: '100%', 
-                        padding: '10px', 
-                        background: 'linear-gradient(to bottom, #ff5252, #d32f2f)', 
-                        border: 'none', 
-                        borderRadius: '4px', 
-                        color: 'white', 
-                        fontWeight: 'bold', 
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        background: 'linear-gradient(to bottom, #ff5252, #d32f2f)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        color: 'white',
+                        fontWeight: 'bold',
                         cursor: 'pointer',
                         textTransform: 'uppercase'
                       }}
@@ -1270,27 +1143,27 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
             />
           )}
 
-      {showAdmiralPanel && (
-        <AdmiralPanel onClose={() => setShowAdmiralPanel(false)} />
-      )}
+          {showAdmiralPanel && (
+            <AdmiralPanel onClose={() => setShowAdmiralPanel(false)} />
+          )}
 
-      {showRecruitmentPanel && planetData && (
-        <RecruitmentPanel 
-          planet={planetData} 
-          onClose={() => setShowRecruitmentPanel(false)}
-          onUpdate={() => {
-            loadPlanetData();
-            props.onUpdate?.();
-          }}
-        />
-      )}
+          {showRecruitmentPanel && planetData && (
+            <RecruitmentPanel
+              planet={planetData}
+              onClose={() => setShowRecruitmentPanel(false)}
+              onUpdate={() => {
+                loadPlanetData();
+                props.onUpdate?.();
+              }}
+            />
+          )}
 
-      {showEspionagePanel && planetData && (
-        <IntelligenceHubPanel 
-          planetId={planetData.id} 
-          onClose={() => setShowEspionagePanel(false)} 
-        />
-      )}
+          {showEspionagePanel && planetData && (
+            <IntelligenceHubPanel
+              planetId={planetData.id}
+              onClose={() => setShowEspionagePanel(false)}
+            />
+          )}
 
           {showExpansionModal && planetData && (
             <ExpansionModal

@@ -20,7 +20,9 @@ import prisma from '../lib/prisma';
 import { resolveCombat } from '../services/combatService';
 import { syncPlanetResources } from '../services/planetService';
 import { relocateNpc } from '../services/pveService';
-import { FleetArrivalJob, FleetReturnJob, NpcRespawnJob, redisConnectionOptions, queueNpcRespawn } from '../lib/jobQueue';
+import { updateProbes } from '../services/espionageService';
+import { transferHarvesterOwnership } from '../services/harvesterService';
+import { FleetArrivalJob, FleetReturnJob, NpcRespawnJob, ProbeUpdateJob, redisConnectionOptions, queueNpcRespawn } from '../lib/jobQueue';
 import { NPC_BALANCE } from '../constants/npcBalanceData';
 
 /**
@@ -60,44 +62,50 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
         const combatResult = await resolveCombat(fleetId);
 
         // Handle NPC attack count, gear drop, and respawn queuing
+        // IMPORTANT: Harvesters are permanent and never respawn - skip this logic for them
         const targetPlanet = await prisma.planet.findUnique({ where: { id: fleet.toPlanetId } });
-        if (targetPlanet && targetPlanet.isNpc) {
-            const updatedNpc = await prisma.planet.update({
-                where: { id: targetPlanet.id },
-                data: { attackCount: { increment: 1 } },
-            });
+        if (targetPlanet && targetPlanet.isNpc && (targetPlanet as any).planetType !== 'harvester') {
+            const maxHits = targetPlanet.maxAttacks || 15;
+            const previousCount = targetPlanet.attackCount;
 
-            // Handle gear drop on victory (probabilistic based on remaining hits)
-            // Chance increases as hits remaining decreases, guaranteed on final hit
-            if (combatResult.winner === 'attacker' && updatedNpc.npcLootGearId) {
-                const maxHits = updatedNpc.maxAttacks || 15;
-                const currentHit = updatedNpc.attackCount;
-                const hitsRemaining = maxHits - currentHit;
+            // Only process if NPC hasn't already reached max attacks (prevents duplicate processing)
+            if (previousCount >= maxHits) {
+                console.log(`⚠️ NPC ${targetPlanet.id} already at max attacks, skipping`);
+            } else {
+                const updatedNpc = await prisma.planet.update({
+                    where: { id: targetPlanet.id },
+                    data: { attackCount: { increment: 1 } },
+                });
+                const newCount = updatedNpc.attackCount;
 
-                // Drop probability: 1/(remaining_hits + 1) - guarantees drop on last hit
-                // Hit 1 of 15: 1/15 = 6.7% chance
-                // Hit 7 of 15: 1/9 = 11% chance  
-                // Hit 14 of 15: 1/2 = 50% chance
-                // Hit 15 of 15: 1/1 = 100% chance
-                const dropChance = 1 / (hitsRemaining + 1);
-                const roll = Math.random();
+                // Handle gear drop on victory (probabilistic based on remaining hits)
+                // Chance increases as hits remaining decreases, guaranteed on final hit
+                if (combatResult.winner === 'attacker' && updatedNpc.npcLootGearId) {
+                    const hitsRemaining = maxHits - newCount;
 
-                if (roll < dropChance) {
-                    await prisma.gearPiece.update({
-                        where: { id: updatedNpc.npcLootGearId },
-                        data: { userId: fleet.ownerId },
-                    });
-                    await prisma.planet.update({
-                        where: { id: updatedNpc.id },
-                        data: { npcLootGearId: null },
-                    });
-                    console.log(`🎁 Gear ${updatedNpc.npcLootGearId} dropped (hit ${currentHit}/${maxHits}, ${Math.round(dropChance * 100)}% chance)`);
+                    // Drop probability: 1/(remaining_hits + 1) - guarantees drop on last hit
+                    const dropChance = 1 / (hitsRemaining + 1);
+                    const roll = Math.random();
+
+                    if (roll < dropChance) {
+                        await prisma.gearPiece.update({
+                            where: { id: updatedNpc.npcLootGearId },
+                            data: { userId: fleet.ownerId },
+                        });
+                        await prisma.planet.update({
+                            where: { id: updatedNpc.id },
+                            data: { npcLootGearId: null },
+                        });
+                        console.log(`🎁 Gear ${updatedNpc.npcLootGearId} dropped (hit ${newCount}/${maxHits}, ${Math.round(dropChance * 100)}% chance)`);
+                    }
                 }
-            }
 
-            // Queue respawn after delay when max attacks reached
-            if (updatedNpc.attackCount >= (updatedNpc.maxAttacks || 15)) {
-                await queueNpcRespawn({ planetId: updatedNpc.id }, NPC_BALANCE.respawn.delaySeconds);
+                // Queue respawn ONLY when attackCount first reaches maxAttacks
+                // This prevents multiple respawn jobs from being queued
+                if (newCount === maxHits) {
+                    console.log(`🔄 NPC ${updatedNpc.id} reached max attacks, queuing respawn in ${NPC_BALANCE.respawn.delaySeconds}s`);
+                    await queueNpcRespawn({ planetId: updatedNpc.id }, NPC_BALANCE.respawn.delaySeconds);
+                }
             }
         }
 
@@ -168,7 +176,30 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
             }
         }
 
-        if (totalSurvivors > 0) {
+        // Check for Harvester conquest - if attacker wins, they take over
+        const targetPlanetForConquest = await prisma.planet.findUnique({ where: { id: fleet.toPlanetId } });
+        if (targetPlanetForConquest && (targetPlanetForConquest as any).planetType === 'harvester' && combatResult.winner === 'attacker' && totalSurvivors > 0) {
+            console.log(`🏴 Harvester conquest! ${fleet.ownerId} conquers ${fleet.toPlanetId}`);
+
+            // Transfer ownership - survivors stay on the Harvester
+            await transferHarvesterOwnership(fleet.toPlanetId, fleet.ownerId, survivingUnits);
+
+            // Mark fleet as completed (no return trip)
+            await prisma.fleet.update({
+                where: { id: fleet.id },
+                data: { status: 'completed' },
+            });
+
+            // Release admiral if assigned
+            if (fleet.admiralId) {
+                await prisma.admiral.update({
+                    where: { id: fleet.admiralId },
+                    data: { stationedPlanetId: fleet.toPlanetId },
+                });
+            }
+
+            console.log(`✅ Harvester ${fleet.toPlanetId} now owned by ${fleet.ownerId} with ${totalSurvivors} units stationed`);
+        } else if (totalSurvivors > 0) {
             const originalDuration = fleet.arriveAt.getTime() - fleet.departAt.getTime();
             const returnArrival = new Date(Date.now() + originalDuration);
 
@@ -371,6 +402,18 @@ async function processNpcRespawn(job: Job<NpcRespawnJob>) {
 }
 
 /**
+ * Process probe updates (runs every 60 seconds)
+ * Handles: arrivals, returns, accuracy gain, discovery rolls
+ */
+async function processProbeUpdate(job: Job<ProbeUpdateJob>) {
+    console.log(`🛸 Processing probe update tick`);
+
+    await updateProbes();
+
+    console.log(`✅ Probe update tick completed`);
+}
+
+/**
  * Create and start the worker
  */
 export function createGameEventsWorker() {
@@ -387,6 +430,9 @@ export function createGameEventsWorker() {
                         break;
                     case 'npc:respawn':
                         await processNpcRespawn(job as Job<NpcRespawnJob>);
+                        break;
+                    case 'probe:update':
+                        await processProbeUpdate(job as Job<ProbeUpdateJob>);
                         break;
                     default:
                         console.warn(`Unknown job type: ${job.name}`);

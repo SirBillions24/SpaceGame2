@@ -14,12 +14,12 @@ interface PlanetBannerProps {
   hasIntelHub?: boolean;
 }
 
-export default function PlanetBanner({ 
-  planet, 
-  mapContainer, 
-  onEnterPlanet, 
-  onClose, 
-  onSendFleet, 
+export default function PlanetBanner({
+  planet,
+  mapContainer,
+  onEnterPlanet,
+  onClose,
+  onSendFleet,
   onSelectAsSource,
   onLaunchProbe,
   hasIntelHub
@@ -150,17 +150,6 @@ export default function PlanetBanner({
           title="Send Fleet"
         >
           Fleet Ops
-        </button>
-        <button
-          className="banner-button source-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            onSelectAsSource();
-          }}
-          title="Select as Source"
-        >
-          Select Source
         </button>
       </div>
     </div>

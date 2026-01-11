@@ -1,9 +1,11 @@
 import { Router, Response } from 'express';
 import prisma from '../lib/prisma';
 import { syncPlanetResources, calculatePlanetRates } from '../services/planetService';
-import { optionalAuthenticateToken, AuthRequest } from '../middleware/auth';
+import { optionalAuthenticateToken, AuthRequest, authenticateToken } from '../middleware/auth';
 import { UNIT_DATA } from '../constants/unitData';
 import { TOOL_DATA } from '../constants/toolData';
+import { BUILDING_DATA } from '../constants/buildingData';
+import { getBlackHoles } from '../services/harvesterService';
 
 const router = Router();
 
@@ -15,6 +17,20 @@ router.get('/unit-types', (req, res: Response) => {
 // Get all tool types and their stats (for module assignment)
 router.get('/tool-types', (req, res: Response) => {
   res.json({ tools: TOOL_DATA });
+});
+
+// Get all building types and their stats (for construction UI)
+router.get('/building-types', (req, res: Response) => {
+  // Buildings limited to 1 per planet
+  const limitedBuildings = [
+    'storage_depot', 'naval_academy', 'orbital_garrison', 'tavern',
+    'defense_workshop', 'siege_workshop', 'orbital_minefield', 'docking_hub'
+  ];
+
+  res.json({
+    buildings: BUILDING_DATA,
+    limitedBuildings
+  });
 });
 
 // Get all planets with their positions and owners
@@ -48,6 +64,7 @@ router.get('/planets', optionalAuthenticateToken, async (req: AuthRequest, res: 
         isNpc: planet.isNpc,
         npcLevel: planet.npcLevel,
         npcClass: planet.npcClass,
+        planetType: (planet as any).planetType || 'colony',
         attackCount: planet.attackCount,
         maxAttacks: planet.maxAttacks,
         createdAt: planet.createdAt,
@@ -148,6 +165,7 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
         titanium: syncedPlanet.titanium,
         food: syncedPlanet.food,
         credits: syncedPlanet.credits,
+        darkMatter: (syncedPlanet as any).darkMatter || 0,
       };
       responseData.production = {
         carbon: planetStats.carbonRate,
@@ -186,5 +204,45 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
   }
 });
 
-export default router;
+// Get all planets owned by the current user
+router.get('/my-planets', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const planets = await prisma.planet.findMany({
+      where: {
+        ownerId: req.userId,
+        isNpc: false
+      },
+      include: { buildings: true },
+      orderBy: { createdAt: 'asc' }
+    });
 
+    const result = planets.map(planet => ({
+      id: planet.id,
+      x: planet.x,
+      y: planet.y,
+      name: planet.name,
+      planetType: (planet as any).planetType || 'colony',
+      gridSizeX: (planet as any).gridSizeX || 10,
+      gridSizeY: (planet as any).gridSizeY || 10,
+      createdAt: planet.createdAt,
+    }));
+
+    res.json({ planets: result });
+  } catch (error) {
+    console.error('Error fetching my planets:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all black holes (for map rendering and Harvester spawning)
+router.get('/black-holes', async (req, res: Response) => {
+  try {
+    const blackHoles = await getBlackHoles();
+    res.json({ blackHoles });
+  } catch (error) {
+    console.error('Error fetching black holes:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router;

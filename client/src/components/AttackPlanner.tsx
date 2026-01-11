@@ -374,7 +374,14 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                     <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                         <div className="target-info">
                             Target: <strong>{toPlanet.name}</strong>
-                            {toPlanet.isNpc && (
+                            {/* Harvesters are permanent - no respawn/hits display */}
+                            {(toPlanet as any).planetType === 'harvester' && (
+                                <span className="harvester-badge" style={{ marginLeft: '10px', background: 'linear-gradient(135deg, #6a0dad, #9b59b6)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', color: 'white' }}>
+                                    🌀 HARVESTER (Conquest Target)
+                                </span>
+                            )}
+                            {/* Regular NPCs show stability/hits remaining */}
+                            {toPlanet.isNpc && (toPlanet as any).planetType !== 'harvester' && (
                                 <div className="npc-stability-container" style={{ display: 'inline-flex', alignItems: 'center', marginLeft: '10px', gap: '8px' }}>
                                     <span style={{ fontSize: '0.7rem', color: '#888' }}>STABILITY:</span>
                                     <div className="stability-bar-bg" style={{ width: '60px', height: '6px', background: '#222', borderRadius: '3px', position: 'relative', overflow: 'hidden', border: '1px solid #444' }}>
@@ -391,7 +398,7 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                     <span style={{ fontSize: '0.7rem', color: '#00f3ff' }}>{Math.max(0, (toPlanet.maxAttacks || 15) - (toPlanet.attackCount || 0))} Hits Left</span>
                                 </div>
                             )}
-                            {toPlanet.isNpc && <span className="npc-tag"> (Sector {toPlanet.x},{toPlanet.y})</span>}
+                            {toPlanet.isNpc && (toPlanet as any).planetType !== 'harvester' && <span className="npc-tag"> (Sector {toPlanet.x},{toPlanet.y})</span>}
                         </div>
                         <div className="triangle-legend-mini" style={{ display: 'flex', gap: '10px', fontSize: '0.75rem', background: 'rgba(0,0,0,0.3)', padding: '5px 10px', borderRadius: '4px', border: '1px solid rgba(0,243,255,0.2)' }}>
                             <span>👤 &gt; 🤖</span>

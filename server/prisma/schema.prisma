@@ -46,6 +46,7 @@ model Planet {
   titanium   Float @default(500) // Advanced material
   food       Float @default(500) // Nutrient Paste (Upkeep)
   credits    Float @default(100)
+  darkMatter Float @default(0) @map("dark_matter") // Exotic resource from Horizon Harvesters
   stability  Int   @default(0) // Public Order (0 is neutral, negative is bad)
   taxRate    Int @default(10) // Percentage
   population Int @default(100)
@@ -58,6 +59,7 @@ model Planet {
   maxAttacks  Int @default(15) @map("max_attacks")
   npcLootGearId String? @map("npc_loot_gear_id")  // Unclaimed gear drop for this NPC life
   npcRespawnCount Int @default(0) @map("npc_respawn_count")  // Tracking for level scaling
+  planetType    String  @default("colony") @map("planet_type") // "colony" | "harvester"
 
   // Economy State (Lazy Evaluation)
   lastResourceUpdate  DateTime @default(now()) @map("last_resource_update")
@@ -352,4 +354,16 @@ model WorldConfig {
   updatedAt       DateTime @updatedAt @map("updated_at")
   
   @@map("world_config")
+}
+
+// Black Holes - spawn points for Horizon Harvesters
+model BlackHole {
+  id        String   @id @default(uuid())
+  x         Int
+  y         Int
+  radius    Int      @default(300)  // Accretion disk radius for Harvester spawning
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@unique([x, y])
+  @@map("black_holes")
 }

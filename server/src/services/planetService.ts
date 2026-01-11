@@ -8,6 +8,7 @@ import { BUILDING_DATA, getBuildingStats } from '../constants/buildingData';
 import { addXp } from './progressionService';
 import { getWorldBounds, getQuadrantCenter, maybeExpandWorld, Quadrant } from './worldService';
 import { MAP_CONFIG } from '../constants/npcBalanceData';
+import { calculateDarkMatterProduction } from './harvesterService';
 
 const MIN_PLANET_DISTANCE = MAP_CONFIG.minPlanetDistance;
 
@@ -230,11 +231,23 @@ export async function syncPlanetResources(planetId: string) {
           where: { id: planet.activeBuildId }
         });
 
-        // Also check if it was an energy canopy generator to decrease canopy level
+        // Also check if it was a defensive building to decrease the appropriate level
         if (building.type === 'canopy_generator') {
           await prisma.planet.update({
             where: { id: planetId },
             data: { energyCanopyLevel: { decrement: 1 } }
+          });
+        }
+        if (building.type === 'orbital_minefield') {
+          await prisma.planet.update({
+            where: { id: planetId },
+            data: { orbitalMinefieldLevel: { decrement: 1 } }
+          });
+        }
+        if (building.type === 'docking_hub') {
+          await prisma.planet.update({
+            where: { id: planetId },
+            data: { dockingHubLevel: { decrement: 1 } }
           });
         }
       } else {
@@ -255,11 +268,23 @@ export async function syncPlanetResources(planetId: string) {
           await addXp(planet.ownerId, stats.xp);
         }
 
-        // Handle Energy Canopy Unlock Hook
+        // Handle defensive building level sync
         if (building.type === 'canopy_generator') {
           await prisma.planet.update({
             where: { id: planetId },
             data: { energyCanopyLevel: { increment: 1 } }
+          });
+        }
+        if (building.type === 'orbital_minefield') {
+          await prisma.planet.update({
+            where: { id: planetId },
+            data: { orbitalMinefieldLevel: { increment: 1 } }
+          });
+        }
+        if (building.type === 'docking_hub') {
+          await prisma.planet.update({
+            where: { id: planetId },
+            data: { dockingHubLevel: { increment: 1 } }
           });
         }
       }
@@ -331,6 +356,10 @@ export async function syncPlanetResources(planetId: string) {
   // Credits
   let newCredits = planet.credits + (stats.creditRate * diffHours);
 
+  // Dark Matter (from Horizon Harvester generators)
+  const darkMatterRate = calculateDarkMatterProduction(planet.buildings);
+  let newDarkMatter = (planet as any).darkMatter + (darkMatterRate * diffHours);
+
   // 7. Queue Processing
   let updatedRecruitmentQueue = planet.recruitmentQueue;
   if (planet.recruitmentQueue) {
@@ -373,6 +402,7 @@ export async function syncPlanetResources(planetId: string) {
       titanium: newTitanium,
       food: newFood,
       credits: newCredits,
+      darkMatter: newDarkMatter,
       stability: Math.round(stats.publicOrder),
       population: stats.population,
       lastResourceUpdate: now,
@@ -398,7 +428,7 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
   // Building Limits
   if (type === 'colony_hub') throw new Error('Additional Colony Hubs cannot be constructed.');
 
-  const limitedBuildings = ['storage_depot', 'naval_academy', 'orbital_garrison', 'tavern', 'defense_workshop', 'siege_workshop'];
+  const limitedBuildings = ['storage_depot', 'naval_academy', 'orbital_garrison', 'tavern', 'defense_workshop', 'siege_workshop', 'orbital_minefield', 'docking_hub'];
   if (limitedBuildings.includes(type)) {
     const existing = (planet as any).buildings?.find((b: any) => b.type === type);
     if (existing) {
@@ -491,6 +521,11 @@ export async function demolishBuilding(planetId: string, buildingId: string) {
 
   if (building.type === 'colony_hub') {
     throw new Error('You cannot demolish the Colony Hub.');
+  }
+
+  // Dark Matter Generators can only be moved, not recycled
+  if (building.type === 'dark_matter_generator') {
+    throw new Error('Dark Matter Generators cannot be recycled, only moved.');
   }
 
   // Calculate Refund (10% of current level cost)

@@ -11,8 +11,10 @@ import admiralRoutes from './routes/admiral';
 import espionageRoutes from './routes/espionage';
 import devRoutes from './routes/dev';
 import { migrateExistingNpcs } from './services/pveService';
+import { seedBlackHoles, spawnMissingHarvesters } from './services/harvesterService';
 import { globalLimiter, authLimiter, heavyActionLimiter } from './middleware/rateLimiter';
 import { createGameEventsWorker } from './workers/gameEventWorker';
+import { startProbeUpdateScheduler } from './lib/jobQueue';
 
 dotenv.config();
 
@@ -49,6 +51,7 @@ app.listen(PORT, '0.0.0.0', async () => {
   // Start job queue worker (Redis required)
   try {
     createGameEventsWorker();
+    await startProbeUpdateScheduler();
     console.log('✅ Game Events Worker started');
   } catch (err) {
     console.error('❌ FATAL: Failed to start job queue worker:', err);
@@ -58,4 +61,13 @@ app.listen(PORT, '0.0.0.0', async () => {
 
   // Run NPC migration once on startup
   migrateExistingNpcs().catch(err => console.error('Failed to migrate NPCs:', err));
+
+  // Seed black holes and spawn Harvesters
+  try {
+    await seedBlackHoles();
+    await spawnMissingHarvesters();
+    console.log('🌌 Black holes and Harvesters initialized');
+  } catch (err) {
+    console.error('Failed to seed Harvesters:', err);
+  }
 });

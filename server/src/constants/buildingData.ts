@@ -216,6 +216,47 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
             3: { level: 3, requiredPlayerLevel: 50, cost: { carbon: 20000, titanium: 20000 }, defenseBonus: 0.70, time: 28800, xp: 400 },
             4: { level: 4, requiredPlayerLevel: 69, cost: { carbon: 100000, titanium: 100000 }, defenseBonus: 0.90, time: 86400, xp: 1000 },
         }
+    },
+    orbital_minefield: {
+        type: 'orbital_minefield',
+        name: 'Orbital Minefield',
+        size: 3,
+        category: 'military',
+        levels: {
+            1: { level: 1, requiredPlayerLevel: 8, cost: { carbon: 800, titanium: 800 }, defenseBonus: 0.10, time: 1200, xp: 40 },
+            2: { level: 2, requiredPlayerLevel: 18, cost: { carbon: 3000, titanium: 3000 }, defenseBonus: 0.10, time: 5400, xp: 100 },
+            3: { level: 3, requiredPlayerLevel: 35, cost: { carbon: 12000, titanium: 12000 }, defenseBonus: 0.10, time: 21600, xp: 250 },
+            4: { level: 4, requiredPlayerLevel: 55, cost: { carbon: 60000, titanium: 60000 }, defenseBonus: 0.10, time: 64800, xp: 600 },
+        }
+    },
+    docking_hub: {
+        type: 'docking_hub',
+        name: 'Central Docking Hub',
+        size: 4,
+        category: 'military',
+        levels: {
+            1: { level: 1, requiredPlayerLevel: 14, cost: { carbon: 1500, titanium: 1500 }, defenseBonus: 0.35, time: 2400, xp: 75 },
+            2: { level: 2, requiredPlayerLevel: 28, cost: { carbon: 6000, titanium: 6000 }, defenseBonus: 0.35, time: 10800, xp: 200 },
+            3: { level: 3, requiredPlayerLevel: 45, cost: { carbon: 25000, titanium: 25000 }, defenseBonus: 0.35, time: 36000, xp: 500 },
+            4: { level: 4, requiredPlayerLevel: 62, cost: { carbon: 80000, titanium: 80000 }, defenseBonus: 0.35, time: 72000, xp: 900 },
+        }
+    },
+    // Dark Matter Generator - unique to Horizon Harvesters, cannot be recycled only moved
+    dark_matter_generator: {
+        type: 'dark_matter_generator',
+        name: 'Dark Matter Generator',
+        size: 5,
+        category: 'civil',
+        levels: {
+            1: {
+                level: 1,
+                requiredPlayerLevel: 50,
+                cost: { carbon: 0, titanium: 0 },
+                production: 10, // 10 dark matter per hour
+                time: 0,
+                xp: 0
+            },
+        }
     }
 };
 

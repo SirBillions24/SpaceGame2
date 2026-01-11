@@ -1,0 +1,72 @@
+/**
+ * SourcePlanetDropdown.css
+ * 
+ * Styles for the source planet selection dropdown.
+ */
+
+.source-planet-dropdown {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, rgba(30, 40, 60, 0.95), rgba(20, 30, 50, 0.95));
+    border: 1px solid rgba(100, 150, 255, 0.3);
+    border-radius: 8px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+}
+
+.source-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #8899bb;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.source-icon {
+    font-size: 14px;
+}
+
+.source-select {
+    padding: 6px 12px;
+    background: rgba(20, 30, 50, 0.8);
+    border: 1px solid rgba(100, 150, 255, 0.4);
+    border-radius: 4px;
+    color: #e0e8ff;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 160px;
+    transition: all 0.2s ease;
+}
+
+.source-select:hover {
+    border-color: rgba(100, 180, 255, 0.6);
+    background: rgba(30, 45, 70, 0.9);
+}
+
+.source-select:focus {
+    outline: none;
+    border-color: #6699ff;
+    box-shadow: 0 0 0 2px rgba(102, 153, 255, 0.2);
+}
+
+.source-select option {
+    background: #1a2540;
+    color: #e0e8ff;
+    padding: 8px;
+}
+
+.source-coords {
+    color: #667799;
+    font-size: 11px;
+    font-family: 'Roboto Mono', monospace;
+}

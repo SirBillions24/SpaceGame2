@@ -111,6 +111,12 @@ export const api = {
     return response.json();
   },
 
+  async getBuildingTypes(): Promise<{ buildings: Record<string, any>, limitedBuildings: string[] }> {
+    const response = await fetch(`${API_BASE_URL}/world/building-types`);
+    if (!response.ok) throw new Error('Failed to fetch building types');
+    return response.json();
+  },
+
   async getPlanets(): Promise<WorldPlanetsResponse> {
     const response = await fetch(`${API_BASE_URL}/world/planets`, {
       headers: getHeaders(true)
@@ -589,6 +595,22 @@ export const api = {
       const error = await response.json();
       throw new Error(error.error || 'Failed to preview defense borrowing');
     }
+    return response.json();
+  },
+
+  // Multi-Planet Support
+  async getMyPlanets(): Promise<{ planets: { id: string; x: number; y: number; name: string; planetType: string }[] }> {
+    const response = await fetch(`${API_BASE_URL}/world/my-planets`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch owned planets');
+    return response.json();
+  },
+
+  // Black Holes (for map rendering)
+  async getBlackHoles(): Promise<{ blackHoles: { id: string; x: number; y: number; radius: number }[] }> {
+    const response = await fetch(`${API_BASE_URL}/world/black-holes`);
+    if (!response.ok) throw new Error('Failed to fetch black holes');
     return response.json();
   }
 };

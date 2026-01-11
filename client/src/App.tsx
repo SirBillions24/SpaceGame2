@@ -7,6 +7,7 @@ import PlanetInterior from './components/PlanetInterior';
 import RegionSelector from './components/RegionSelector';
 import GlobalHUD from './components/GlobalHUD';
 import TravelOverview from './components/TravelOverview';
+import { SourcePlanetDropdown } from './components/SourcePlanetDropdown';
 import { api, setAuthToken, getAuthToken, getCurrentUser, type Planet } from './lib/api';
 import './App.css';
 
@@ -24,6 +25,9 @@ function App() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isEspionageMode, setIsEspionageMode] = useState(false);
   const [hasIntelHub, setHasIntelHub] = useState(false);
+  // Multi-planet state
+  const [ownedPlanets, setOwnedPlanets] = useState<{ id: string; x: number; y: number; name: string; planetType: string }[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
 
   // Check for stored auth token & load initial data
   useEffect(() => {
@@ -62,6 +66,21 @@ function App() {
         api.getPlanets().then(data => {
           const myPlanets = data.planets.filter(p => p.ownerId === user.userId && !p.isNpc);
           setHasIntelHub(myPlanets.some(p => p.buildings?.some(b => b.type === 'tavern' && b.status === 'active')));
+
+          // Update owned planets list for dropdown
+          setOwnedPlanets(myPlanets.map(p => ({
+            id: p.id,
+            x: p.x,
+            y: p.y,
+            name: p.name,
+            planetType: (p as any).planetType || 'colony'
+          })));
+
+          // Auto-select first planet if none selected
+          if (myPlanets.length > 0 && !selectedSourceId) {
+            setSelectedSourceId(myPlanets[0].id);
+          }
+
           if (myPlanets.length === 0) {
             setNeedsSpawn(true);
           } else if (!hudPlanet) {
@@ -140,14 +159,44 @@ function App() {
 
       <WorldMap
         onPlanetClick={handlePlanetClick}
-        sourcePlanetId={sourcePlanet?.id}
+        sourcePlanetId={selectedSourceId}
         onMapContainerReady={handleMapContainerReady}
         currentUserId={isLoggedIn ? getCurrentUser()?.userId : undefined}
         isEspionageMode={isEspionageMode}
         onEspionageModeChange={setIsEspionageMode}
       />
 
-      <div className="hud-overlay" style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', gap: '10px', zIndex: 1000 }}>
+      <div className="hud-overlay" style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', alignItems: 'center', gap: '12px', zIndex: 1000 }}>
+        {/* Source Planet Selector */}
+        {!showPlanetInterior && !showFleetPanel && ownedPlanets.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'rgba(30, 40, 60, 0.9)', borderRadius: '4px', border: '1px solid rgba(100, 150, 255, 0.3)' }}>
+            <span style={{ color: '#8899bb', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>⚓ Source:</span>
+            <select
+              value={selectedSourceId || ''}
+              onChange={(e) => {
+                setSelectedSourceId(e.target.value);
+                api.getPlanet(e.target.value).then(setHudPlanet);
+              }}
+              style={{
+                padding: '4px 8px',
+                background: 'rgba(20, 30, 50, 0.9)',
+                border: '1px solid rgba(100, 150, 255, 0.4)',
+                borderRadius: '3px',
+                color: '#e0e8ff',
+                fontSize: '12px',
+                cursor: 'pointer',
+                minWidth: '140px'
+              }}
+            >
+              {ownedPlanets.map(planet => (
+                <option key={planet.id} value={planet.id}>
+                  {planet.planetType === 'harvester' ? '🌀' : '🌍'} {planet.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {hasIntelHub && (
           <button
             onClick={() => setIsEspionageMode(!isEspionageMode)}
@@ -192,10 +241,6 @@ function App() {
             setSelectedPlanet(null);
           }}
           onSendFleet={() => {
-            const user = getCurrentUser();
-            if (!sourcePlanet && user && hudPlanet && hudPlanet.ownerId === user.userId) {
-              setSourcePlanet(hudPlanet);
-            }
             setTargetPlanet(selectedPlanet);
             setShowFleetPanel(true);
           }}
@@ -220,9 +265,9 @@ function App() {
         />
       )}
 
-      {showFleetPanel && sourcePlanet && targetPlanet && (
+      {showFleetPanel && selectedSourceId && targetPlanet && (
         <FleetPanel
-          fromPlanet={sourcePlanet}
+          fromPlanet={ownedPlanets.find(p => p.id === selectedSourceId) as any || hudPlanet}
           toPlanet={targetPlanet}
           onClose={() => {
             setShowFleetPanel(false);

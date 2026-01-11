@@ -393,3 +393,5 @@ Worker crashed mid-job. BullMQ will auto-recover stalled jobs after ~30 seconds.
 |:---------|:--------|:-------------|
 | `fleet:arrival` | Process fleet arriving at destination | Fleet dispatch |
 | `fleet:return` | Process fleet returning home with loot | Combat completion |
+| `npc:respawn` | Respawn NPC after defeat | NPC death |
+| `probe:update` | Update probe states (arrivals, returns, accuracy, discovery) | Repeatable (60s) |

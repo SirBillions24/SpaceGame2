@@ -8,7 +8,7 @@ The system follows a modular Service-Route-Prisma pattern:
 - **Prisma Schema**: `ReconProbe` model tracks location, status, accuracy, and discovery risk.
 - **Service**: `server/src/services/espionageService.ts` contains the heavy lifting (accuracy math, discovery rolls, retreat logic).
 - **Constants**: `server/src/constants/espionageData.ts` defines probe types and their modular stats.
-- **Worker**: `server/src/services/timerWorker.ts` polls `updateProbes()` every minute to process real-time events.
+- **Job Queue**: BullMQ repeatable job (`probe:update`) runs `updateProbes()` every 60 seconds to process real-time events.
 
 ## 2. Capacity & Scaling
 The number of probes a player can control is **modular and scales with building progression**:

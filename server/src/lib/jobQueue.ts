@@ -80,6 +80,11 @@ export interface NpcRespawnJob {
     planetId: string;
 }
 
+// No data needed - this is a scheduled tick
+export interface ProbeUpdateJob {
+    tick: number; // Just a counter for logging
+}
+
 /**
  * Queue job to process a fleet arrival
  */
@@ -133,6 +138,33 @@ export async function getQueueStats() {
     ]);
 
     return { waiting, active, completed, failed, delayed };
+}
+
+/**
+ * Start the probe update scheduler (repeats every 60 seconds)
+ */
+export async function startProbeUpdateScheduler() {
+    // Remove any existing repeatable job first (in case config changed)
+    const repeatableJobs = await gameEventsQueue.getRepeatableJobs();
+    for (const job of repeatableJobs) {
+        if (job.name === 'probe:update') {
+            await gameEventsQueue.removeRepeatableByKey(job.key);
+        }
+    }
+
+    // Add new repeatable job - runs every 60 seconds
+    await gameEventsQueue.add(
+        'probe:update',
+        { tick: 0 },
+        {
+            repeat: {
+                every: 60000, // 60 seconds
+            },
+            jobId: 'probe-update-scheduler', // Consistent ID
+        }
+    );
+
+    console.log('🛸 Probe update scheduler started (every 60s)');
 }
 
 /**
