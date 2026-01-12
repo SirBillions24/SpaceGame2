@@ -14,8 +14,9 @@ export interface BuildingLevelStats {
     population?: number;
     stability?: number;
     storage?: number;
-    defenseBonus?: number; // New: Percentage defense bonus for Defensive Grid
-    recruitmentSpeedBonus?: number; // New: Percentage bonus to recruitment speed
+    defenseBonus?: number; // Percentage defense bonus for Defensive Grid
+    recruitmentSpeedBonus?: number; // Percentage bonus to recruitment speed
+    staffingRequirement?: number; // Workers needed to operate at full efficiency
     time: number; // in seconds
     xp: number;
 }
@@ -36,17 +37,17 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
         size: 3,
         category: 'civil',
         levels: {
-            1: { level: 1, requiredPlayerLevel: 1, cost: { carbon: 13, titanium: 0 }, production: 8, time: 2, xp: 2 },
-            2: { level: 2, requiredPlayerLevel: 1, cost: { carbon: 50, titanium: 20 }, production: 13, time: 9, xp: 4 },
-            3: { level: 3, requiredPlayerLevel: 8, cost: { carbon: 142, titanium: 76 }, production: 18, time: 300, xp: 6 },
-            4: { level: 4, requiredPlayerLevel: 12, cost: { carbon: 441, titanium: 441 }, production: 23, time: 2250, xp: 10 },
-            5: { level: 5, requiredPlayerLevel: 16, cost: { carbon: 736, titanium: 900 }, production: 28, time: 3600, xp: 12 },
-            6: { level: 6, requiredPlayerLevel: 20, cost: { carbon: 1031, titanium: 1547 }, production: 34, time: 5400, xp: 14 },
-            7: { level: 7, requiredPlayerLevel: 24, cost: { carbon: 1467, titanium: 2725 }, production: 41, time: 7200, xp: 16 },
-            8: { level: 8, requiredPlayerLevel: 29, cost: { carbon: 1818, titanium: 4243 }, production: 48, time: 10800, xp: 20 },
-            9: { level: 9, requiredPlayerLevel: 33, cost: { carbon: 2483, titanium: 5795 }, production: 56, time: 14400, xp: 22 },
-            10: { level: 10, requiredPlayerLevel: 37, cost: { carbon: 11760, titanium: 14880 }, production: 63, time: 28800, xp: 25 },
-            11: { level: 11, requiredPlayerLevel: 43, cost: { carbon: 49880, titanium: 56120 }, production: 72, time: 86400, xp: 30 },
+            1: { level: 1, requiredPlayerLevel: 1, cost: { carbon: 13, titanium: 0 }, production: 8, staffingRequirement: 3, time: 2, xp: 2 },
+            2: { level: 2, requiredPlayerLevel: 1, cost: { carbon: 50, titanium: 20 }, production: 13, staffingRequirement: 5, time: 9, xp: 4 },
+            3: { level: 3, requiredPlayerLevel: 8, cost: { carbon: 142, titanium: 76 }, production: 18, staffingRequirement: 7, time: 300, xp: 6 },
+            4: { level: 4, requiredPlayerLevel: 12, cost: { carbon: 441, titanium: 441 }, production: 23, staffingRequirement: 9, time: 2250, xp: 10 },
+            5: { level: 5, requiredPlayerLevel: 16, cost: { carbon: 736, titanium: 900 }, production: 28, staffingRequirement: 11, time: 3600, xp: 12 },
+            6: { level: 6, requiredPlayerLevel: 20, cost: { carbon: 1031, titanium: 1547 }, production: 34, staffingRequirement: 13, time: 5400, xp: 14 },
+            7: { level: 7, requiredPlayerLevel: 24, cost: { carbon: 1467, titanium: 2725 }, production: 41, staffingRequirement: 15, time: 7200, xp: 16 },
+            8: { level: 8, requiredPlayerLevel: 29, cost: { carbon: 1818, titanium: 4243 }, production: 48, staffingRequirement: 17, time: 10800, xp: 20 },
+            9: { level: 9, requiredPlayerLevel: 33, cost: { carbon: 2483, titanium: 5795 }, production: 56, staffingRequirement: 19, time: 14400, xp: 22 },
+            10: { level: 10, requiredPlayerLevel: 37, cost: { carbon: 11760, titanium: 14880 }, production: 63, staffingRequirement: 21, time: 28800, xp: 25 },
+            11: { level: 11, requiredPlayerLevel: 43, cost: { carbon: 49880, titanium: 56120 }, production: 72, staffingRequirement: 23, time: 86400, xp: 30 },
         }
     },
     titanium_extractor: {
@@ -55,17 +56,17 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
         size: 3,
         category: 'civil',
         levels: {
-            1: { level: 1, requiredPlayerLevel: 2, cost: { carbon: 14, titanium: 0 }, production: 8, time: 5, xp: 2 },
-            2: { level: 2, requiredPlayerLevel: 2, cost: { carbon: 20, titanium: 10 }, production: 13, time: 6, xp: 5 },
-            3: { level: 3, requiredPlayerLevel: 9, cost: { carbon: 236, titanium: 79 }, production: 18, time: 390, xp: 7 },
-            4: { level: 4, requiredPlayerLevel: 13, cost: { carbon: 799, titanium: 342 }, production: 23, time: 2250, xp: 11 },
-            5: { level: 5, requiredPlayerLevel: 17, cost: { carbon: 1262, titanium: 680 }, production: 28, time: 3600, xp: 13 },
-            6: { level: 6, requiredPlayerLevel: 21, cost: { carbon: 1920, titanium: 1280 }, production: 34, time: 5400, xp: 15 },
-            7: { level: 7, requiredPlayerLevel: 26, cost: { carbon: 2767, titanium: 2264 }, production: 41, time: 7200, xp: 19 },
-            8: { level: 8, requiredPlayerLevel: 30, cost: { carbon: 3743, titanium: 3062 }, production: 48, time: 10800, xp: 21 },
-            9: { level: 9, requiredPlayerLevel: 34, cost: { carbon: 5298, titanium: 4335 }, production: 56, time: 14400, xp: 23 },
-            10: { level: 10, requiredPlayerLevel: 38, cost: { carbon: 14715, titanium: 11145 }, production: 63, time: 28800, xp: 26 },
-            11: { level: 11, requiredPlayerLevel: 44, cost: { carbon: 56110, titanium: 49920 }, production: 72, time: 86400, xp: 31 },
+            1: { level: 1, requiredPlayerLevel: 2, cost: { carbon: 14, titanium: 0 }, production: 8, staffingRequirement: 3, time: 5, xp: 2 },
+            2: { level: 2, requiredPlayerLevel: 2, cost: { carbon: 20, titanium: 10 }, production: 13, staffingRequirement: 5, time: 6, xp: 5 },
+            3: { level: 3, requiredPlayerLevel: 9, cost: { carbon: 236, titanium: 79 }, production: 18, staffingRequirement: 7, time: 390, xp: 7 },
+            4: { level: 4, requiredPlayerLevel: 13, cost: { carbon: 799, titanium: 342 }, production: 23, staffingRequirement: 9, time: 2250, xp: 11 },
+            5: { level: 5, requiredPlayerLevel: 17, cost: { carbon: 1262, titanium: 680 }, production: 28, staffingRequirement: 11, time: 3600, xp: 13 },
+            6: { level: 6, requiredPlayerLevel: 21, cost: { carbon: 1920, titanium: 1280 }, production: 34, staffingRequirement: 13, time: 5400, xp: 15 },
+            7: { level: 7, requiredPlayerLevel: 26, cost: { carbon: 2767, titanium: 2264 }, production: 41, staffingRequirement: 15, time: 7200, xp: 19 },
+            8: { level: 8, requiredPlayerLevel: 30, cost: { carbon: 3743, titanium: 3062 }, production: 48, staffingRequirement: 17, time: 10800, xp: 21 },
+            9: { level: 9, requiredPlayerLevel: 34, cost: { carbon: 5298, titanium: 4335 }, production: 56, staffingRequirement: 19, time: 14400, xp: 23 },
+            10: { level: 10, requiredPlayerLevel: 38, cost: { carbon: 14715, titanium: 11145 }, production: 63, staffingRequirement: 21, time: 28800, xp: 26 },
+            11: { level: 11, requiredPlayerLevel: 44, cost: { carbon: 56110, titanium: 49920 }, production: 72, staffingRequirement: 23, time: 86400, xp: 31 },
         }
     },
     hydroponics: {
@@ -74,16 +75,16 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
         size: 3,
         category: 'civil',
         levels: {
-            1: { level: 1, requiredPlayerLevel: 2, cost: { carbon: 30, titanium: 0 }, production: 16, time: 5, xp: 3 },
-            2: { level: 2, requiredPlayerLevel: 2, cost: { carbon: 107, titanium: 19 }, production: 24, time: 6, xp: 5 },
-            3: { level: 3, requiredPlayerLevel: 9, cost: { carbon: 236, titanium: 79 }, production: 32, time: 390, xp: 7 },
-            4: { level: 4, requiredPlayerLevel: 14, cost: { carbon: 791, titanium: 426 }, production: 40, time: 2250, xp: 11 },
-            5: { level: 5, requiredPlayerLevel: 18, cost: { carbon: 1256, titanium: 838 }, production: 48, time: 3600, xp: 13 },
-            6: { level: 6, requiredPlayerLevel: 22, cost: { carbon: 1949, titanium: 1595 }, production: 56, time: 5400, xp: 16 },
-            7: { level: 7, requiredPlayerLevel: 27, cost: { carbon: 2630, titanium: 2630 }, production: 64, time: 7200, xp: 19 },
-            8: { level: 8, requiredPlayerLevel: 31, cost: { carbon: 3295, titanium: 4028 }, production: 72, time: 10800, xp: 21 },
-            9: { level: 9, requiredPlayerLevel: 35, cost: { carbon: 3977, titanium: 5965 }, production: 80, time: 14400, xp: 23 },
-            10: { level: 10, requiredPlayerLevel: 40, cost: { carbon: 5379, titanium: 9990 }, production: 88, time: 28800, xp: 29 },
+            1: { level: 1, requiredPlayerLevel: 2, cost: { carbon: 30, titanium: 0 }, production: 16, staffingRequirement: 4, time: 5, xp: 3 },
+            2: { level: 2, requiredPlayerLevel: 2, cost: { carbon: 107, titanium: 19 }, production: 24, staffingRequirement: 6, time: 6, xp: 5 },
+            3: { level: 3, requiredPlayerLevel: 9, cost: { carbon: 236, titanium: 79 }, production: 32, staffingRequirement: 8, time: 390, xp: 7 },
+            4: { level: 4, requiredPlayerLevel: 14, cost: { carbon: 791, titanium: 426 }, production: 40, staffingRequirement: 10, time: 2250, xp: 11 },
+            5: { level: 5, requiredPlayerLevel: 18, cost: { carbon: 1256, titanium: 838 }, production: 48, staffingRequirement: 12, time: 3600, xp: 13 },
+            6: { level: 6, requiredPlayerLevel: 22, cost: { carbon: 1949, titanium: 1595 }, production: 56, staffingRequirement: 14, time: 5400, xp: 16 },
+            7: { level: 7, requiredPlayerLevel: 27, cost: { carbon: 2630, titanium: 2630 }, production: 64, staffingRequirement: 16, time: 7200, xp: 19 },
+            8: { level: 8, requiredPlayerLevel: 31, cost: { carbon: 3295, titanium: 4028 }, production: 72, staffingRequirement: 18, time: 10800, xp: 21 },
+            9: { level: 9, requiredPlayerLevel: 35, cost: { carbon: 3977, titanium: 5965 }, production: 80, staffingRequirement: 20, time: 14400, xp: 23 },
+            10: { level: 10, requiredPlayerLevel: 40, cost: { carbon: 5379, titanium: 9990 }, production: 88, staffingRequirement: 22, time: 28800, xp: 29 },
         }
     },
     housing_unit: {
@@ -187,11 +188,11 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
         category: 'civil',
         nonConstructable: true,
         levels: {
-            1: { level: 1, requiredPlayerLevel: 1, cost: { carbon: 0, titanium: 0 }, stability: 100, time: 0, xp: 0 },
-            2: { level: 2, requiredPlayerLevel: 11, cost: { carbon: 1000, titanium: 500 }, stability: 150, time: 3600, xp: 50 },
-            3: { level: 3, requiredPlayerLevel: 24, cost: { carbon: 5000, titanium: 2500 }, stability: 200, time: 10800, xp: 100 },
-            4: { level: 4, requiredPlayerLevel: 52, cost: { carbon: 20000, titanium: 10000 }, stability: 300, time: 43200, xp: 200 },
-            5: { level: 5, requiredPlayerLevel: 68, cost: { carbon: 50000, titanium: 25000 }, stability: 500, time: 86400, xp: 500 },
+            1: { level: 1, requiredPlayerLevel: 1, cost: { carbon: 0, titanium: 0 }, stability: 100, population: 20, time: 0, xp: 0 },
+            2: { level: 2, requiredPlayerLevel: 11, cost: { carbon: 1000, titanium: 500 }, stability: 150, population: 35, time: 3600, xp: 50 },
+            3: { level: 3, requiredPlayerLevel: 24, cost: { carbon: 5000, titanium: 2500 }, stability: 200, population: 50, time: 10800, xp: 100 },
+            4: { level: 4, requiredPlayerLevel: 52, cost: { carbon: 20000, titanium: 10000 }, stability: 300, population: 75, time: 43200, xp: 200 },
+            5: { level: 5, requiredPlayerLevel: 68, cost: { carbon: 50000, titanium: 25000 }, stability: 500, population: 100, time: 86400, xp: 500 },
         }
     },
     monument: {

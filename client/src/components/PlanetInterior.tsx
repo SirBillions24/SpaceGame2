@@ -152,6 +152,7 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
   const [showAdmiralPanel, setShowAdmiralPanel] = useState(false);
   const [showEspionagePanel, setShowEspionagePanel] = useState(false);
   const [showRecruitmentPanel, setShowRecruitmentPanel] = useState(false);
+  const [showWorkforcePanel, setShowWorkforcePanel] = useState(false);
   const [hoveredBuildingType, setHoveredBuildingType] = useState<string | null>(null);
   const [activeMainTab, setActiveMainTab] = useState<string>('structures');
   const [expandedSubsections, setExpandedSubsections] = useState<Set<string>>(new Set(['military', 'civil', 'workshops', 'operations']));
@@ -751,6 +752,36 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                     <div className="res-cap-value">CLASSIFIED</div>
                   )}
                 </div>
+                {isOwner && (
+                  <div
+                    className="resource-item workforce-stat-item"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setShowWorkforcePanel(true)}
+                  >
+                    <div className="res-cap-label">Workforce</div>
+                    <div
+                      className="res-cap-value"
+                      style={{
+                        color: (planetData?.stats?.workforceEfficiency || 1.0) >= 1.0
+                          ? '#4caf50'
+                          : (planetData?.stats?.workforceEfficiency || 1.0) >= 0.5
+                            ? '#ff9800'
+                            : '#f44336'
+                      }}
+                    >
+                      {planetData?.stats?.population || 0}/{planetData?.stats?.workforceRequired || 0}
+                      {(planetData?.stats?.workforceEfficiency || 1.0) < 1.0 && ' ⚠️'}
+                    </div>
+                    <span
+                      className="res-rate"
+                      style={{
+                        color: (planetData?.stats?.workforceEfficiency || 1.0) >= 1.0 ? '#4caf50' : '#ff9800'
+                      }}
+                    >
+                      Efficiency: {((planetData?.stats?.workforceEfficiency || 1.0) * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                )}
                 <div className="resource-item">
                   <div className="res-cap-label">Grid Size</div>
                   <div className="res-cap-value">{gridSizeX} × {gridSizeY}</div>
@@ -1163,6 +1194,114 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
               planetId={planetData.id}
               onClose={() => setShowEspionagePanel(false)}
             />
+          )}
+
+          {/* Workforce Details Panel */}
+          {showWorkforcePanel && planetData && (
+            <div className="building-modal-overlay" onClick={() => setShowWorkforcePanel(false)}>
+              <div className="building-modal" onClick={e => e.stopPropagation()} style={{ minWidth: '500px' }}>
+                <div className="modal-header-row">
+                  <h3>👷 Workforce Economy</h3>
+                  <button className="close-btn" onClick={() => setShowWorkforcePanel(false)}>×</button>
+                </div>
+
+                <div style={{ marginBottom: '15px', padding: '12px', background: 'rgba(33, 150, 243, 0.1)', borderRadius: '6px', border: '1px solid rgba(33, 150, 243, 0.3)' }}>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#aaa' }}>
+                    Production buildings require workers to operate efficiently. Build Housing Units or upgrade your Colony Hub to increase your workforce.
+                  </p>
+                </div>
+
+                {/* Efficiency Summary */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '4px' }}>WORKERS AVAILABLE</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#4caf50' }}>
+                      {planetData?.stats?.population || 0}
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '6px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '4px' }}>WORKERS REQUIRED</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: (planetData?.stats?.population || 0) >= (planetData?.stats?.workforceRequired || 0) ? '#4caf50' : '#ff9800' }}>
+                      {planetData?.stats?.workforceRequired || 0}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Efficiency Breakdown */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#00f3ff', marginBottom: '8px', fontWeight: 'bold' }}>EFFICIENCY CALCULATION</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                      <span>Staffing Ratio:</span>
+                      <span style={{ color: (planetData?.stats?.staffingRatio || 1.0) >= 1.0 ? '#4caf50' : '#ff9800' }}>
+                        {((planetData?.stats?.staffingRatio || 1.0) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    {(planetData?.stats?.overstaffBonus || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                        <span>Overstaffing Bonus:</span>
+                        <span style={{ color: '#4caf50' }}>+{((planetData?.stats?.overstaffBonus || 0) * 100).toFixed(1)}%</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderTop: '1px solid #333', paddingTop: '6px' }}>
+                      <span style={{ fontWeight: 'bold' }}>Final Workforce Efficiency:</span>
+                      <span style={{ fontWeight: 'bold', color: (planetData?.stats?.workforceEfficiency || 1.0) >= 1.0 ? '#4caf50' : '#ff9800' }}>
+                        {((planetData?.stats?.workforceEfficiency || 1.0) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Population Sources */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#00f3ff', marginBottom: '8px', fontWeight: 'bold' }}>POPULATION SOURCES</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.9rem' }}>
+                    {buildings.filter(b => b.type === 'colony_hub').map(b => (
+                      <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Colony Hub (Lvl {b.level})</span>
+                        <span style={{ color: '#4caf50' }}>+{b.stats?.population || 0} workers</span>
+                      </div>
+                    ))}
+                    {buildings.filter(b => b.type === 'housing_unit').map(b => (
+                      <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Housing Unit (Lvl {b.level})</span>
+                        <span style={{ color: '#4caf50' }}>+{b.stats?.population || 0} workers</span>
+                      </div>
+                    ))}
+                    {buildings.filter(b => b.type === 'housing_unit').length === 0 && (
+                      <div style={{ color: '#888', fontStyle: 'italic' }}>No Housing Units built yet</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Staffing Requirements */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#00f3ff', marginBottom: '8px', fontWeight: 'bold' }}>STAFFING REQUIREMENTS</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.9rem' }}>
+                    {buildings.filter(b => ['carbon_processor', 'titanium_extractor', 'hydroponics'].includes(b.type)).map(b => (
+                      <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{BUILDING_LABELS[b.type]} (Lvl {b.level})</span>
+                        <span style={{ color: '#ff9800' }}>-{b.stats?.staffingRequirement || 0} workers</span>
+                      </div>
+                    ))}
+                    {buildings.filter(b => ['carbon_processor', 'titanium_extractor', 'hydroponics'].includes(b.type)).length === 0 && (
+                      <div style={{ color: '#888', fontStyle: 'italic' }}>No production buildings yet</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tips */}
+                <div style={{ padding: '12px', background: 'rgba(76, 175, 80, 0.1)', borderRadius: '6px', border: '1px solid rgba(76, 175, 80, 0.3)' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#81c784', fontWeight: 'bold', marginBottom: '6px' }}>💡 Tips</div>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.8rem', color: '#aaa' }}>
+                    <li>Colony Hub upgrades provide both workers AND stability</li>
+                    <li>Housing Units provide more workers but decrease stability</li>
+                    <li>Excess workers provide up to 20% production bonus</li>
+                    <li>Buildings always produce at least 25% even when understaffed</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           )}
 
           {showExpansionModal && planetData && (

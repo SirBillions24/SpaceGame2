@@ -56,6 +56,12 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
     const publicOrder = stats?.publicOrder || 0;
     const productivity = stats?.productivity || 100;
 
+    // Workforce Stats (new economy system)
+    const workforceRequired = stats?.workforceRequired || 0;
+    const workforceEfficiency = stats?.workforceEfficiency || 1.0;
+    const staffingRatio = stats?.staffingRatio || 1.0;
+    const overstaffBonus = stats?.overstaffBonus || 0;
+
     // Food Tooltip
     const foodProd = stats?.foodRate || 0;
     const foodCons = stats?.foodConsumption || 0;
@@ -263,6 +269,65 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                                 className={`order-indicator ${publicOrder >= 0 ? 'positive' : 'negative'}`}
                                 style={{ width: `${Math.min(100, Math.abs(publicOrder) / 5)}%` }}
                             ></div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Workforce Efficiency Indicator */}
+                <div className="res-group workforce-group">
+                    <div
+                        className="res-icon workforce-icon"
+                        style={{
+                            background: workforceEfficiency >= 1.0 ? '#4caf50' : workforceEfficiency >= 0.5 ? '#ff9800' : '#f44336',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        👷
+                    </div>
+                    <span className="res-val" style={{ color: workforceEfficiency >= 1.0 ? '#81c784' : workforceEfficiency >= 0.5 ? '#ffb74d' : '#e57373' }}>
+                        {(workforceEfficiency * 100).toFixed(0)}%
+                    </span>
+
+                    <div className="resource-dropdown workforce-dropdown">
+                        <h5>Workforce Efficiency</h5>
+                        <p style={{ fontSize: '0.8em', color: '#aaa', marginBottom: '8px' }}>
+                            Production buildings require workers to operate.
+                        </p>
+                        <div className="military-row">
+                            <span className="unit-name">Workers Available:</span>
+                            <span className="unit-count">{pop}</span>
+                        </div>
+                        <div className="military-row">
+                            <span className="unit-name">Workers Required:</span>
+                            <span className="unit-count">{workforceRequired}</span>
+                        </div>
+                        <div className="military-row" style={{ borderTop: '1px solid #444', marginTop: '5px', paddingTop: '5px' }}>
+                            <span className="unit-name">Staffing Ratio:</span>
+                            <span className="unit-count" style={{ color: staffingRatio >= 1.0 ? '#4caf50' : staffingRatio >= 0.5 ? '#ff9800' : '#f44336' }}>
+                                {(staffingRatio * 100).toFixed(0)}%
+                            </span>
+                        </div>
+                        {overstaffBonus > 0 && (
+                            <div className="military-row">
+                                <span className="unit-name">Overstaff Bonus:</span>
+                                <span className="unit-count" style={{ color: '#4caf50' }}>+{(overstaffBonus * 100).toFixed(1)}%</span>
+                            </div>
+                        )}
+                        <div className="military-row" style={{ borderTop: '1px solid #444', marginTop: '5px', paddingTop: '5px' }}>
+                            <span className="unit-name">Final Efficiency:</span>
+                            <span className="unit-count" style={{ color: workforceEfficiency >= 1.0 ? '#4caf50' : '#ff9800' }}>
+                                {(workforceEfficiency * 100).toFixed(0)}%
+                            </span>
+                        </div>
+                        <div style={{ fontSize: '0.75em', color: '#888', marginTop: '8px', fontStyle: 'italic' }}>
+                            Build Housing or upgrade Colony Hub for more workers.
                         </div>
                     </div>
                 </div>

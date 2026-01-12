@@ -2,8 +2,14 @@ import prisma from '../lib/prisma';
 import { spawnPirateBases } from './pveService';
 import { processManufacturingQueue } from './toolService';
 import { processTurretQueue } from './turretService';
+import {
+  BASE_PRODUCTION,
+  BASE_STAFFING_REQUIREMENT,
+  STAFFING_PER_LEVEL,
+  OVERSTAFFING_BONUS_CAP,
+  UNDERSTAFFED_MINIMUM
+} from '../constants/mechanics';
 import { UNIT_DATA } from '../constants/unitData';
-import { BASE_PRODUCTION } from '../constants/mechanics';
 import { BUILDING_DATA, getBuildingStats } from '../constants/buildingData';
 import { addXp } from './progressionService';
 import { getWorldBounds, getQuadrantCenter, maybeExpandWorld, Quadrant } from './worldService';
@@ -109,17 +115,20 @@ async function generatePlanetPosition(quadrant?: Quadrant): Promise<{ x: number;
 }
 
 /**
- * Lazy Resource Evaluation:
- * Syncs resources based on time elapsed since last update.
- */
-/**
  * Calculate resource rates and stats for a planet
+ * Includes workforce efficiency: production buildings require workers to operate
  */
 export function calculatePlanetRates(planet: any) {
-  let carbonProduction = 0;
-  let titaniumProduction = 0;
-  let foodProduction = 0;
+  // Track base production values (before workforce efficiency)
+  let carbonBaseProduction = 0;
+  let titaniumBaseProduction = 0;
+  let foodBaseProduction = 0;
+
+  // Track workforce
   let population = 0;
+  let workforceRequired = 0;
+
+  // Track stability
   let dwellingPenalty = 0;
   let decorationBonus = 0;
   let maxStorage = 1000; // Base storage
@@ -139,16 +148,34 @@ export function calculatePlanetRates(planet: any) {
             (b as any).nextUpgrade = nextLevelStats;
           }
 
-          if (b.type === 'carbon_processor') carbonProduction += stats.production || 0;
-          if (b.type === 'titanium_extractor') titaniumProduction += stats.production || 0;
-          if (b.type === 'hydroponics') foodProduction += stats.production || 0;
+          // Production buildings - track base production and staffing requirements
+          if (b.type === 'carbon_processor') {
+            carbonBaseProduction += stats.production || 0;
+            workforceRequired += stats.staffingRequirement || (BASE_STAFFING_REQUIREMENT + (b.level - 1) * STAFFING_PER_LEVEL);
+          }
+          if (b.type === 'titanium_extractor') {
+            titaniumBaseProduction += stats.production || 0;
+            workforceRequired += stats.staffingRequirement || (BASE_STAFFING_REQUIREMENT + (b.level - 1) * STAFFING_PER_LEVEL);
+          }
+          if (b.type === 'hydroponics') {
+            foodBaseProduction += stats.production || 0;
+            workforceRequired += stats.staffingRequirement || (BASE_STAFFING_REQUIREMENT + (b.level - 1) * STAFFING_PER_LEVEL);
+          }
 
+          // Population sources: Housing units and Colony Hub
           if (b.type === 'housing_unit') {
             population += stats.population || 0;
             dwellingPenalty += Math.abs(stats.stability || 0);
           }
 
-          if (b.type === 'monument' || b.type === 'colony_hub') {
+          // Colony Hub provides both stability AND population
+          if (b.type === 'colony_hub') {
+            decorationBonus += stats.stability || 0;
+            population += stats.population || 0;
+          }
+
+          // Monuments provide stability only
+          if (b.type === 'monument') {
             decorationBonus += stats.stability || 0;
           }
 
@@ -164,21 +191,41 @@ export function calculatePlanetRates(planet: any) {
   const taxPenalty = (planet.taxRate || 10) * 2;
   const publicOrder = decorationBonus - dwellingPenalty - taxPenalty;
 
-  // Productivity logic
+  // Productivity (stability) multiplier
   let productivity = 100;
   if (publicOrder >= 0) {
     productivity = (Math.sqrt(publicOrder) * 2) + 100;
   } else {
     productivity = 100 * (100 / (100 + 2 * Math.sqrt(Math.abs(publicOrder))));
   }
-  const prodMult = productivity / 100;
+  const stabilityMultiplier = productivity / 100;
 
-  // Production Rates (Base 100 + building production * productivity)
-  const carbonRate = (BASE_PRODUCTION + carbonProduction) * prodMult;
-  const titaniumRate = (BASE_PRODUCTION + titaniumProduction) * prodMult;
-  const foodRate = (BASE_PRODUCTION + foodProduction) * prodMult;
+  // Workforce Efficiency Calculation
+  // staffingRatio = min(1.0, population / workforceRequired)
+  // overstaffBonus = log10(1 + surplus / required) × 0.15, capped at OVERSTAFFING_BONUS_CAP
+  // workforceEfficiency = max(UNDERSTAFFED_MINIMUM, staffingRatio + overstaffBonus)
+  let staffingRatio = 1.0;
+  let overstaffBonus = 0;
+  let workforceEfficiency = 1.0;
 
-  // Consumption
+  if (workforceRequired > 0) {
+    staffingRatio = Math.min(1.0, population / workforceRequired);
+    const surplusWorkers = Math.max(0, population - workforceRequired);
+    if (surplusWorkers > 0) {
+      overstaffBonus = Math.min(
+        OVERSTAFFING_BONUS_CAP,
+        Math.log10(1 + surplusWorkers / workforceRequired) * 0.15
+      );
+    }
+    workforceEfficiency = Math.max(UNDERSTAFFED_MINIMUM, staffingRatio + overstaffBonus);
+  }
+
+  // Final Production Rates = (Base + BuildingProduction) × workforceEfficiency × stabilityMultiplier
+  const carbonRate = (BASE_PRODUCTION + carbonBaseProduction) * workforceEfficiency * stabilityMultiplier;
+  const titaniumRate = (BASE_PRODUCTION + titaniumBaseProduction) * workforceEfficiency * stabilityMultiplier;
+  const foodRate = (BASE_PRODUCTION + foodBaseProduction) * workforceEfficiency * stabilityMultiplier;
+
+  // Consumption (units eat food regardless of workforce efficiency)
   let foodConsumption = 0;
   if (planet.units) {
     planet.units.forEach((u: any) => {
@@ -201,7 +248,12 @@ export function calculatePlanetRates(planet: any) {
     publicOrder,
     productivity,
     maxStorage,
-    darkMatterRate: calculateDarkMatterProduction(planet.buildings)
+    darkMatterRate: calculateDarkMatterProduction(planet.buildings),
+    // New workforce stats for UI
+    workforceRequired,
+    workforceEfficiency,
+    staffingRatio,
+    overstaffBonus
   };
 }
 

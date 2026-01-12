@@ -35,3 +35,11 @@ export const MIN_GRID_SIZE = 10; // Starting grid size (10x10)
 export const EXPANSION_BASE_COST_CARBON = 1000;
 export const EXPANSION_BASE_COST_TITANIUM = 500;
 export const EXPANSION_COST_MULTIPLIER = 1.5; // Cost increases by 50% per expansion
+
+// 8. WORKFORCE ECONOMY
+// Population acts as workforce for production buildings
+export const BASE_STAFFING_REQUIREMENT = 3;      // Workers per production building at level 1
+export const STAFFING_PER_LEVEL = 2;             // Additional workers per building level
+export const OVERSTAFFING_BONUS_CAP = 0.20;      // Max 20% bonus from excess workers
+export const UNDERSTAFFED_MINIMUM = 0.25;        // Buildings always produce at least 25%
+

@@ -346,6 +346,23 @@
     box-shadow: 0 0 5px #f44336;
 }
 
+/* Workforce Group - matches order-group styling */
+.workforce-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid #444;
+    background: #212121;
+    font-weight: bold;
+    font-family: monospace;
+}
+
+.workforce-dropdown h5 {
+    color: #2196f3;
+}
+
 .order-bar-bg {
     width: 100%;
     background: #333;
