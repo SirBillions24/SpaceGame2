@@ -3,6 +3,7 @@ import './GlobalHUD.css';
 import { type Planet, api } from '../lib/api';
 
 import Mailbox from './Mailbox';
+import ResourceBreakdownPanel from './ResourceBreakdownPanel';
 
 interface GlobalHUDProps {
     user: { username: string; xp?: number; level?: number; } | null;
@@ -15,6 +16,7 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
     const [devToolsOpen, setDevToolsOpen] = useState(false);
     const [clickCount, setClickCount] = useState(0);
     const [lastClickTime, setLastClickTime] = useState(0);
+    const [selectedResourcePanel, setSelectedResourcePanel] = useState<'carbon' | 'titanium' | 'food' | null>(null);
 
     // Sync state if prop changes
     useEffect(() => {
@@ -131,7 +133,11 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
 
             {/* Top Center: Resources */}
             <div className="hud-resources-bar">
-                <div className="res-group">
+                <div
+                    className="res-group clickable"
+                    onClick={() => setSelectedResourcePanel('carbon')}
+                    title="Click for detailed breakdown"
+                >
                     <div className="res-icon carbon-icon"></div>
                     <span className="res-val">{Math.floor(carbon).toLocaleString()}</span>
                     <span className="res-rate-mini">+{stats?.carbonRate.toFixed(2)}/h</span>
@@ -150,9 +156,14 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                             <span className="unit-name">Total:</span>
                             <span className="unit-count">+{stats?.carbonRate.toFixed(2)}/h</span>
                         </div>
+                        <div style={{ fontSize: '0.7em', color: '#666', marginTop: '6px', fontStyle: 'italic' }}>Click for detailed breakdown</div>
                     </div>
                 </div>
-                <div className="res-group">
+                <div
+                    className="res-group clickable"
+                    onClick={() => setSelectedResourcePanel('titanium')}
+                    title="Click for detailed breakdown"
+                >
                     <div className="res-icon titanium-icon"></div>
                     <span className="res-val">{Math.floor(titanium).toLocaleString()}</span>
                     <span className="res-rate-mini">+{stats?.titaniumRate.toFixed(2)}/h</span>
@@ -173,7 +184,11 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                         </div>
                     </div>
                 </div>
-                <div className="res-group">
+                <div
+                    className="res-group clickable"
+                    onClick={() => setSelectedResourcePanel('food')}
+                    title="Click for detailed breakdown"
+                >
                     <div className="res-icon food-icon"></div>
                     <span className={`res-val ${foodNet < 0 ? 'warning' : ''}`}>{Math.floor(food).toLocaleString()}</span>
                     <span className="res-rate-mini">{foodNet > 0 ? '+' : ''}{foodNet.toFixed(2)}/h</span>
@@ -194,6 +209,7 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                                 {foodNet > 0 ? '+' : ''}{foodNet.toFixed(2)}/h
                             </span>
                         </div>
+                        <div style={{ fontSize: '0.7em', color: '#666', marginTop: '6px', fontStyle: 'italic' }}>Click for detailed breakdown</div>
                     </div>
                 </div>
 
@@ -471,6 +487,16 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Resource Breakdown Panel */}
+            {selectedResourcePanel && stats?.productionBreakdown && (
+                <ResourceBreakdownPanel
+                    resourceType={selectedResourcePanel}
+                    production={stats.productionBreakdown[selectedResourcePanel]}
+                    consumption={selectedResourcePanel === 'food' ? stats.consumptionBreakdown?.food : undefined}
+                    onClose={() => setSelectedResourcePanel(null)}
+                />
             )}
         </div>
     );

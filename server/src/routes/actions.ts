@@ -38,6 +38,12 @@ interface FleetBody {
   };
   // Admiral assignment (optional)
   admiralId?: string;
+  // Resource transfer (only valid when target is owned by sender)
+  resourceTransfer?: {
+    carbon?: number;
+    titanium?: number;
+    food?: number;
+  };
 }
 
 // Create a new fleet movement
@@ -275,7 +281,76 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
       await import('../services/fleetService').then(m => m.deductTools(fromPlanetId, allTools));
     }
 
-    // Create fleet with borrowed defense info
+    // --- RESOURCE TRANSFER HANDLING (for transfers to owned planets) ---
+    let cargoJson: string | null = null;
+    const resourceTransfer = req.body.resourceTransfer;
+
+    if (resourceTransfer && (resourceTransfer.carbon || resourceTransfer.titanium || resourceTransfer.food)) {
+      // Verify target planet is owned by sender
+      const targetOwnership = await prisma.planet.findUnique({
+        where: { id: toPlanetId },
+        select: { ownerId: true }
+      });
+
+      if (!targetOwnership || targetOwnership.ownerId !== userId) {
+        return res.status(400).json({ error: 'Resource transfer is only allowed to your own planets' });
+      }
+
+      // Calculate total carry capacity based on unit stats
+      let totalCapacity = 0;
+      for (const [unitType, count] of Object.entries(units)) {
+        const unitStats = UNIT_DATA[unitType];
+        if (unitStats) {
+          totalCapacity += (unitStats.capacity || 0) * (count as number);
+        }
+      }
+
+      // Calculate requested transfer
+      const requestedCarbon = Math.max(0, resourceTransfer.carbon || 0);
+      const requestedTitanium = Math.max(0, resourceTransfer.titanium || 0);
+      const requestedFood = Math.max(0, resourceTransfer.food || 0);
+      const totalRequested = requestedCarbon + requestedTitanium + requestedFood;
+
+      if (totalRequested > totalCapacity) {
+        return res.status(400).json({
+          error: `Transfer exceeds carry capacity. Requested: ${totalRequested}, Capacity: ${totalCapacity}`
+        });
+      }
+
+      // Validate and deduct resources from source planet atomically
+      const transferResult = await prisma.$transaction(async (tx) => {
+        const sourcePlanet = await tx.planet.findUnique({ where: { id: fromPlanetId } });
+        if (!sourcePlanet) throw new Error('Source planet not found');
+
+        // Check availability
+        if (sourcePlanet.carbon < requestedCarbon) {
+          throw new Error(`Insufficient carbon. Available: ${Math.floor(sourcePlanet.carbon)}, Requested: ${requestedCarbon}`);
+        }
+        if (sourcePlanet.titanium < requestedTitanium) {
+          throw new Error(`Insufficient titanium. Available: ${Math.floor(sourcePlanet.titanium)}, Requested: ${requestedTitanium}`);
+        }
+        if (sourcePlanet.food < requestedFood) {
+          throw new Error(`Insufficient food. Available: ${Math.floor(sourcePlanet.food)}, Requested: ${requestedFood}`);
+        }
+
+        // Deduct resources
+        await tx.planet.update({
+          where: { id: fromPlanetId },
+          data: {
+            carbon: { decrement: requestedCarbon },
+            titanium: { decrement: requestedTitanium },
+            food: { decrement: requestedFood },
+          }
+        });
+
+        return { carbon: requestedCarbon, titanium: requestedTitanium, food: requestedFood };
+      });
+
+      cargoJson = JSON.stringify(transferResult);
+      console.log(`📦 Resource transfer queued: C:${transferResult.carbon} T:${transferResult.titanium} F:${transferResult.food}`);
+    }
+
+    // Create fleet with borrowed defense info and cargo
     const fleet = await prisma.fleet.create({
       data: {
         ownerId: userId,
@@ -288,6 +363,7 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
           : null,
         toolsJson: Object.keys(allTools).length > 0 ? JSON.stringify(allTools) : null,
         borrowedFromDefenseJson: hasBorrowedTroops ? JSON.stringify(borrowedFromDefense) : null,
+        cargoJson: cargoJson,
         admiralId: admiralId,
         departAt,
         arriveAt,

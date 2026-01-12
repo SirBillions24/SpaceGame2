@@ -280,11 +280,19 @@ export async function transferHarvesterOwnership(
         where: { planetId: harvesterId }
     });
 
-    // Update planet ownership
+    // Fetch new owner's username for naming
+    const newOwner = await prisma.user.findUnique({
+        where: { id: newOwnerId },
+        select: { username: true }
+    });
+    const ownerName = newOwner?.username || 'Unknown';
+
+    // Update planet ownership and name to reflect new owner
     await prisma.planet.update({
         where: { id: harvesterId },
         data: {
             ownerId: newOwnerId,
+            name: `${ownerName}'s Horizon Harvester`,
             isNpc: false,
             npcLevel: 0,
             npcClass: null,

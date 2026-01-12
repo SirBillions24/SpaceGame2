@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import { api, type Planet, type Fleet } from '../lib/api';
 import { ProceduralBackgroundManager } from './ProceduralBackground';
+import { SPRITE_CONFIG, getPlanetSpritePath } from '../config/spriteConfig';
 
 interface Probe {
   id: string;
@@ -233,18 +234,28 @@ export default function WorldMap({
             cameraRef.current.y = centerY;
           }
 
-          const colonyTexture = await PIXI.Assets.load('/assets/castles/castlesprite.png');
-          const meleeTexture = await PIXI.Assets.load('/assets/castles/melee_outpost.jpeg').catch(() => colonyTexture);
-          const rangedTexture = await PIXI.Assets.load('/assets/castles/ranged_den.jpeg').catch(() => colonyTexture);
-          const roboticTexture = await PIXI.Assets.load('/assets/castles/robotic_forge.jpeg').catch(() => colonyTexture);
+          // Load all planet textures from config
+          const textureCache = new Map<string, PIXI.Texture>();
+          const defaultTexture = await PIXI.Assets.load(SPRITE_CONFIG.planets.default);
+          textureCache.set(SPRITE_CONFIG.planets.default, defaultTexture);
+
+          // Load planet type textures
+          for (const [, path] of Object.entries(SPRITE_CONFIG.planets)) {
+            if (!textureCache.has(path)) {
+              textureCache.set(path, await PIXI.Assets.load(path).catch(() => defaultTexture));
+            }
+          }
+
+          // Load NPC class textures
+          for (const [, path] of Object.entries(SPRITE_CONFIG.npc)) {
+            if (!textureCache.has(path)) {
+              textureCache.set(path, await PIXI.Assets.load(path).catch(() => defaultTexture));
+            }
+          }
 
           pData.planets.forEach(p => {
-            let texture = colonyTexture;
-            if (p.isNpc) {
-              if (p.npcClass === 'melee') texture = meleeTexture;
-              else if (p.npcClass === 'ranged') texture = rangedTexture;
-              else if (p.npcClass === 'robotic') texture = roboticTexture;
-            }
+            const spritePath = getPlanetSpritePath(p.planetType, p.npcClass, p.isNpc);
+            const texture = textureCache.get(spritePath) || defaultTexture;
 
             const s = new PIXI.Sprite(texture);
             s.anchor.set(0.5);
@@ -258,7 +269,7 @@ export default function WorldMap({
             // Highlighting
             if (p.isNpc) {
               // Only tint if we are using the fallback texture
-              if (texture === colonyTexture) {
+              if (texture === defaultTexture) {
                 s.tint = 0xff4444; // Red for Enemies fallback
               }
             } else if (sourcePlanetId === p.id) {
@@ -352,8 +363,15 @@ export default function WorldMap({
             // Color coding
             let color = 0xffff00; // Attack (Yellow)
             if (fleet.type === 'support') color = 0x00ff00; // Support (Green)
-            // If we knew "my id", we could color red for incoming attacks. 
-            // TODO: Add logic to check if target is me and type is attack.
+            // Check if this is a transfer (attack to owned planet - same owner for from/to)
+            if (fleet.type === 'attack' && fleet.fromPlanet && fleet.toPlanet) {
+              // If going to owned planet, show as transfer (cyan)
+              const fromOwner = planets.find(p => p.id === fleet.fromPlanet.id)?.ownerId;
+              const toOwner = planets.find(p => p.id === fleet.toPlanet.id)?.ownerId;
+              if (fromOwner && toOwner && fromOwner === toOwner) {
+                color = 0x00f3ff; // Transfer (Cyan)
+              }
+            }
 
             objects.graphics.moveTo(startX, startY);
             objects.graphics.lineTo(endX, endY);

@@ -112,6 +112,15 @@
     background: rgba(255, 255, 255, 0.1);
 }
 
+.res-group.clickable {
+    cursor: pointer;
+}
+
+.res-group.clickable:hover {
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 8px rgba(0, 243, 255, 0.3);
+}
+
 .res-icon {
     width: 20px;
     height: 20px;

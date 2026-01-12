@@ -117,6 +117,7 @@ async function generatePlanetPosition(quadrant?: Quadrant): Promise<{ x: number;
 /**
  * Calculate resource rates and stats for a planet
  * Includes workforce efficiency: production buildings require workers to operate
+ * Returns detailed per-building breakdowns for UI
  */
 export function calculatePlanetRates(planet: any) {
   // Track base production values (before workforce efficiency)
@@ -132,6 +133,11 @@ export function calculatePlanetRates(planet: any) {
   let dwellingPenalty = 0;
   let decorationBonus = 0;
   let maxStorage = 1000; // Base storage
+
+  // Per-building tracking for detailed breakdowns
+  const carbonBuildings: any[] = [];
+  const titaniumBuildings: any[] = [];
+  const foodBuildings: any[] = [];
 
   // Process Buildings
   if (planet.buildings) {
@@ -150,16 +156,22 @@ export function calculatePlanetRates(planet: any) {
 
           // Production buildings - track base production and staffing requirements
           if (b.type === 'carbon_processor') {
-            carbonBaseProduction += stats.production || 0;
+            const baseRate = stats.production || 0;
+            carbonBaseProduction += baseRate;
             workforceRequired += stats.staffingRequirement || (BASE_STAFFING_REQUIREMENT + (b.level - 1) * STAFFING_PER_LEVEL);
+            carbonBuildings.push({ id: b.id, type: b.type, level: b.level, baseRate });
           }
           if (b.type === 'titanium_extractor') {
-            titaniumBaseProduction += stats.production || 0;
+            const baseRate = stats.production || 0;
+            titaniumBaseProduction += baseRate;
             workforceRequired += stats.staffingRequirement || (BASE_STAFFING_REQUIREMENT + (b.level - 1) * STAFFING_PER_LEVEL);
+            titaniumBuildings.push({ id: b.id, type: b.type, level: b.level, baseRate });
           }
           if (b.type === 'hydroponics') {
-            foodBaseProduction += stats.production || 0;
+            const baseRate = stats.production || 0;
+            foodBaseProduction += baseRate;
             workforceRequired += stats.staffingRequirement || (BASE_STAFFING_REQUIREMENT + (b.level - 1) * STAFFING_PER_LEVEL);
+            foodBuildings.push({ id: b.id, type: b.type, level: b.level, baseRate });
           }
 
           // Population sources: Housing units and Colony Hub
@@ -201,9 +213,6 @@ export function calculatePlanetRates(planet: any) {
   const stabilityMultiplier = productivity / 100;
 
   // Workforce Efficiency Calculation
-  // staffingRatio = min(1.0, population / workforceRequired)
-  // overstaffBonus = log10(1 + surplus / required) × 0.15, capped at OVERSTAFFING_BONUS_CAP
-  // workforceEfficiency = max(UNDERSTAFFED_MINIMUM, staffingRatio + overstaffBonus)
   let staffingRatio = 1.0;
   let overstaffBonus = 0;
   let workforceEfficiency = 1.0;
@@ -220,18 +229,45 @@ export function calculatePlanetRates(planet: any) {
     workforceEfficiency = Math.max(UNDERSTAFFED_MINIMUM, staffingRatio + overstaffBonus);
   }
 
-  // Final Production Rates = (Base + BuildingProduction) × workforceEfficiency × stabilityMultiplier
-  const carbonRate = (BASE_PRODUCTION + carbonBaseProduction) * workforceEfficiency * stabilityMultiplier;
-  const titaniumRate = (BASE_PRODUCTION + titaniumBaseProduction) * workforceEfficiency * stabilityMultiplier;
-  const foodRate = (BASE_PRODUCTION + foodBaseProduction) * workforceEfficiency * stabilityMultiplier;
+  // Combined multiplier for production
+  const combinedMultiplier = workforceEfficiency * stabilityMultiplier;
 
-  // Consumption (units eat food regardless of workforce efficiency)
+  // Compute per-building final rates
+  carbonBuildings.forEach(b => {
+    b.workforceApplied = b.baseRate * workforceEfficiency;
+    b.finalRate = b.baseRate * combinedMultiplier;
+  });
+  titaniumBuildings.forEach(b => {
+    b.workforceApplied = b.baseRate * workforceEfficiency;
+    b.finalRate = b.baseRate * combinedMultiplier;
+  });
+  foodBuildings.forEach(b => {
+    b.workforceApplied = b.baseRate * workforceEfficiency;
+    b.finalRate = b.baseRate * combinedMultiplier;
+  });
+
+  // Final Production Rates = (Base + BuildingProduction) × workforceEfficiency × stabilityMultiplier
+  const carbonRate = (BASE_PRODUCTION + carbonBaseProduction) * combinedMultiplier;
+  const titaniumRate = (BASE_PRODUCTION + titaniumBaseProduction) * combinedMultiplier;
+  const foodRate = (BASE_PRODUCTION + foodBaseProduction) * combinedMultiplier;
+
+  // Consumption breakdown (units eat food regardless of workforce efficiency)
   let foodConsumption = 0;
+  const troopConsumption: any[] = [];
   if (planet.units) {
     planet.units.forEach((u: any) => {
       const stats = UNIT_DATA[u.unitType];
       const upkeep = stats ? stats.upkeep : 1;
-      foodConsumption += (u.count * upkeep);
+      const total = u.count * upkeep;
+      foodConsumption += total;
+      if (u.count > 0) {
+        troopConsumption.push({
+          unitType: u.unitType,
+          count: u.count,
+          upkeepPerUnit: upkeep,
+          totalConsumption: total
+        });
+      }
     });
   }
 
@@ -249,11 +285,44 @@ export function calculatePlanetRates(planet: any) {
     productivity,
     maxStorage,
     darkMatterRate: calculateDarkMatterProduction(planet.buildings),
-    // New workforce stats for UI
+    // Workforce stats for UI
     workforceRequired,
     workforceEfficiency,
     staffingRatio,
-    overstaffBonus
+    overstaffBonus,
+    // Detailed breakdowns for economy panel
+    productionBreakdown: {
+      carbon: {
+        baseHubRate: BASE_PRODUCTION,
+        buildingBaseTotal: carbonBaseProduction,
+        buildings: carbonBuildings,
+        workforceMultiplier: workforceEfficiency,
+        stabilityMultiplier: stabilityMultiplier,
+        finalRate: carbonRate
+      },
+      titanium: {
+        baseHubRate: BASE_PRODUCTION,
+        buildingBaseTotal: titaniumBaseProduction,
+        buildings: titaniumBuildings,
+        workforceMultiplier: workforceEfficiency,
+        stabilityMultiplier: stabilityMultiplier,
+        finalRate: titaniumRate
+      },
+      food: {
+        baseHubRate: BASE_PRODUCTION,
+        buildingBaseTotal: foodBaseProduction,
+        buildings: foodBuildings,
+        workforceMultiplier: workforceEfficiency,
+        stabilityMultiplier: stabilityMultiplier,
+        finalRate: foodRate
+      }
+    },
+    consumptionBreakdown: {
+      food: {
+        troops: troopConsumption,
+        totalConsumption: foodConsumption
+      }
+    }
   };
 }
 
@@ -764,8 +833,23 @@ export async function recruitUnit(planetId: string, unitType: string, count: num
   const totalTitanium = unitData.cost.titanium * count;
   const totalCredits = (unitData.cost.credits || 0) * count;
 
-  if (planet.carbon < totalCarbon || planet.titanium < totalTitanium || planet.credits < totalCredits) {
+  // Check for Free Build mode (dev tool)
+  const isFreeBuild = (global as any).isFreeBuildEnabled?.(planet.ownerId) || false;
+
+  // Credits are now a User-level (global) resource, not planet-level
+  // Fetch user credits if needed
+  let userCredits = 0;
+  if (totalCredits > 0 && !isFreeBuild) {
+    const user = await prisma.user.findUnique({ where: { id: planet.ownerId } });
+    userCredits = user?.credits || 0;
+  }
+
+  if (!isFreeBuild && (planet.carbon < totalCarbon || planet.titanium < totalTitanium)) {
     throw new Error(`Insufficient resources`);
+  }
+
+  if (!isFreeBuild && totalCredits > 0 && userCredits < totalCredits) {
+    throw new Error(`Insufficient credits. Need ${totalCredits}, have ${Math.floor(userCredits)}`);
   }
 
   // Calculate Finish Time
@@ -805,16 +889,23 @@ export async function recruitUnit(planetId: string, unitType: string, count: num
   };
   recruitmentQueue.push(newItem);
 
-  // Update DB
+  // Update DB - Deduct planet resources (skip in free build mode)
   await prisma.planet.update({
     where: { id: planetId },
     data: {
-      carbon: { decrement: totalCarbon },
-      titanium: { decrement: totalTitanium },
-      credits: { decrement: totalCredits },
+      carbon: isFreeBuild ? planet.carbon : { decrement: totalCarbon },
+      titanium: isFreeBuild ? planet.titanium : { decrement: totalTitanium },
       recruitmentQueue: JSON.stringify(recruitmentQueue)
     }
   });
+
+  // Deduct user credits if applicable (skip in free build mode)
+  if (!isFreeBuild && totalCredits > 0) {
+    await prisma.user.update({
+      where: { id: planet.ownerId },
+      data: { credits: { decrement: totalCredits } }
+    });
+  }
 
   return { queue: recruitmentQueue };
 }

@@ -1,0 +1,289 @@
+/* Resource Breakdown Panel - Matches AdmiralPanel styling */
+
+.resource-breakdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.resource-breakdown-panel {
+    background: rgba(10, 11, 30, 0.95);
+    border: 2px solid #00f3ff;
+    border-radius: 8px;
+    padding: 0;
+    min-width: 550px;
+    max-width: 700px;
+    max-height: 85vh;
+    box-shadow: 0 0 20px rgba(0, 243, 255, 0.3);
+    backdrop-filter: blur(10px);
+}
+
+.breakdown-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #00f3ff;
+    background: rgba(0, 243, 255, 0.1);
+}
+
+.breakdown-header h3 {
+    margin: 0;
+    color: #00f3ff;
+    font-size: 1.2rem;
+}
+
+.breakdown-header .close-btn {
+    background: transparent;
+    border: none;
+    color: #00f3ff;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.breakdown-header .close-btn:hover {
+    background: rgba(0, 243, 255, 0.2);
+}
+
+.breakdown-content {
+    padding: 1.5rem;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* Summary Card */
+.breakdown-summary {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.summary-stat {
+    flex: 1;
+    padding: 0.75rem;
+    background: rgba(0, 243, 255, 0.05);
+    border: 1px solid rgba(0, 243, 255, 0.2);
+    border-radius: 4px;
+    text-align: center;
+}
+
+.summary-stat .stat-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #cccccc;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.summary-stat .stat-value {
+    font-size: 1.2rem;
+    font-weight: bold;
+    font-family: 'Roboto Mono', monospace;
+}
+
+.summary-stat .stat-value.positive {
+    color: #00ff88;
+}
+
+.summary-stat .stat-value.negative {
+    color: #ff6666;
+}
+
+.summary-stat .stat-value.warning {
+    color: #ff9800;
+}
+
+/* Sections */
+.breakdown-section {
+    margin-bottom: 1.5rem;
+}
+
+.breakdown-section h4 {
+    color: #00f3ff;
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    border-bottom: 1px solid rgba(0, 243, 255, 0.3);
+    padding-bottom: 0.5rem;
+}
+
+.consumption-section h4 {
+    color: #ff6666;
+    border-bottom-color: rgba(255, 102, 102, 0.3);
+}
+
+/* Bonus Display - matching AdmiralPanel */
+.bonus-display {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.bonus-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: rgba(0, 243, 255, 0.05);
+    border: 1px solid rgba(0, 243, 255, 0.2);
+    border-radius: 4px;
+}
+
+.bonus-item.highlight {
+    background: rgba(0, 243, 255, 0.1);
+    border-color: #00f3ff;
+}
+
+.bonus-label {
+    color: #cccccc;
+    font-size: 0.95rem;
+}
+
+.bonus-value {
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+.bonus-value.positive {
+    color: #00ff88;
+}
+
+.bonus-value.negative {
+    color: #ff6666;
+}
+
+.bonus-value.warning {
+    color: #ff9800;
+}
+
+/* Table */
+.breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.breakdown-table th {
+    text-align: left;
+    padding: 0.75rem;
+    background: rgba(0, 243, 255, 0.1);
+    color: #00f3ff;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    border-bottom: 1px solid rgba(0, 243, 255, 0.3);
+}
+
+.breakdown-table td {
+    padding: 0.75rem;
+    color: #cccccc;
+    border-bottom: 1px solid rgba(0, 243, 255, 0.1);
+}
+
+.breakdown-table tbody tr:hover {
+    background: rgba(0, 243, 255, 0.05);
+}
+
+.breakdown-table .hub-row {
+    background: rgba(0, 243, 255, 0.03);
+}
+
+.breakdown-table .final-col {
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.breakdown-table .negative {
+    color: #ff6666;
+}
+
+.breakdown-table tfoot td {
+    border-top: 2px solid rgba(0, 243, 255, 0.3);
+    padding-top: 0.75rem;
+    border-bottom: none;
+    color: #ffffff;
+}
+
+/* Formula Section */
+.formula-section {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    font-family: 'Roboto Mono', monospace;
+}
+
+.formula-note {
+    color: #888888;
+    font-size: 0.85rem;
+    margin: 0 0 0.25rem 0;
+}
+
+.formula-calc {
+    color: #aaaaaa;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+/* Footer */
+.breakdown-footer {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(0, 243, 255, 0.3);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.close-button {
+    background: rgba(0, 243, 255, 0.2);
+    border: 1px solid #00f3ff;
+    color: #00f3ff;
+    padding: 0.6rem 1.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s;
+}
+
+.close-button:hover {
+    background: rgba(0, 243, 255, 0.3);
+}
+
+/* Scrollbar */
+.breakdown-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.breakdown-content::-webkit-scrollbar-track {
+    background: rgba(10, 11, 30, 0.5);
+}
+
+.breakdown-content::-webkit-scrollbar-thumb {
+    background: #00f3ff;
+    border-radius: 3px;
+}

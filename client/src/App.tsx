@@ -26,7 +26,7 @@ function App() {
   const [isEspionageMode, setIsEspionageMode] = useState(false);
   const [hasIntelHub, setHasIntelHub] = useState(false);
   // Multi-planet state
-  const [ownedPlanets, setOwnedPlanets] = useState<{ id: string; x: number; y: number; name: string; planetType: string }[]>([]);
+  const [ownedPlanets, setOwnedPlanets] = useState<{ id: string; x: number; y: number; name: string; planetType: string; ownerId: string }[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
 
   // Check for stored auth token & load initial data
@@ -73,7 +73,8 @@ function App() {
             x: p.x,
             y: p.y,
             name: p.name,
-            planetType: (p as any).planetType || 'colony'
+            planetType: (p as any).planetType || 'colony',
+            ownerId: p.ownerId // Needed for transfer panel to detect owned targets
           })));
 
           // Auto-select first planet if none selected

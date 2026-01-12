@@ -14,7 +14,8 @@ interface AttackPlannerProps {
     onCommit: (
         finalUnits: Record<string, number>,
         laneAssignments: any,
-        admiralId?: string
+        admiralId?: string,
+        resourceTransfer?: { carbon?: number; titanium?: number; food?: number }
     ) => void;
     onCancel: () => void;
 }
@@ -152,6 +153,31 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
     const [borrowedFromDefense, setBorrowedFromDefense] = useState<Record<string, Record<string, number>>>({ front: {}, left: {}, right: {} });
     const [hasBorrowedTroops, setHasBorrowedTroops] = useState(false);
 
+    // Resource Transfer State (for transfers to owned planets)
+    const [resourceTransfer, setResourceTransfer] = useState<{ carbon: number; titanium: number; food: number }>({ carbon: 0, titanium: 0, food: 0 });
+    const [unitData, setUnitData] = useState<Record<string, { capacity?: number }>>({});
+    // Track which resources have been MAX'd (in order) for smart even allocation
+    const [maxedResources, setMaxedResources] = useState<('carbon' | 'titanium' | 'food')[]>([]);
+    // Simple unit transfer state (for transfers to owned planets - no waves/lanes)
+    const [transferUnits, setTransferUnits] = useState<Record<string, number>>({});
+    const MAX_TRANSFER_UNITS = 3600; // Same as max attack capacity (12 slots × 3 lanes × 100 per slot)
+
+    // Determine if target is owned by the player (compare fromPlanet and toPlanet owners)
+    // Use useMemo to stabilize this value and prevent flickering during re-renders
+    const isOwnedTarget = useMemo(() => {
+        return Boolean(fromPlanet.ownerId && toPlanet.ownerId && fromPlanet.ownerId === toPlanet.ownerId);
+    }, [fromPlanet.ownerId, toPlanet.ownerId]);
+
+    // Total units selected for transfer
+    const transferUnitTotal = Object.values(transferUnits).reduce((a, b) => a + b, 0);
+
+    // Load unit data for capacity calculation
+    useEffect(() => {
+        api.getUnitTypes().then(data => {
+            setUnitData(data.units || {});
+        }).catch(console.error);
+    }, []);
+
     // Load admiral on mount
     useEffect(() => {
         loadAdmiral();
@@ -238,6 +264,20 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
         });
         return used;
     }, [waves]);
+
+    // Calculate total carry capacity based on assigned units
+    const carryCapacity = useMemo(() => {
+        let total = 0;
+        for (const [unitType, count] of Object.entries(usedTotals)) {
+            if (ALL_UNITS.includes(unitType) && unitData[unitType]) {
+                total += (unitData[unitType].capacity || 0) * count;
+            }
+        }
+        return total;
+    }, [usedTotals, unitData]);
+
+    // Total resources currently allocated for transfer
+    const transferTotal = resourceTransfer.carbon + resourceTransfer.titanium + resourceTransfer.food;
 
     // Fetch defense borrowing preview when unit allocations change
     useEffect(() => {
@@ -363,8 +403,288 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
         });
 
         // Only include admiral if one is selected (selectedAdmiral is already available)
-        onCommit(finalSoldierUnits, laneAssignments, selectedAdmiral?.id);
+        // Include resource transfer only if sending to owned planet and has resources to transfer
+        const transferData = isOwnedTarget && transferTotal > 0 ? resourceTransfer : undefined;
+        onCommit(finalSoldierUnits, laneAssignments, selectedAdmiral?.id, transferData);
     };
+
+    // Simplified transfer launch (for friendly transfers - no lanes/waves)
+    const handleTransferLaunch = () => {
+        // Filter out zero entries
+        const finalUnits: Record<string, number> = {};
+        Object.entries(transferUnits).forEach(([u, c]) => {
+            if (c > 0) finalUnits[u] = c;
+        });
+
+        // Validate at least one unit
+        const totalUnits = Object.values(finalUnits).reduce((a, b) => a + b, 0);
+        if (totalUnits === 0) {
+            console.warn('[Transfer] No units selected, aborting transfer');
+            return;
+        }
+
+        // For transfers, we don't use lane assignments - just send all to front
+        const laneAssignments = {
+            left: [{ units: {}, tools: {} }],
+            front: [{ units: finalUnits, tools: {} }],
+            right: [{ units: {}, tools: {} }]
+        };
+
+        // Include resource transfer if any
+        const transferData = transferTotal > 0 ? resourceTransfer : undefined;
+        onCommit(finalUnits, laneAssignments, selectedAdmiral?.id, transferData);
+    };
+
+    // Simplified Transfer UI for friendly planets
+    if (isOwnedTarget) {
+        // Calculate carry capacity for resource transfers based on selected transfer units
+        const transferCarryCapacity = Object.entries(transferUnits).reduce((total, [unitType, count]) => {
+            return total + (unitData[unitType]?.capacity || 0) * count;
+        }, 0);
+
+        return (
+            <div className="attack-planner" style={{ maxWidth: '900px' }}>
+                <div className="ap-header">
+                    <div className="ap-header-left">
+                        <h2 style={{ color: '#00f3ff' }}>Fleet Transfer Planning</h2>
+                        <div className="target-info">
+                            Destination: <strong>{toPlanet.name}</strong>
+                            <span style={{ marginLeft: '10px', color: '#00ff88', fontSize: '0.85rem' }}>
+                                📦 Friendly Transfer
+                            </span>
+                        </div>
+                    </div>
+                    <button className="close-btn" onClick={onCancel}>✕</button>
+                </div>
+
+                <div className="ap-main" style={{ flexDirection: 'column', gap: '12px', padding: '12px' }}>
+                    {/* Unit Transfer Limit */}
+                    <div style={{ background: 'rgba(0, 243, 255, 0.05)', border: '1px solid rgba(0, 243, 255, 0.3)', borderRadius: '6px', padding: '10px' }}>
+                        <h3 style={{ margin: '0 0 10px 0', color: '#00f3ff', fontSize: '1rem' }}>
+                            🎖️ Troops to Transfer
+                            <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'normal', marginLeft: '10px' }}>
+                                ({transferUnitTotal.toLocaleString()} / {MAX_TRANSFER_UNITS.toLocaleString()})
+                            </span>
+                        </h3>
+
+                        {/* Capacity Bar */}
+                        <div style={{ marginBottom: '10px' }}>
+                            <div style={{ height: '8px', background: '#222', borderRadius: '4px', overflow: 'hidden', border: '1px solid #444' }}>
+                                <div style={{
+                                    width: `${Math.min(100, (transferUnitTotal / MAX_TRANSFER_UNITS) * 100)}%`,
+                                    height: '100%',
+                                    background: transferUnitTotal > MAX_TRANSFER_UNITS ? '#ff4d4d' : '#00f3ff',
+                                    transition: 'width 0.3s ease'
+                                }} />
+                            </div>
+                        </div>
+
+                        {/* Unit Grid - 4 columns for compactness */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                            {ALL_UNITS.map(unitType => {
+                                const available = availableUnits[unitType] || 0;
+                                const selected = transferUnits[unitType] || 0;
+                                const remaining = available - selected;
+                                const faction = getUnitFaction(unitType);
+
+                                return (
+                                    <div key={unitType} style={{
+                                        background: 'rgba(0,0,0,0.3)',
+                                        border: selected > 0 ? '1px solid rgba(0, 243, 255, 0.5)' : '1px solid #333',
+                                        borderRadius: '4px',
+                                        padding: '8px',
+                                        opacity: available === 0 ? 0.5 : 1
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                            <div>
+                                                <div style={{ fontWeight: 'bold', textTransform: 'capitalize', fontSize: '0.8rem' }}>
+                                                    {unitType.replace('_', ' ')}
+                                                </div>
+                                                <div style={{ fontSize: '0.65rem', color: '#888' }}>
+                                                    {faction.toUpperCase()} • Avail: {remaining}
+                                                </div>
+                                            </div>
+                                            {selected > 0 && (
+                                                <span style={{ color: '#00f3ff', fontWeight: 'bold', fontSize: '0.95rem' }}>{selected}</span>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'space-between' }}>
+                                            <button
+                                                onClick={() => setTransferUnits(prev => ({ ...prev, [unitType]: Math.max(0, (prev[unitType] || 0) - 10) }))}
+                                                disabled={selected === 0}
+                                                style={{ flex: '1', background: '#333', border: '1px solid #444', color: '#fff', padding: '4px 0', borderRadius: '3px', cursor: selected > 0 ? 'pointer' : 'not-allowed', fontSize: '0.75rem' }}
+                                            >-10</button>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={Math.min(available, MAX_TRANSFER_UNITS - transferUnitTotal + selected)}
+                                                value={selected}
+                                                onChange={(e) => {
+                                                    const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                    const maxAllowed = Math.min(available, MAX_TRANSFER_UNITS - transferUnitTotal + selected);
+                                                    setTransferUnits(prev => ({ ...prev, [unitType]: Math.min(val, maxAllowed) }));
+                                                }}
+                                                style={{ width: '40px', background: '#1a1a2e', border: '1px solid #444', borderRadius: '3px', padding: '4px 2px', color: '#fff', textAlign: 'center', fontSize: '0.8rem' }}
+                                            />
+                                            <button
+                                                onClick={() => {
+                                                    const maxAdd = Math.min(remaining, MAX_TRANSFER_UNITS - transferUnitTotal, 10);
+                                                    setTransferUnits(prev => ({ ...prev, [unitType]: (prev[unitType] || 0) + maxAdd }));
+                                                }}
+                                                disabled={remaining === 0 || transferUnitTotal >= MAX_TRANSFER_UNITS}
+                                                style={{ flex: '1', background: '#333', border: '1px solid #444', color: '#fff', padding: '4px 0', borderRadius: '3px', cursor: remaining > 0 && transferUnitTotal < MAX_TRANSFER_UNITS ? 'pointer' : 'not-allowed', fontSize: '0.75rem' }}
+                                            >+10</button>
+                                            <button
+                                                onClick={() => {
+                                                    const maxAdd = Math.min(remaining, MAX_TRANSFER_UNITS - transferUnitTotal);
+                                                    setTransferUnits(prev => ({ ...prev, [unitType]: (prev[unitType] || 0) + maxAdd }));
+                                                }}
+                                                disabled={remaining === 0 || transferUnitTotal >= MAX_TRANSFER_UNITS}
+                                                style={{ flex: '1', background: 'rgba(0, 243, 255, 0.2)', border: '1px solid rgba(0, 243, 255, 0.3)', color: '#00f3ff', padding: '4px 0', borderRadius: '3px', cursor: remaining > 0 && transferUnitTotal < MAX_TRANSFER_UNITS ? 'pointer' : 'not-allowed', fontSize: '0.7rem', fontWeight: 'bold' }}
+                                            >MAX</button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Resource Transfer Section */}
+                    <div style={{ background: 'rgba(0, 243, 255, 0.05)', border: '1px solid rgba(0, 243, 255, 0.3)', borderRadius: '8px', padding: '15px' }}>
+                        <h3 style={{ margin: '0 0 15px 0', color: '#00f3ff', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            📦 Resource Transfer
+                            <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: 'normal' }}>
+                                (Capacity: {transferTotal.toLocaleString()} / {transferCarryCapacity.toLocaleString()})
+                            </span>
+                        </h3>
+
+                        {/* Multi-Color Capacity Bar */}
+                        <div style={{ marginBottom: '15px' }}>
+                            <div style={{ height: '12px', background: '#222', borderRadius: '4px', overflow: 'hidden', border: '1px solid #444', display: 'flex' }}>
+                                {resourceTransfer.carbon > 0 && transferCarryCapacity > 0 && (
+                                    <div style={{ width: `${(resourceTransfer.carbon / transferCarryCapacity) * 100}%`, height: '100%', background: '#5d4037', transition: 'width 0.3s ease' }} />
+                                )}
+                                {resourceTransfer.titanium > 0 && transferCarryCapacity > 0 && (
+                                    <div style={{ width: `${(resourceTransfer.titanium / transferCarryCapacity) * 100}%`, height: '100%', background: '#90a4ae', transition: 'width 0.3s ease' }} />
+                                )}
+                                {resourceTransfer.food > 0 && transferCarryCapacity > 0 && (
+                                    <div style={{ width: `${(resourceTransfer.food / transferCarryCapacity) * 100}%`, height: '100%', background: '#81c784', transition: 'width 0.3s ease' }} />
+                                )}
+                            </div>
+                        </div>
+
+                        {transferCarryCapacity === 0 ? (
+                            <div style={{ color: '#888', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                                Select troops above to enable resource transfer (capacity based on unit carry capacity)
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                {(['carbon', 'titanium', 'food'] as const).map(resource => {
+                                    const available = fromPlanet.resources?.[resource] || 0;
+                                    const icons = { carbon: '💎', titanium: '🔩', food: '🌽' };
+                                    const colors = { carbon: '#8d6e63', titanium: '#90a4ae', food: '#81c784' };
+                                    const isMaxed = maxedResources.includes(resource);
+
+                                    return (
+                                        <div key={resource} style={{ flex: '1', minWidth: '150px' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', fontSize: '0.85rem', color: colors[resource] }}>
+                                                <span>{icons[resource]}</span>
+                                                {resource.charAt(0).toUpperCase() + resource.slice(1)}
+                                                <span style={{ color: '#666', fontSize: '0.75rem' }}>(max: {Math.floor(available).toLocaleString()})</span>
+                                                {isMaxed && <span style={{ color: '#00f3ff', fontSize: '0.65rem' }}>●</span>}
+                                            </label>
+                                            <div style={{ display: 'flex', gap: '4px' }}>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    value={resourceTransfer[resource]}
+                                                    onChange={(e) => {
+                                                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                        const maxAllowed = Math.min(available, transferCarryCapacity - (transferTotal - resourceTransfer[resource]));
+                                                        setResourceTransfer(prev => ({ ...prev, [resource]: Math.min(val, maxAllowed) }));
+                                                        // Remove from maxed if manually edited
+                                                        setMaxedResources(prev => prev.filter(r => r !== resource));
+                                                    }}
+                                                    style={{ flex: 1, background: '#1a1a2e', border: isMaxed ? '1px solid rgba(0, 243, 255, 0.6)' : '1px solid rgba(0, 243, 255, 0.3)', borderRadius: '4px', padding: '6px 8px', color: '#fff', fontSize: '0.9rem' }}
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        // Smart MAX: add this resource to maxed list and redistribute evenly
+                                                        const newMaxed = maxedResources.includes(resource)
+                                                            ? maxedResources
+                                                            : [...maxedResources, resource];
+                                                        setMaxedResources(newMaxed);
+
+                                                        // Calculate available amounts for each maxed resource
+                                                        const availables: Record<string, number> = {
+                                                            carbon: fromPlanet.resources?.carbon || 0,
+                                                            titanium: fromPlanet.resources?.titanium || 0,
+                                                            food: fromPlanet.resources?.food || 0
+                                                        };
+
+                                                        // Even split across maxed resources, capped by availability
+                                                        const perResource = Math.floor(transferCarryCapacity / newMaxed.length);
+                                                        const newTransfer = { carbon: 0, titanium: 0, food: 0 };
+                                                        let remainingCapacity = transferCarryCapacity;
+
+                                                        // First pass: allocate even amounts up to availability
+                                                        newMaxed.forEach(res => {
+                                                            const amount = Math.min(perResource, Math.floor(availables[res]), remainingCapacity);
+                                                            newTransfer[res] = amount;
+                                                            remainingCapacity -= amount;
+                                                        });
+
+                                                        // Second pass: distribute remaining capacity
+                                                        if (remainingCapacity > 0) {
+                                                            for (const res of newMaxed) {
+                                                                const canAdd = Math.min(remainingCapacity, Math.floor(availables[res]) - newTransfer[res]);
+                                                                newTransfer[res] += canAdd;
+                                                                remainingCapacity -= canAdd;
+                                                                if (remainingCapacity <= 0) break;
+                                                            }
+                                                        }
+
+                                                        setResourceTransfer(newTransfer);
+                                                    }}
+                                                    style={{ background: isMaxed ? 'rgba(0, 243, 255, 0.4)' : 'rgba(0, 243, 255, 0.2)', border: '1px solid rgba(0, 243, 255, 0.3)', borderRadius: '4px', padding: '4px 8px', color: '#00f3ff', cursor: 'pointer', fontSize: '0.75rem', fontWeight: isMaxed ? 'bold' : 'normal' }}
+                                                >MAX</button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '10px', borderTop: '1px solid #333' }}>
+                        <button
+                            onClick={onCancel}
+                            style={{ background: '#333', border: '1px solid #444', color: '#888', padding: '12px 24px', borderRadius: '6px', cursor: 'pointer' }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleTransferLaunch}
+                            disabled={transferUnitTotal === 0}
+                            style={{
+                                background: transferUnitTotal > 0 ? 'linear-gradient(135deg, #00f3ff, #0088ff)' : '#333',
+                                border: 'none',
+                                color: transferUnitTotal > 0 ? '#000' : '#666',
+                                padding: '12px 30px',
+                                borderRadius: '6px',
+                                cursor: transferUnitTotal > 0 ? 'pointer' : 'not-allowed',
+                                fontWeight: 'bold',
+                                fontSize: '1rem'
+                            }}
+                        >
+                            INITIATE TRANSFER
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="attack-planner">
@@ -573,6 +893,179 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                             </div>
                         ))}
                     </div>
+
+                    {/* Resource Transfer Section (only for owned targets) */}
+                    {isOwnedTarget && (
+                        <div className="resource-transfer-section" style={{
+                            marginTop: '20px',
+                            padding: '15px',
+                            background: 'rgba(0, 243, 255, 0.05)',
+                            border: '1px solid rgba(0, 243, 255, 0.3)',
+                            borderRadius: '8px'
+                        }}>
+                            <h3 style={{ margin: '0 0 15px 0', color: '#00f3ff', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                📦 Resource Transfer
+                                <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: 'normal' }}>
+                                    (Capacity: {transferTotal.toLocaleString()} / {carryCapacity.toLocaleString()})
+                                </span>
+                            </h3>
+
+                            {/* Multi-Color Capacity Bar (HUD colors) */}
+                            <div style={{ marginBottom: '15px' }}>
+                                <div style={{
+                                    height: '12px',
+                                    background: '#222',
+                                    borderRadius: '4px',
+                                    overflow: 'hidden',
+                                    border: '1px solid #444',
+                                    display: 'flex'
+                                }}>
+                                    {/* Carbon segment */}
+                                    {resourceTransfer.carbon > 0 && (
+                                        <div style={{
+                                            width: `${carryCapacity > 0 ? (resourceTransfer.carbon / carryCapacity) * 100 : 0}%`,
+                                            height: '100%',
+                                            background: '#5d4037', // HUD carbon color
+                                            transition: 'width 0.3s ease'
+                                        }} title={`Carbon: ${resourceTransfer.carbon.toLocaleString()}`} />
+                                    )}
+                                    {/* Titanium segment */}
+                                    {resourceTransfer.titanium > 0 && (
+                                        <div style={{
+                                            width: `${carryCapacity > 0 ? (resourceTransfer.titanium / carryCapacity) * 100 : 0}%`,
+                                            height: '100%',
+                                            background: '#90a4ae', // HUD titanium color
+                                            transition: 'width 0.3s ease'
+                                        }} title={`Titanium: ${resourceTransfer.titanium.toLocaleString()}`} />
+                                    )}
+                                    {/* Food segment */}
+                                    {resourceTransfer.food > 0 && (
+                                        <div style={{
+                                            width: `${carryCapacity > 0 ? (resourceTransfer.food / carryCapacity) * 100 : 0}%`,
+                                            height: '100%',
+                                            background: '#81c784', // HUD food color
+                                            transition: 'width 0.3s ease'
+                                        }} title={`Food: ${resourceTransfer.food.toLocaleString()}`} />
+                                    )}
+                                </div>
+                                {/* Legend */}
+                                <div style={{ display: 'flex', gap: '15px', marginTop: '6px', fontSize: '0.7rem', color: '#888' }}>
+                                    <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: '#5d4037', borderRadius: '2px', marginRight: '4px' }}></span>Carbon</span>
+                                    <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: '#90a4ae', borderRadius: '2px', marginRight: '4px' }}></span>Titanium</span>
+                                    <span><span style={{ display: 'inline-block', width: '10px', height: '10px', background: '#81c784', borderRadius: '2px', marginRight: '4px' }}></span>Food</span>
+                                </div>
+                            </div>
+
+                            {/* Resource Inputs with Smart MAX */}
+                            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                {(['carbon', 'titanium', 'food'] as const).map(resource => {
+                                    const available = fromPlanet.resources?.[resource] || 0;
+                                    const icons = { carbon: '💎', titanium: '🔩', food: '🌽' };
+                                    // Match HUD colors
+                                    const colors = { carbon: '#8d6e63', titanium: '#90a4ae', food: '#81c784' };
+                                    const isMaxed = maxedResources.includes(resource);
+
+                                    return (
+                                        <div key={resource} style={{ flex: '1', minWidth: '150px' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', fontSize: '0.85rem', color: colors[resource] }}>
+                                                <span>{icons[resource]}</span>
+                                                {resource.charAt(0).toUpperCase() + resource.slice(1)}
+                                                <span style={{ color: '#666', fontSize: '0.75rem' }}>(max: {Math.floor(available).toLocaleString()})</span>
+                                                {isMaxed && <span style={{ color: '#00f3ff', fontSize: '0.65rem' }}>●</span>}
+                                            </label>
+                                            <div style={{ display: 'flex', gap: '4px' }}>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={Math.min(available, carryCapacity - (transferTotal - resourceTransfer[resource]))}
+                                                    value={resourceTransfer[resource]}
+                                                    onChange={(e) => {
+                                                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                        const maxAllowed = Math.min(available, carryCapacity - (transferTotal - resourceTransfer[resource]));
+                                                        setResourceTransfer(prev => ({
+                                                            ...prev,
+                                                            [resource]: Math.min(val, maxAllowed)
+                                                        }));
+                                                        // Remove from maxed if manually edited
+                                                        setMaxedResources(prev => prev.filter(r => r !== resource));
+                                                    }}
+                                                    style={{
+                                                        flex: 1,
+                                                        background: '#1a1a2e',
+                                                        border: isMaxed ? '1px solid rgba(0, 243, 255, 0.6)' : '1px solid rgba(0, 243, 255, 0.3)',
+                                                        borderRadius: '4px',
+                                                        padding: '6px 8px',
+                                                        color: '#fff',
+                                                        fontSize: '0.9rem'
+                                                    }}
+                                                    disabled={carryCapacity === 0}
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        // Smart MAX: add this resource to maxed list and redistribute evenly
+                                                        const newMaxed = maxedResources.includes(resource)
+                                                            ? maxedResources
+                                                            : [...maxedResources, resource];
+                                                        setMaxedResources(newMaxed);
+
+                                                        // Calculate available amounts for each maxed resource
+                                                        const availables: Record<string, number> = {
+                                                            carbon: fromPlanet.resources?.carbon || 0,
+                                                            titanium: fromPlanet.resources?.titanium || 0,
+                                                            food: fromPlanet.resources?.food || 0
+                                                        };
+
+                                                        // Even split across maxed resources, capped by availability
+                                                        const perResource = Math.floor(carryCapacity / newMaxed.length);
+                                                        const newTransfer = { carbon: 0, titanium: 0, food: 0 };
+                                                        let remainingCapacity = carryCapacity;
+
+                                                        // First pass: allocate even amounts up to availability
+                                                        newMaxed.forEach(res => {
+                                                            const amount = Math.min(perResource, Math.floor(availables[res]), remainingCapacity);
+                                                            newTransfer[res] = amount;
+                                                            remainingCapacity -= amount;
+                                                        });
+
+                                                        // Second pass: distribute remaining capacity
+                                                        if (remainingCapacity > 0) {
+                                                            for (const res of newMaxed) {
+                                                                const canAdd = Math.min(remainingCapacity, Math.floor(availables[res]) - newTransfer[res]);
+                                                                newTransfer[res] += canAdd;
+                                                                remainingCapacity -= canAdd;
+                                                                if (remainingCapacity <= 0) break;
+                                                            }
+                                                        }
+
+                                                        setResourceTransfer(newTransfer);
+                                                    }}
+                                                    style={{
+                                                        background: isMaxed ? 'rgba(0, 243, 255, 0.4)' : 'rgba(0, 243, 255, 0.2)',
+                                                        border: '1px solid rgba(0, 243, 255, 0.3)',
+                                                        borderRadius: '4px',
+                                                        padding: '4px 8px',
+                                                        color: '#00f3ff',
+                                                        cursor: carryCapacity > 0 ? 'pointer' : 'not-allowed',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: isMaxed ? 'bold' : 'normal'
+                                                    }}
+                                                    disabled={carryCapacity === 0}
+                                                >
+                                                    MAX
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {carryCapacity === 0 && (
+                                <div style={{ marginTop: '10px', color: '#888', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                                    Assign units above to enable resource transfer (capacity based on unit carry capacity)
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Right: Palettes */}

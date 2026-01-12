@@ -91,13 +91,18 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
     }
   };
 
-  const handleAttackCommit = async (finalUnits: Record<string, number>, laneAssignments: any, admiralId?: string) => {
+  const handleAttackCommit = async (
+    finalUnits: Record<string, number>,
+    laneAssignments: any,
+    admiralId?: string,
+    resourceTransfer?: { carbon?: number; titanium?: number; food?: number }
+  ) => {
     if (!currentFromPlanet || !toPlanet) return;
     setLoading(true);
     try {
       // We only use the `laneAssignments` JSON for the complex attack logic
       // But `finalUnits` is needed for aggregation in DB (if needed) or simple checks
-      await api.createFleet(currentFromPlanet.id, toPlanet.id, 'attack', finalUnits, laneAssignments, admiralId);
+      await api.createFleet(currentFromPlanet.id, toPlanet.id, 'attack', finalUnits, laneAssignments, admiralId, resourceTransfer);
       onFleetCreated();
       onClose();
     } catch (err: any) {
@@ -163,7 +168,7 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
                   {admiral.attackBonus > 0 && admiral.defenseBonus > 0 && ' • '}
                   {admiral.defenseBonus > 0 && `+${admiral.defenseBonus}% Defense`}
                 </span>
-                <button 
+                <button
                   className="remove-admiral-btn"
                   onClick={() => setAdmiral(null)}
                   title="Remove admiral from fleet"
@@ -174,7 +179,7 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
             ) : (
               <div className="no-admiral">
                 <span>No admiral assigned</span>
-                <button 
+                <button
                   className="assign-admiral-btn"
                   onClick={loadAdmiral}
                   disabled={loadingAdmiral}

@@ -196,12 +196,13 @@ export const api = {
     type: 'attack' | 'support' | 'scout',
     units: Record<string, number>,
     laneAssignments?: any,
-    admiralId?: string
+    admiralId?: string,
+    resourceTransfer?: { carbon?: number; titanium?: number; food?: number }
   ): Promise<{ message: string; fleet: Fleet }> {
     const response = await fetch(`${API_BASE_URL}/actions/fleet`, {
       method: 'POST',
       headers: getHeaders(true),
-      body: JSON.stringify({ fromPlanetId, toPlanetId, type, units, laneAssignments, admiralId }),
+      body: JSON.stringify({ fromPlanetId, toPlanetId, type, units, laneAssignments, admiralId, resourceTransfer }),
     });
     if (!response.ok) {
       const error = await response.json();

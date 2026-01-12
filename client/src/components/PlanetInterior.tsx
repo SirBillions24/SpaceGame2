@@ -1035,6 +1035,35 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
                       {showUpgradeMenu.building.stats?.recruitmentSpeedBonus !== undefined && <div>Recruitment Speed: +{(showUpgradeMenu.building.stats.recruitmentSpeedBonus * 100).toFixed(0)}%</div>}
                     </div>
                   </div>
+
+                  {/* Production Analysis for production buildings */}
+                  {showUpgradeMenu.building.stats?.production !== undefined && planetData?.stats && (
+                    <div className="stat-column production-analysis">
+                      <div className="stat-label" style={{ color: '#00f3ff' }}>Production Analysis</div>
+                      <div className="stat-value" style={{ fontSize: '0.85rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span>Base Rate:</span>
+                          <span>{showUpgradeMenu.building.stats.production}/h</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span>× Workforce ({((planetData.stats.workforceEfficiency || 1) * 100).toFixed(0)}%):</span>
+                          <span>{(showUpgradeMenu.building.stats.production * (planetData.stats.workforceEfficiency || 1)).toFixed(1)}/h</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span>× Stability ({((planetData.stats.productivity || 100)).toFixed(0)}%):</span>
+                          <span style={{ color: '#4caf50', fontWeight: 'bold' }}>
+                            {(showUpgradeMenu.building.stats.production * (planetData.stats.workforceEfficiency || 1) * (planetData.stats.productivity || 100) / 100).toFixed(2)}/h
+                          </span>
+                        </div>
+                        <div style={{ borderTop: '1px solid #444', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', color: '#4caf50' }}>
+                          <span style={{ fontWeight: 'bold' }}>Building Output:</span>
+                          <span style={{ fontWeight: 'bold' }}>
+                            {(showUpgradeMenu.building.stats.production * (planetData.stats.workforceEfficiency || 1) * (planetData.stats.productivity || 100) / 100).toFixed(2)}/h
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {showUpgradeMenu.building.nextUpgrade && (
                     <div className="stat-column next">
                       <div className="stat-label">Next Level</div>

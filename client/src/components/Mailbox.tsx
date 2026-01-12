@@ -45,6 +45,13 @@ export default function Mailbox({ onClose }: MailboxProps) {
     const [selectedItemType, setSelectedItemType] = useState<'battle' | 'espionage' | 'message' | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageJumpInput, setPageJumpInput] = useState('');
+    const PAGE_SIZE = 10;
+    const totalPages = Math.ceil(items.length / PAGE_SIZE);
+    const paginatedItems = items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
     useEffect(() => {
         loadInbox();
     }, []);
@@ -79,6 +86,40 @@ export default function Mailbox({ onClose }: MailboxProps) {
             <div className="mailbox-window">
                 <div className="mailbox-header">
                     <h2>Comms Relay</h2>
+                    {/* Pagination Controls */}
+                    {!selectedItemId && items.length > PAGE_SIZE && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', marginRight: '15px' }}>
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                style={{ background: 'transparent', border: 'none', color: currentPage === 1 ? '#555' : '#00f3ff', cursor: currentPage === 1 ? 'default' : 'pointer', fontSize: '1rem' }}
+                            >◀</button>
+                            <span style={{ color: '#888', fontSize: '0.85rem' }}>
+                                {currentPage} / {totalPages}
+                            </span>
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                style={{ background: 'transparent', border: 'none', color: currentPage === totalPages ? '#555' : '#00f3ff', cursor: currentPage === totalPages ? 'default' : 'pointer', fontSize: '1rem' }}
+                            >▶</button>
+                            <input
+                                type="number"
+                                min={1}
+                                max={totalPages}
+                                placeholder="#"
+                                value={pageJumpInput}
+                                onChange={(e) => setPageJumpInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        const page = parseInt(pageJumpInput) || 1;
+                                        setCurrentPage(Math.max(1, Math.min(totalPages, page)));
+                                        setPageJumpInput('');
+                                    }
+                                }}
+                                style={{ width: '40px', background: '#222', border: '1px solid #444', borderRadius: '4px', color: '#fff', padding: '2px 4px', textAlign: 'center', fontSize: '0.8rem' }}
+                            />
+                        </div>
+                    )}
                     <button className="close-btn" onClick={onClose}>X</button>
                 </div>
 
@@ -98,7 +139,7 @@ export default function Mailbox({ onClose }: MailboxProps) {
                             ) : items.length === 0 ? (
                                 <div className="empty-state">No messages in buffer.</div>
                             ) : (
-                                items.map(item => (
+                                paginatedItems.map(item => (
                                     <div
                                         key={item.id}
                                         className={`report-item ${item.type} ${item.type === 'message' && !item.isRead ? 'unread' : ''}`}
@@ -106,7 +147,8 @@ export default function Mailbox({ onClose }: MailboxProps) {
                                     >
                                         <div className="report-icon">
                                             {item.type === 'battle' ? (item.isAttacker ? '⚔️' : '🛡️') :
-                                                item.type === 'espionage' ? '🛰️' : '✉️'}
+                                                item.type === 'espionage' ? '🛰️' :
+                                                    (item.type === 'message' && item.subType === 'transfer_complete') ? '📦' : '✉️'}
                                         </div>
                                         <div className="report-summary">
                                             <div className="report-title">{item.title}</div>
@@ -360,6 +402,11 @@ function MessageView({ id, items, onBack }: { id: string, items: any[], onBack: 
         return <GearDropMessageView message={message} onBack={onBack} />;
     }
 
+    // Handle transfer complete messages with special styling
+    if (message.subType === 'transfer_complete') {
+        return <TransferCompleteMessageView message={message} onBack={onBack} />;
+    }
+
     return (
         <div className="message-view">
             <div className="br-nav">
@@ -372,6 +419,116 @@ function MessageView({ id, items, onBack }: { id: string, items: any[], onBack: 
             <div className="message-body">
                 {message.content}
             </div>
+        </div>
+    );
+}
+
+// Transfer Complete Message View
+interface TransferData {
+    fromPlanet: { id: string; name: string; x: number; y: number };
+    toPlanet: { id: string; name: string; x: number; y: number };
+    units: Record<string, number>;
+    resources: { carbon: number; titanium: number; food: number };
+}
+
+function TransferCompleteMessageView({ message, onBack }: { message: any, onBack: () => void }) {
+    let data: TransferData | null = null;
+    try {
+        data = JSON.parse(message.content);
+    } catch (e) {
+        // Fall back to text display
+    }
+
+    if (!data) {
+        return (
+            <div className="message-view">
+                <div className="br-nav">
+                    <button className="back-btn" onClick={onBack}>← Back</button>
+                </div>
+                <div className="message-header">
+                    <h3>{message.title}</h3>
+                    <div className="message-date">{new Date(message.createdAt).toLocaleString()}</div>
+                </div>
+                <div className="message-body">{message.content}</div>
+            </div>
+        );
+    }
+
+    const hasUnits = Object.values(data.units).some(v => v > 0);
+    const hasResources = data.resources.carbon > 0 || data.resources.titanium > 0 || data.resources.food > 0;
+
+    return (
+        <div className="message-view transfer-complete-view">
+            <div className="br-nav">
+                <button className="back-btn" onClick={onBack}>← Back</button>
+            </div>
+            <div className="report-header victory">
+                <h3>TRANSFER COMPLETE</h3>
+                <div className="sub-status">Fleet arrived safely</div>
+            </div>
+
+            {/* Route Display */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', margin: '20px 0', fontSize: '1.1rem' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontWeight: 'bold', color: '#00f3ff' }}>{data.fromPlanet.name}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#666' }}>({data.fromPlanet.x}, {data.fromPlanet.y})</div>
+                </div>
+                <span style={{ color: '#00ff88', fontSize: '1.5rem' }}>➜</span>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontWeight: 'bold', color: '#00f3ff' }}>{data.toPlanet.name}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#666' }}>({data.toPlanet.x}, {data.toPlanet.y})</div>
+                </div>
+            </div>
+
+            {/* Units Transferred */}
+            {hasUnits && (
+                <div style={{ marginTop: '15px', padding: '10px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px' }}>
+                    <h4 style={{ margin: '0 0 10px 0', color: '#d32f2f' }}>🎖️ Troops Transferred</h4>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                        {Object.entries(data.units).filter(([_, c]) => c > 0).map(([unit, count]) => (
+                            <div key={unit} style={{ background: 'rgba(211, 47, 47, 0.2)', padding: '5px 10px', borderRadius: '4px', border: '1px solid rgba(211, 47, 47, 0.3)' }}>
+                                <span style={{ textTransform: 'capitalize' }}>{unit.replace(/_/g, ' ')}</span>: <span style={{ fontWeight: 'bold', color: '#fff' }}>{count}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Resources Transferred */}
+            {hasResources && (
+                <div style={{ marginTop: '15px', padding: '10px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px' }}>
+                    <h4 style={{ margin: '0 0 10px 0', color: '#00f3ff' }}>📦 Resources Delivered</h4>
+                    <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                        {data.resources.carbon > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ display: 'inline-block', width: '14px', height: '14px', background: '#5d4037', borderRadius: '50%' }}></span>
+                                <span style={{ color: '#8d6e63' }}>Carbon:</span>
+                                <span style={{ fontWeight: 'bold', color: '#fff' }}>{data.resources.carbon.toLocaleString()}</span>
+                            </div>
+                        )}
+                        {data.resources.titanium > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ display: 'inline-block', width: '14px', height: '14px', background: '#90a4ae', borderRadius: '50%' }}></span>
+                                <span style={{ color: '#90a4ae' }}>Titanium:</span>
+                                <span style={{ fontWeight: 'bold', color: '#fff' }}>{data.resources.titanium.toLocaleString()}</span>
+                            </div>
+                        )}
+                        {data.resources.food > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ display: 'inline-block', width: '14px', height: '14px', background: '#81c784', borderRadius: '50%' }}></span>
+                                <span style={{ color: '#81c784' }}>Food:</span>
+                                <span style={{ fontWeight: 'bold', color: '#fff' }}>{data.resources.food.toLocaleString()}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {!hasUnits && !hasResources && (
+                <div style={{ marginTop: '15px', color: '#888', fontStyle: 'italic', textAlign: 'center' }}>
+                    No units or resources were transferred with this fleet.
+                </div>
+            )}
         </div>
     );
 }

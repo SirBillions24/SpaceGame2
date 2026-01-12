@@ -58,7 +58,78 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
     await syncPlanetResources(fleet.toPlanetId);
 
     if (type === 'attack') {
-        // Resolve combat
+        // Check if attacking own planet - merge units instead of combat
+        const transferTargetPlanet = await prisma.planet.findUnique({ where: { id: fleet.toPlanetId } });
+
+        if (transferTargetPlanet && transferTargetPlanet.ownerId === fleet.ownerId) {
+            // Friendly transfer - merge units to target planet's reserves
+            console.log(`🤝 Friendly fleet arrival: merging units to owned planet ${fleet.toPlanetId}`);
+
+            const units = JSON.parse(fleet.unitsJson);
+            for (const [unitType, count] of Object.entries(units)) {
+                if ((count as number) > 0) {
+                    await prisma.planetUnit.upsert({
+                        where: { planetId_unitType: { planetId: fleet.toPlanetId, unitType } },
+                        update: { count: { increment: count as number } },
+                        create: { planetId: fleet.toPlanetId, unitType, count: count as number },
+                    });
+                }
+            }
+
+            // Handle resource transfer if cargo attached
+            if (fleet.cargoJson) {
+                const cargo = typeof fleet.cargoJson === 'string' ? JSON.parse(fleet.cargoJson) : fleet.cargoJson;
+                if (cargo.carbon || cargo.titanium || cargo.food) {
+                    await prisma.planet.update({
+                        where: { id: fleet.toPlanetId },
+                        data: {
+                            carbon: { increment: cargo.carbon || 0 },
+                            titanium: { increment: cargo.titanium || 0 },
+                            food: { increment: cargo.food || 0 },
+                        }
+                    });
+                    console.log(`📦 Resources transferred: C:${cargo.carbon || 0} T:${cargo.titanium || 0} F:${cargo.food || 0}`);
+                }
+            }
+
+            // Mark fleet as completed (no return trip needed)
+            await prisma.fleet.update({
+                where: { id: fleet.id },
+                data: { status: 'completed' },
+            });
+
+            // Release admiral if assigned
+            if (fleet.admiralId) {
+                await prisma.admiral.update({
+                    where: { id: fleet.admiralId },
+                    data: { stationedPlanetId: null },
+                });
+            }
+
+            // Get from planet for message
+            const fromPlanet = await prisma.planet.findUnique({ where: { id: fleet.fromPlanetId } });
+            const cargo = fleet.cargoJson ? (typeof fleet.cargoJson === 'string' ? JSON.parse(fleet.cargoJson) : fleet.cargoJson) : {};
+
+            // Create transfer complete inbox message
+            await prisma.inboxMessage.create({
+                data: {
+                    userId: fleet.ownerId,
+                    type: 'transfer_complete',
+                    title: 'Transfer Complete',
+                    content: JSON.stringify({
+                        fromPlanet: { id: fleet.fromPlanetId, name: fromPlanet?.name || 'Unknown', x: fromPlanet?.x || 0, y: fromPlanet?.y || 0 },
+                        toPlanet: { id: transferTargetPlanet.id, name: transferTargetPlanet.name, x: transferTargetPlanet.x, y: transferTargetPlanet.y },
+                        units,
+                        resources: { carbon: cargo.carbon || 0, titanium: cargo.titanium || 0, food: cargo.food || 0 }
+                    })
+                }
+            });
+
+            console.log(`✅ Fleet ${fleetId} merged to friendly planet successfully`);
+            return;
+        }
+
+        // Hostile attack - resolve combat
         const combatResult = await resolveCombat(fleetId);
 
         // Handle NPC attack count, gear drop, and respawn queuing
