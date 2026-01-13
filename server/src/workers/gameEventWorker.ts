@@ -132,6 +132,10 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
         // Hostile attack - resolve combat
         const combatResult = await resolveCombat(fleetId);
 
+        // Track gear drops - will be delivered on fleet return
+        let droppedGearId: string | null = null;
+        let droppedGearPlanetName: string | null = null;
+
         // Handle NPC attack count, gear drop, and respawn queuing
         // IMPORTANT: Harvesters are permanent and never respawn - skip this logic for them
         const targetPlanet = await prisma.planet.findUnique({ where: { id: fleet.toPlanetId } });
@@ -159,44 +163,18 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
                     const roll = Math.random();
 
                     if (roll < dropChance) {
-                        // Fetch gear details before transfer for the message
-                        const gear = await prisma.gearPiece.findUnique({
-                            where: { id: updatedNpc.npcLootGearId }
-                        });
+                        // Store gear ID for fleet return - don't transfer ownership yet!
+                        // The gear will be delivered when the fleet returns home
+                        droppedGearId = updatedNpc.npcLootGearId;
+                        droppedGearPlanetName = targetPlanet.name;
 
-                        await prisma.gearPiece.update({
-                            where: { id: updatedNpc.npcLootGearId },
-                            data: { userId: fleet.ownerId },
-                        });
+                        // Clear the NPC's loot gear reference so it can't be "dropped" again
                         await prisma.planet.update({
                             where: { id: updatedNpc.id },
                             data: { npcLootGearId: null },
                         });
 
-                        // Send inbox message about gear drop
-                        if (gear) {
-                            await prisma.inboxMessage.create({
-                                data: {
-                                    userId: fleet.ownerId,
-                                    type: 'gear_drop',
-                                    title: `${gear.name} Recovered!`,
-                                    content: JSON.stringify({
-                                        gearId: gear.id,
-                                        name: gear.name,
-                                        slotType: gear.slotType,
-                                        rarity: gear.rarity,
-                                        level: gear.level,
-                                        meleeStrengthBonus: gear.meleeStrengthBonus,
-                                        rangedStrengthBonus: gear.rangedStrengthBonus,
-                                        canopyReductionBonus: gear.canopyReductionBonus,
-                                        planetName: targetPlanet.name,
-                                        iconName: (gear as any).iconName || null
-                                    })
-                                }
-                            });
-                        }
-
-                        console.log(`🎁 Gear ${updatedNpc.npcLootGearId} dropped (hit ${newCount}/${maxHits}, ${Math.round(dropChance * 100)}% chance)`);
+                        console.log(`🎁 Gear ${updatedNpc.npcLootGearId} will be delivered on fleet return (hit ${newCount}/${maxHits}, ${Math.round(dropChance * 100)}% chance)`);
                     }
                 }
 
@@ -303,6 +281,13 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
             const originalDuration = fleet.arriveAt.getTime() - fleet.departAt.getTime();
             const returnArrival = new Date(Date.now() + originalDuration);
 
+            // Build cargo JSON including resources and any dropped gear
+            const cargoData = resourcesJson ? JSON.parse(resourcesJson) : {};
+            if (droppedGearId) {
+                cargoData.gearId = droppedGearId;
+                cargoData.gearPlanetName = droppedGearPlanetName;
+            }
+
             await prisma.fleet.update({
                 where: { id: fleet.id },
                 data: {
@@ -310,7 +295,7 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
                     unitsJson: JSON.stringify(survivingUnits),
                     departAt: new Date(),
                     arriveAt: returnArrival,
-                    cargoJson: resourcesJson,
+                    cargoJson: JSON.stringify(cargoData),
                 },
             });
 
@@ -380,6 +365,44 @@ async function processFleetReturn(job: Job<FleetReturnJob>) {
                     food: { increment: loot.food || 0 },
                 },
             });
+
+            // Deliver any gear that was dropped during combat
+            if (loot.gearId) {
+                const gear = await tx.gearPiece.findUnique({
+                    where: { id: loot.gearId }
+                });
+
+                if (gear) {
+                    // Transfer gear ownership to the fleet owner
+                    await tx.gearPiece.update({
+                        where: { id: loot.gearId },
+                        data: { userId: fleet.ownerId },
+                    });
+
+                    // Send inbox message about gear drop
+                    await tx.inboxMessage.create({
+                        data: {
+                            userId: fleet.ownerId,
+                            type: 'gear_drop',
+                            title: `${gear.name} Recovered!`,
+                            content: JSON.stringify({
+                                gearId: gear.id,
+                                name: gear.name,
+                                slotType: gear.slotType,
+                                rarity: gear.rarity,
+                                level: gear.level,
+                                meleeStrengthBonus: gear.meleeStrengthBonus,
+                                rangedStrengthBonus: gear.rangedStrengthBonus,
+                                canopyReductionBonus: gear.canopyReductionBonus,
+                                planetName: loot.gearPlanetName || 'Unknown',
+                                iconName: (gear as any).iconName || null
+                            })
+                        }
+                    });
+
+                    console.log(`🎁 Gear ${gear.name} delivered to player ${fleet.ownerId}`);
+                }
+            }
         }
 
         // Add units back to home planet

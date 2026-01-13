@@ -1,12 +1,15 @@
 
 import prisma from '../lib/prisma';
+import { XP_CURVE } from '../constants/playerConfig';
 
-// XP Curve: Required XP to reach next Level = 100 * (CurrentLevel)^2
-// e.g. Lv 1->2: 100 XP
-// Lv 2->3: 400 XP (Total)
-// Lv 3->4: 900 XP (Total)
+/**
+ * Calculate XP required to reach the next level.
+ * Formula: XP = baseXp × (level ^ exponent)
+ * 
+ * Adjust XP_CURVE in playerConfig.ts to change progression speed.
+ */
 export const calculateXpForLevel = (level: number): number => {
-    return 100 * Math.pow(level, 2);
+    return XP_CURVE.baseXp * Math.pow(level, XP_CURVE.exponent);
 };
 
 export const addXp = async (userId: string, amount: number) => {

@@ -163,6 +163,100 @@ export const MAP_CONFIG = {
 };
 
 // =============================================================================
+// NPC THEMES/ARCHETYPES
+// =============================================================================
+
+/**
+ * NPC planet themes that determine their name, garrison composition, and loot focus.
+ * Each NPC is assigned a random theme when spawned.
+ * 
+ * GAMEPLAY IMPACT:
+ * - Units array = what troops defend this type (affects what counters work)
+ * - primaryLoot = which resource has 5x bonus (creates "farming targets")
+ * - unitUnlockLevels = when elite units start appearing in garrisons
+ */
+export interface NpcTheme {
+    name: string;           // Display name (e.g., "Raider Outpost (Lvl 10)")
+    units: string[];        // Unit types this archetype uses
+    primaryLoot: string;    // Resource that gets 5x loot multiplier
+    unitUnlockLevels: Record<string, number>;  // Level thresholds for stronger units
+}
+
+export const NPC_THEMES: Record<string, NpcTheme> = {
+    melee: {
+        name: 'Raider Outpost',
+        units: ['marine', 'sentinel'],
+        primaryLoot: 'carbon',
+        unitUnlockLevels: {
+            sentinel: 10,   // Sentinels appear at level 10+
+        },
+    },
+    ranged: {
+        name: 'Sniper Den',
+        units: ['sniper'],
+        primaryLoot: 'food',
+        unitUnlockLevels: {},
+    },
+    robotic: {
+        name: 'Automaton Forge',
+        units: ['interceptor', 'automaton', 'drone'],
+        primaryLoot: 'titanium',
+        unitUnlockLevels: {
+            automaton: 10,      // Automatons appear at level 10+
+            interceptor: 20,    // Interceptors appear at level 20+
+        },
+    },
+};
+
+// =============================================================================
+// NPC LOOT RESOURCE FORMULAS
+// =============================================================================
+
+/**
+ * Formulas for calculating how much loot NPCs have.
+ * 
+ * Formula: resource = base × (npcLevel / levelDivisor) × archetype multiplier
+ * 
+ * EXAMPLE (Level 20 Melee NPC):
+ * - Carbon = 500 × (20/10) × 5 = 5,000 carbon (5x because melee → carbon)
+ * - Titanium = 500 × (20/10) × 1 = 1,000 titanium
+ * - Credits = 100 × (20/10) = 200 credits
+ * 
+ * GAMEPLAY IMPACT:
+ * - Higher bases = more loot per raid, faster player economy growth
+ * - Higher levelDivisor = less loot scaling with level, flatter progression
+ * - archetypeMultiplier = creates "farming targets" for specific resources
+ */
+export const NPC_LOOT_RESOURCES = {
+    baseCarbon: 500,            // Base carbon loot
+    baseTitanium: 500,          // Base titanium loot
+    baseFood: 500,              // Base food loot
+    baseCredits: 100,           // Base credits loot
+    levelDivisor: 10,           // Divide NPC level by this for scaling
+    archetypeMultiplier: 5,     // Primary loot gets this multiplier
+};
+
+/**
+ * Gear name generation - cosmetic prefixes and suffixes for randomly generated gear.
+ * 
+ * NOTE: These are purely cosmetic and don't affect gameplay balance.
+ */
+export const GEAR_NAME_PREFIXES: Record<GearRarity, string[]> = {
+    common: ['Basic', 'Standard', 'Simple'],
+    uncommon: ['Refined', 'Enhanced', 'Improved'],
+    rare: ['Advanced', 'Superior', 'Elite'],
+    epic: ['Masterwork', 'Legendary', 'Exalted'],
+    legendary: ['Mythic', 'Transcendent', 'Divine'],
+};
+
+export const GEAR_NAME_SUFFIXES: Record<string, string[]> = {
+    weapon: ['Rifle', 'Blaster', 'Cannon', 'Blicky'],
+    helmet: ['Helm', 'Visor', 'Crown'],
+    spacesuit: ['Armor', 'Exosuit', 'Battlesuit', 'Drip'],
+    shield: ['Barrier', 'Aegis', 'Bulwark'],
+};
+
+// =============================================================================
 // TYPES
 // =============================================================================
 

@@ -5,31 +5,20 @@
  */
 
 import prisma from '../lib/prisma';
-import { NPC_BALANCE, LOOT_BALANCE, MAP_CONFIG, GearRarity } from '../constants/npcBalanceData';
+import {
+    NPC_BALANCE,
+    LOOT_BALANCE,
+    MAP_CONFIG,
+    GearRarity,
+    NPC_THEMES,
+    NPC_LOOT_RESOURCES,
+    GEAR_NAME_PREFIXES,
+    GEAR_NAME_SUFFIXES
+} from '../constants/npcBalanceData';
 import { getEligibleUniques } from '../constants/gearData';
 import { getWorldBounds } from './worldService';
 
-// =============================================================================
-// NPC THEMES
-// =============================================================================
-
-const NPC_THEMES: Record<string, { name: string, units: string[], primaryLoot: string }> = {
-    melee: {
-        name: 'Raider Outpost',
-        units: ['marine', 'sentinel'],
-        primaryLoot: 'carbon'
-    },
-    ranged: {
-        name: 'Sniper Den',
-        units: ['ranger'],
-        primaryLoot: 'food'
-    },
-    robotic: {
-        name: 'Automaton Forge',
-        units: ['interceptor', 'droid_decoy', 'heavy_automaton'],
-        primaryLoot: 'titanium'
-    }
-};
+// NOTE: NPC_THEMES is now imported from npcBalanceData.ts
 
 // =============================================================================
 // UTILITY FUNCTIONS
@@ -216,23 +205,10 @@ export async function generateNpcLootGear(npcLevel: number, npcClass: string): P
         canopyReductionBonus: activeMods.includes('canopy') ? -rollBellCurveStat(range.min, range.max) : 0,
     };
 
-    // Generate a themed name based on rarity and slot
-    const rarityPrefixes: Record<string, string[]> = {
-        common: ['Basic', 'Standard', 'Simple'],
-        uncommon: ['Refined', 'Enhanced', 'Improved'],
-        rare: ['Advanced', 'Superior', 'Elite'],
-        epic: ['Masterwork', 'Legendary', 'Exalted'],
-        legendary: ['Mythic', 'Transcendent', 'Divine'],
-    };
-    const slotNames: Record<string, string[]> = {
-        weapon: ['Rifle', 'Blaster', 'Cannon'],
-        helmet: ['Helm', 'Visor', 'Crown'],
-        spacesuit: ['Armor', 'Exosuit', 'Battlesuit'],
-        shield: ['Barrier', 'Aegis', 'Bulwark'],
-    };
-
-    const prefix = rarityPrefixes[rarity][Math.floor(Math.random() * rarityPrefixes[rarity].length)];
-    const suffix = slotNames[slotType][Math.floor(Math.random() * slotNames[slotType].length)];
+    // Generate a themed name based on rarity and slot (names from npcBalanceData.ts)
+    const prefix = GEAR_NAME_PREFIXES[rarity][Math.floor(Math.random() * GEAR_NAME_PREFIXES[rarity].length)];
+    const suffixes = GEAR_NAME_SUFFIXES[slotType] || ['Gear'];
+    const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
     const name = `${prefix} ${suffix}`;
 
     const gear = await prisma.gearPiece.create({
@@ -271,11 +247,11 @@ export async function generateNpcDefense(planetId: string, level: number, npcCla
     const leftRatio = (1 - frontRatio) * (0.4 + Math.random() * 0.2);
     const rightRatio = 1 - frontRatio - leftRatio;
 
-    // Determine available units based on level
+    // Determine available units based on level (unlock levels from NPC_THEMES)
+    const themeUnlockLevels = theme.unitUnlockLevels || {};
     const availableUnits = theme.units.filter(u => {
-        if (u === 'sentinel' && level < 10) return false;
-        if (u === 'heavy_automaton' && level < 20) return false;
-        return true;
+        const unlockLevel = themeUnlockLevels[u];
+        return !unlockLevel || level >= unlockLevel;
     });
 
     const distributeUnits = (count: number): Record<string, number> => {
@@ -379,15 +355,17 @@ export async function spawnPirateBases(ownerId: string, centerX: number, centerY
             const npcClass = classes[Math.floor(Math.random() * classes.length)];
             const theme = NPC_THEMES[npcClass];
 
-            // Specialized Loot based on archetype
-            let carbon = 500 * (level / 10);
-            let titanium = 500 * (level / 10);
-            let food = 500 * (level / 10);
-            const credits = 100 * (level / 10);
+            // Specialized Loot based on archetype (formulas from npcBalanceData.ts)
+            const lootRes = NPC_LOOT_RESOURCES;
+            const levelScale = level / lootRes.levelDivisor;
+            let carbon = lootRes.baseCarbon * levelScale;
+            let titanium = lootRes.baseTitanium * levelScale;
+            let food = lootRes.baseFood * levelScale;
+            const credits = lootRes.baseCredits * levelScale;
 
-            if (npcClass === 'melee') carbon *= 5;
-            if (npcClass === 'robotic') titanium *= 5;
-            if (npcClass === 'ranged') food *= 5;
+            if (npcClass === 'melee') carbon *= lootRes.archetypeMultiplier;
+            if (npcClass === 'robotic') titanium *= lootRes.archetypeMultiplier;
+            if (npcClass === 'ranged') food *= lootRes.archetypeMultiplier;
 
             const maxAttacks = starterNpcs.maxAttacks.min + Math.floor(Math.random() * (starterNpcs.maxAttacks.max - starterNpcs.maxAttacks.min + 1));
 
@@ -442,15 +420,18 @@ export async function relocateNpc(planetId: string) {
     // Generate new loot gear for this life
     const lootGearId = await generateNpcLootGear(newLevel, planet.npcClass || 'melee');
 
-    // Calculate new resources based on level
-    const baseResource = 500 * (newLevel / 10);
-    const carbon = baseResource * (planet.npcClass === 'melee' ? 5 : 1);
-    const titanium = baseResource * (planet.npcClass === 'robotic' ? 5 : 1);
-    const food = baseResource * (planet.npcClass === 'ranged' ? 5 : 1);
-    const credits = 100 * (newLevel / 10);
+    // Calculate new resources based on level (formulas from npcBalanceData.ts)
+    const lootRes = NPC_LOOT_RESOURCES;
+    const levelScale = newLevel / lootRes.levelDivisor;
+    const baseResource = lootRes.baseCarbon * levelScale;
+    const carbon = baseResource * (planet.npcClass === 'melee' ? lootRes.archetypeMultiplier : 1);
+    const titanium = baseResource * (planet.npcClass === 'robotic' ? lootRes.archetypeMultiplier : 1);
+    const food = baseResource * (planet.npcClass === 'ranged' ? lootRes.archetypeMultiplier : 1);
+    const credits = lootRes.baseCredits * levelScale;
 
-    // Random new max attacks
-    const maxAttacks = 10 + Math.floor(Math.random() * 11);
+    // Random new max attacks (from NPC_BALANCE config)
+    const attackRange = NPC_BALANCE.starterNpcs?.maxAttacks || { min: 10, max: 20 };
+    const maxAttacks = attackRange.min + Math.floor(Math.random() * (attackRange.max - attackRange.min + 1));
 
     await prisma.planet.update({
         where: { id: planetId },

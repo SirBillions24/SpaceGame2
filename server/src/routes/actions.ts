@@ -10,7 +10,17 @@ import {
 } from '../services/fleetService';
 import { placeBuilding, recruitUnit, spawnPlanet, moveBuilding, syncPlanetResources, demolishBuilding } from '../services/planetService';
 import { UNIT_DATA } from '../constants/unitData';
-import { MAX_GRID_SIZE, EXPANSION_BASE_COST_CARBON, EXPANSION_BASE_COST_TITANIUM, EXPANSION_COST_MULTIPLIER, DEFENSE_TURRET_BUILD_TIME_SECONDS } from '../constants/mechanics';
+import {
+  MAX_GRID_SIZE,
+  EXPANSION_BASE_COST_CARBON,
+  EXPANSION_BASE_COST_TITANIUM,
+  EXPANSION_COST_MULTIPLIER,
+  DEFENSE_TURRET_BUILD_TIME_SECONDS,
+  DEFENSE_TURRET_BASE_COST_CARBON,
+  DEFENSE_TURRET_BASE_COST_TITANIUM,
+  DEFENSE_TURRET_COUNT_SCALING,
+  MAX_DEFENSE_TURRETS,
+} from '../constants/mechanics';
 import { getDefenseTurrets, calculateDefenseCapacity } from '../services/defenseService';
 import { validateRequest } from '../middleware/validateRequest';
 import { BuildSchema, RecruitSchema, ManufactureSchema, ExpandSchema, DefenseTurretSchema, TaxRateSchema, MoveBuildingSchema, DemolishSchema } from '../schemas/actionSchemas';
@@ -773,16 +783,16 @@ router.post('/defense-turret', authenticateToken, async (req: AuthRequest, res: 
         }
       }
 
-      // Check if can add (max 20, including queued turrets)
+      // Check if can add (using MAX_DEFENSE_TURRETS from mechanics.ts)
       const totalTurrets = turrets.length + turretQueue.length;
-      if (totalTurrets >= 20) {
-        throw new Error('Maximum 20 defense turrets allowed (including those in construction queue)');
+      if (totalTurrets >= MAX_DEFENSE_TURRETS) {
+        throw new Error(`Maximum ${MAX_DEFENSE_TURRETS} defense turrets allowed (including those in construction queue)`);
       }
 
-      // Calculate cost (scaling with level and number of turrets)
-      const baseCostCarbon = 500 * level;
-      const baseCostTitanium = 250 * level;
-      const turretCountMultiplier = 1 + (turrets.length * 0.1);
+      // Calculate cost (scaling with level and number of turrets, from mechanics.ts)
+      const baseCostCarbon = DEFENSE_TURRET_BASE_COST_CARBON * level;
+      const baseCostTitanium = DEFENSE_TURRET_BASE_COST_TITANIUM * level;
+      const turretCountMultiplier = 1 + (turrets.length * DEFENSE_TURRET_COUNT_SCALING);
       const costCarbon = Math.floor(baseCostCarbon * turretCountMultiplier);
       const costTitanium = Math.floor(baseCostTitanium * turretCountMultiplier);
 

@@ -1,7 +1,5 @@
 import prisma from '../lib/prisma';
-
-const BASE_FLEET_SPEED = 50; // pixels per second
-const MIN_TRAVEL_TIME = 5; // minimum seconds
+import { BASE_FLEET_SPEED, MIN_TRAVEL_TIME } from '../constants/mechanics';
 
 interface UnitCounts {
   [unitType: string]: number;

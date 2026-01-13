@@ -15,6 +15,18 @@ import { addXp } from './progressionService';
 import { getWorldBounds, getQuadrantCenter, maybeExpandWorld, Quadrant } from './worldService';
 import { MAP_CONFIG } from '../constants/npcBalanceData';
 import { calculateDarkMatterProduction } from './harvesterService';
+import {
+  STARTING_UNITS,
+  STARTING_GRID_SIZE,
+  BASE_STORAGE_CAPACITY,
+  DEFAULT_TAX_RATE,
+  CREDITS_PER_POPULATION,
+  TAX_STABILITY_PENALTY_MULTIPLIER,
+  STABILITY_FORMULA,
+  DEMOLISH_REFUND_RATE,
+  DEMOLISH_TIME_RATE,
+  MAX_SPAWN_ATTEMPTS,
+} from '../constants/playerConfig';
 
 const MIN_PLANET_DISTANCE = MAP_CONFIG.minPlanetDistance;
 
@@ -22,11 +34,7 @@ interface UnitCounts {
   [unitType: string]: number;
 }
 
-const STARTING_UNITS: UnitCounts = {
-  marine: 50,
-  ranger: 30,
-  sentinel: 20,
-};
+// NOTE: STARTING_UNITS is now imported from playerConfig.ts
 
 /**
  * Calculate distance between two points
@@ -68,7 +76,7 @@ async function isPositionValid(x: number, y: number): Promise<boolean> {
  */
 async function generatePlanetPosition(quadrant?: Quadrant): Promise<{ x: number; y: number }> {
   const bounds = await getWorldBounds();
-  const maxAttempts = 200;
+  const maxAttempts = MAX_SPAWN_ATTEMPTS;
   let attempts = 0;
 
   // Calculate centers and ranges based on current world size
@@ -132,7 +140,7 @@ export function calculatePlanetRates(planet: any) {
   // Track stability
   let dwellingPenalty = 0;
   let decorationBonus = 0;
-  let maxStorage = 1000; // Base storage
+  let maxStorage = BASE_STORAGE_CAPACITY;
 
   // Per-building tracking for detailed breakdowns
   const carbonBuildings: any[] = [];
@@ -199,18 +207,18 @@ export function calculatePlanetRates(planet: any) {
     }
   }
 
-  // Stability logic
-  const taxPenalty = (planet.taxRate || 10) * 2;
+  // Stability logic (formulas from playerConfig.ts)
+  const taxPenalty = (planet.taxRate || DEFAULT_TAX_RATE) * TAX_STABILITY_PENALTY_MULTIPLIER;
   const publicOrder = decorationBonus - dwellingPenalty - taxPenalty;
 
   // Productivity (stability) multiplier
-  let productivity = 100;
+  let productivity = STABILITY_FORMULA.baseProductivity;
   if (publicOrder >= 0) {
-    productivity = (Math.sqrt(publicOrder) * 2) + 100;
+    productivity = (Math.sqrt(publicOrder) * STABILITY_FORMULA.positiveMultiplier) + STABILITY_FORMULA.baseProductivity;
   } else {
-    productivity = 100 * (100 / (100 + 2 * Math.sqrt(Math.abs(publicOrder))));
+    productivity = STABILITY_FORMULA.baseProductivity * (STABILITY_FORMULA.baseProductivity / (STABILITY_FORMULA.baseProductivity + STABILITY_FORMULA.negativeMultiplier * Math.sqrt(Math.abs(publicOrder))));
   }
-  const stabilityMultiplier = productivity / 100;
+  const stabilityMultiplier = productivity / STABILITY_FORMULA.baseProductivity;
 
   // Workforce Efficiency Calculation
   let staffingRatio = 1.0;
@@ -271,7 +279,7 @@ export function calculatePlanetRates(planet: any) {
     });
   }
 
-  const creditRate = population * ((planet.taxRate || 10) / 100) * 5;
+  const creditRate = population * ((planet.taxRate || DEFAULT_TAX_RATE) / 100) * CREDITS_PER_POPULATION;
 
   return {
     carbonRate,
@@ -675,14 +683,13 @@ export async function demolishBuilding(planetId: string, buildingId: string) {
     throw new Error('Dark Matter Generators cannot be recycled, only moved.');
   }
 
-  // Calculate Refund (10% of current level cost)
-  // And Time (50% of build time)
+  // Calculate Refund and Time (rates from playerConfig.ts)
   const stats = BUILDING_DATA[building.type]?.levels[building.level];
   if (!stats) throw new Error('Building stats not found');
 
-  const carbonRefund = Math.floor(stats.cost.carbon * 0.1);
-  const titaniumRefund = Math.floor(stats.cost.titanium * 0.1);
-  const demoTime = Math.ceil(stats.time * 0.5);
+  const carbonRefund = Math.floor(stats.cost.carbon * DEMOLISH_REFUND_RATE);
+  const titaniumRefund = Math.floor(stats.cost.titanium * DEMOLISH_REFUND_RATE);
+  const demoTime = Math.ceil(stats.time * DEMOLISH_TIME_RATE);
 
   const finishTime = new Date();
   finishTime.setSeconds(finishTime.getSeconds() + demoTime);
@@ -772,8 +779,8 @@ export async function spawnPlanet(userId: string, username: string, quadrant?: Q
       y: position.y,
       name: planetName,
       lastResourceUpdate: new Date(),
-      gridSizeX: 10, // Starting 10x10
-      gridSizeY: 10,
+      gridSizeX: STARTING_GRID_SIZE.x,
+      gridSizeY: STARTING_GRID_SIZE.y,
     },
   });
 

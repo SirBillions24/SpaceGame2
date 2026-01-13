@@ -9,16 +9,29 @@ import prisma from '../lib/prisma';
 import { BUILDING_DATA } from '../constants/buildingData';
 import { UNIT_DATA } from '../constants/unitData';
 import { NPC_BALANCE } from '../constants/npcBalanceData';
+import {
+    HARVESTER_GRID_SIZE,
+    HARVESTER_NPC_LEVEL,
+    HARVESTER_GENERATOR_COUNT,
+    HARVESTER_GENERATOR_SIZE,
+    HARVESTER_SPAWN_DISTANCE,
+    HARVESTER_INITIAL_RESOURCES,
+    HARVESTER_UNIT_SCALING_EXPONENT,
+    HARVESTER_BASE_UNITS,
+    HARVESTER_LANE_DISTRIBUTION,
+    DEFAULT_BLACK_HOLES,
+    HARVESTER_MIN_PLANET_DISTANCE,
+} from '../constants/harvesterConfig';
 
-// Harvester configuration
+// NOTE: HARVESTER_CONFIG is now imported from harvesterConfig.ts
+// Legacy compatibility alias
 const HARVESTER_CONFIG = {
-    gridSize: 50,           // 50x50 grid
-    npcLevel: 50,           // Level 50 NPC when spawned
-    generatorCount: 5,      // 5 Dark Matter Generators
-    generatorSize: 5,       // 5x5 building size
-    accretionDiskMin: 100,  // Minimum spawn distance from black hole center
-    accretionDiskMax: 200,  // Maximum spawn distance (within basic probe range of 150)
-    darkMatterPerHour: 10,  // Production per generator per hour
+    gridSize: HARVESTER_GRID_SIZE,
+    npcLevel: HARVESTER_NPC_LEVEL,
+    generatorCount: HARVESTER_GENERATOR_COUNT,
+    generatorSize: HARVESTER_GENERATOR_SIZE,
+    accretionDiskMin: HARVESTER_SPAWN_DISTANCE.min,
+    accretionDiskMax: HARVESTER_SPAWN_DISTANCE.max,
 };
 
 // NPC system user ID (created on demand)
@@ -57,21 +70,13 @@ async function getNpcUser(): Promise<string> {
 async function generateHarvesterDefense(planetId: string): Promise<void> {
     const level = HARVESTER_CONFIG.npcLevel;
 
-    // Base units scaled to level 50
-    const unitScaling = Math.pow(level, 1.5);
-    const baseUnits = {
-        marine: Math.floor(100 * unitScaling),
-        ranger: Math.floor(60 * unitScaling),
-        sentinel: Math.floor(40 * unitScaling),
-        commando: Math.floor(20 * unitScaling),
-        drone: Math.floor(80 * unitScaling),
-        automaton: Math.floor(50 * unitScaling),
-        interceptor: Math.floor(15 * unitScaling),
-        stalker: Math.floor(70 * unitScaling),
-        spitter: Math.floor(45 * unitScaling),
-        brute: Math.floor(30 * unitScaling),
-        ravager: Math.floor(10 * unitScaling),
-    };
+    // Base units scaled to level (constants from harvesterConfig.ts)
+    const unitScaling = Math.pow(level, HARVESTER_UNIT_SCALING_EXPONENT);
+    const baseUnits: Record<string, number> = {};
+
+    for (const [unitType, baseCount] of Object.entries(HARVESTER_BASE_UNITS)) {
+        baseUnits[unitType] = Math.floor(baseCount * unitScaling);
+    }
 
     // Create planet units
     for (const [unitType, count] of Object.entries(baseUnits)) {
@@ -84,7 +89,7 @@ async function generateHarvesterDefense(planetId: string): Promise<void> {
         }
     }
 
-    // Create defense layout distributing units across lanes
+    // Create defense layout distributing units across lanes (ratios from harvesterConfig.ts)
     const distributeUnits = (total: Record<string, number>) => {
         const result: Record<string, Record<string, number>> = {
             front: {},
@@ -93,9 +98,9 @@ async function generateHarvesterDefense(planetId: string): Promise<void> {
         };
 
         for (const [unit, count] of Object.entries(total)) {
-            result.front[unit] = Math.floor(count * 0.4);
-            result.left[unit] = Math.floor(count * 0.3);
-            result.right[unit] = Math.floor(count * 0.3);
+            result.front[unit] = Math.floor(count * HARVESTER_LANE_DISTRIBUTION.front);
+            result.left[unit] = Math.floor(count * HARVESTER_LANE_DISTRIBUTION.left);
+            result.right[unit] = Math.floor(count * HARVESTER_LANE_DISTRIBUTION.right);
         }
 
         return result;
@@ -207,7 +212,7 @@ export async function spawnHarvesterNearBlackHole(blackHoleId: string): Promise<
         return null;
     }
 
-    // Create the Harvester planet
+    // Create the Harvester planet (resources from harvesterConfig.ts)
     const harvester = await prisma.planet.create({
         data: {
             ownerId: npcOwnerId,
@@ -220,10 +225,10 @@ export async function spawnHarvesterNearBlackHole(blackHoleId: string): Promise<
             planetType: 'harvester',
             gridSizeX: HARVESTER_CONFIG.gridSize,
             gridSizeY: HARVESTER_CONFIG.gridSize,
-            carbon: 10000,
-            titanium: 10000,
-            food: 50000,
-            credits: 5000,
+            carbon: HARVESTER_INITIAL_RESOURCES.carbon,
+            titanium: HARVESTER_INITIAL_RESOURCES.titanium,
+            food: HARVESTER_INITIAL_RESOURCES.food,
+            credits: HARVESTER_INITIAL_RESOURCES.credits,
             darkMatter: 0,
             stability: 100,
         }
@@ -328,12 +333,8 @@ export async function transferHarvesterOwnership(
  * Seed black holes into database (matching visual positions or creating new ones)
  */
 export async function seedBlackHoles(): Promise<void> {
-    // Default black hole positions (center of map, can be expanded)
-    const defaultBlackHoles = [
-        { x: 5000, y: 5000, radius: 300 },  // Center of 10000x10000 map
-    ];
-
-    for (const bh of defaultBlackHoles) {
+    // Black hole positions from harvesterConfig.ts
+    for (const bh of DEFAULT_BLACK_HOLES) {
         const existing = await prisma.blackHole.findFirst({
             where: { x: bh.x, y: bh.y }
         });

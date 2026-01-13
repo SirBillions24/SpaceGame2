@@ -39,17 +39,10 @@ function calculateLoot(survivingUnits: FlankUnits, planetResources: { carbon: nu
   return loot;
 }
 
-// Legacy constants (being migrated to combatBalanceData.ts)
-// Defense Building Bonuses now come from buildingData.ts and combatBalanceData.ts
-const CANOPY_GENERATOR_BONUS = 50; // Legacy - actual bonuses from buildingData
-const MINEFIELD_BONUS = 30;
-const DOCKING_HUB_BONUS = 100;
-
-// Tool reductions now come from toolData.ts bonusValue
-const CANOPY_REDUCTION = 0.15;
-const HUB_BREACH_REDUCTION = 0.15;
-const ECM_POD_REDUCTION = 0.05;
-const FIELD_NEUTRALIZER_REDUCTION = 0;
+// NOTE: Legacy constants removed - all values now come from:
+// - combatBalanceData.ts (faction bonuses, victory dampener, surface bonuses)
+// - buildingData.ts (defense building bonuses)
+// - toolData.ts (tool reduction values)
 
 /**
  * Calculate the weighted faction multiplier for a force attacking another force.
@@ -303,7 +296,7 @@ export function resolveWaveCollision(
     ? (totalDefPower / totalPower) // Attacker losses
     : (totalAttackerPower / totalPower); // Defender losses
 
-  const victoryDampener = 0.5;
+  const victoryDampener = COMBAT_MODIFIERS.victoryDampener;
 
   const attLossRate = attackerWon ? (casualtyRate * victoryDampener) : 1.0;
   const defLossRate = !attackerWon ? (casualtyRate * victoryDampener) : 1.0;
@@ -636,10 +629,10 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
   let attBonus = 0;
   let defBonus = 0;
 
-  // Bonus/Penalty Logic
-  if (attackerSectorsWon === 3) attBonus = 0.30; // +30% for winning all 3 lanes
-  else if (attackerSectorsWon === 0) defBonus = 0.50; // +50% for defender if they held all 3 lanes
-  else if (attackerSectorsWon === 1) defBonus = 0.30; // +30% for defender if they held 2 lanes
+  // Bonus/Penalty Logic (values from combatBalanceData.ts)
+  if (attackerSectorsWon === 3) attBonus = COMBAT_MODIFIERS.surface.attackerAllSectorsBonus;
+  else if (attackerSectorsWon === 0) defBonus = COMBAT_MODIFIERS.surface.defenderAllSectorsBonus;
+  else if (attackerSectorsWon === 1) defBonus = COMBAT_MODIFIERS.surface.defenderTwoSectorsBonus;
 
   const surfAtt: FlankUnits = {};
   const addUnits = (target: FlankUnits, source: FlankUnits) => {

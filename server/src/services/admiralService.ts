@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma';
 import { getStarterGear, type GearItemDefinition } from '../constants/gearData';
+import { GEAR_BONUS_CAPS, ADMIRAL_NAME_MAX_LENGTH } from '../constants/playerConfig';
 
 // Define the 4 gear slots
 export const GEAR_SLOTS = ['weapon', 'helmet', 'spacesuit', 'shield'] as const;
@@ -53,11 +54,11 @@ export function calculateAdmiralBonuses(gearJson: string): {
       }
     }
 
-    // Apply caps
+    // Apply caps (values from playerConfig.ts)
     return {
-      meleeStrengthBonus: Math.min(100, Math.max(0, melee)),
-      rangedStrengthBonus: Math.min(100, Math.max(0, ranged)),
-      canopyReductionBonus: Math.max(-100, Math.min(0, canopy)), // Negative only, capped at -100%
+      meleeStrengthBonus: Math.min(GEAR_BONUS_CAPS.meleeStrengthMax, Math.max(0, melee)),
+      rangedStrengthBonus: Math.min(GEAR_BONUS_CAPS.rangedStrengthMax, Math.max(0, ranged)),
+      canopyReductionBonus: Math.max(GEAR_BONUS_CAPS.canopyReductionMax, Math.min(0, canopy)),
     };
   } catch (e) {
     return {
@@ -107,8 +108,8 @@ export async function updateAdmiralName(userId: string, name: string) {
   if (!name || name.trim().length === 0) {
     throw new Error('Admiral name cannot be empty');
   }
-  if (name.length > 50) {
-    throw new Error('Admiral name must be 50 characters or less');
+  if (name.length > ADMIRAL_NAME_MAX_LENGTH) {
+    throw new Error(`Admiral name must be ${ADMIRAL_NAME_MAX_LENGTH} characters or less`);
   }
 
   const admiral = await getOrCreateAdmiral(userId);

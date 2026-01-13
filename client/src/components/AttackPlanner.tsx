@@ -104,6 +104,29 @@ const TOOL_ICONS: Record<string, string> = {
 const ALL_UNITS = ['marine', 'sniper', 'guardian', 'commando', 'drone', 'automaton', 'sentinel', 'interceptor', 'stalker', 'spitter', 'brute', 'ravager'];
 const ALL_TOOLS = ['invasion_anchors', 'plasma_breachers', 'stealth_field_pods'];
 
+// Transit time calculation (must match server: server/src/constants/mechanics.ts)
+const BASE_FLEET_SPEED = 50; // pixels per second
+const MIN_TRAVEL_TIME = 5; // minimum seconds
+
+const calculateDistance = (x1: number, y1: number, x2: number, y2: number): number => {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+};
+
+const calculateTravelTime = (distance: number): number => {
+    const timeInSeconds = distance / BASE_FLEET_SPEED;
+    return Math.max(MIN_TRAVEL_TIME, Math.ceil(timeInSeconds));
+};
+
+const formatTravelTime = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (minutes < 60) return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+};
+
 // Initial State Generator
 const createInitialState = (): WaveData[] => {
     const waves: WaveData[] = [];
@@ -656,6 +679,13 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                         )}
                     </div>
 
+                    {/* Transit Time Display */}
+                    <div style={{ textAlign: 'center', padding: '8px 0', color: '#888', fontSize: '0.85rem' }}>
+                        ⏱️ Transit Time: <span style={{ color: '#00f3ff', fontWeight: 'bold' }}>
+                            {formatTravelTime(calculateTravelTime(calculateDistance(fromPlanet.x, fromPlanet.y, toPlanet.x, toPlanet.y)))}
+                        </span>
+                    </div>
+
                     {/* Footer */}
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '10px', borderTop: '1px solid #333' }}>
                         <button
@@ -1193,6 +1223,14 @@ export default function AttackPlanner({ fromPlanet, toPlanet, availableUnits, on
                                 </div>
                             </div>
                         )}
+
+                        {/* Transit Time Display */}
+                        <div style={{ textAlign: 'center', padding: '8px 0', marginBottom: '10px', color: '#888', fontSize: '0.85rem' }}>
+                            ⏱️ Transit Time: <span style={{ color: '#ff6b35', fontWeight: 'bold' }}>
+                                {formatTravelTime(calculateTravelTime(calculateDistance(fromPlanet.x, fromPlanet.y, toPlanet.x, toPlanet.y)))}
+                            </span>
+                        </div>
+
                         <button
                             className="attack-btn"
                             onClick={handleLaunch}
