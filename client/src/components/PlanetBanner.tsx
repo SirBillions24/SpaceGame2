@@ -117,7 +117,14 @@ export default function PlanetBanner({
       }}
     >
       <div className="banner-content">
-        <div className="banner-title">{planet.name}</div>
+        <div className="banner-title">
+          {planet.coalitionTag && <span className="banner-coalition-tag">[{planet.coalitionTag}] </span>}
+          {planet.name}
+        </div>
+        <div className="banner-owner">
+          Commander {planet.ownerName}
+          {planet.coalitionName && <div className="banner-coalition-name">{planet.coalitionName}</div>}
+        </div>
         <button
           className="banner-close"
           onClick={(e) => {

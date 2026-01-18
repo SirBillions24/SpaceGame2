@@ -42,6 +42,12 @@ router.get('/planets', optionalAuthenticateToken, async (req: AuthRequest, res: 
           select: {
             id: true,
             username: true,
+            coalitionId: true,
+            coalition: {
+              select: {
+                tag: true
+              }
+            }
           },
         },
         buildings: true, // Include buildings to check for Intel Hub
@@ -60,6 +66,8 @@ router.get('/planets', optionalAuthenticateToken, async (req: AuthRequest, res: 
         name: planet.name,
         ownerId: planet.ownerId,
         ownerName: planet.owner.username,
+        coalitionId: planet.owner.coalitionId,
+        coalitionTag: planet.owner.coalition?.tag,
         taxRate: planet.taxRate,
         isNpc: planet.isNpc,
         npcLevel: planet.npcLevel,
@@ -99,7 +107,16 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
 
     const owner = await prisma.user.findUnique({
       where: { id: syncedPlanet.ownerId },
-      select: { username: true },
+      select: { 
+        username: true,
+        coalitionId: true,
+        coalition: {
+          select: {
+            name: true,
+            tag: true
+          }
+        }
+      },
     });
 
     const units = syncedPlanet.units.reduce((acc: Record<string, number>, unit: any) => {
@@ -128,6 +145,9 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
       name: syncedPlanet.name,
       ownerId: syncedPlanet.ownerId,
       ownerName: owner?.username || 'Unknown',
+      coalitionId: owner?.coalitionId,
+      coalitionName: owner?.coalition?.name,
+      coalitionTag: owner?.coalition?.tag,
       taxRate: syncedPlanet.taxRate,
       isNpc: syncedPlanet.isNpc,
       npcLevel: syncedPlanet.npcLevel,

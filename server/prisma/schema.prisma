@@ -29,13 +29,91 @@ model User {
   reconProbes ReconProbe[]
   inboxMessages InboxMessage[]
   espionageReports EspionageReport[]
+  coalitionMessages CoalitionMessage[]
   darkMatter       Float             @default(0) @map("dark_matter")
   credits          Float             @default(0) @map("credits")
+
+  coalitionId String? @map("coalition_id")
+  coalition   Coalition? @relation(fields: [coalitionId], references: [id], onDelete: SetNull)
+  coalitionRole String @default("MEMBER") @map("coalition_role")
+
+  receivedInvites CoalitionInvite[] @relation("ReceivedInvites")
+  sentInvites     CoalitionInvite[] @relation("SentInvites")
+
+  // Direct Messages (user-to-user, not coalition-specific for future reuse)
+  sentDMs       DirectMessage[] @relation("SentDMs")
+  receivedDMs   DirectMessage[] @relation("ReceivedDMs")
 
   @@map("users")
 }
 
+// Coalition (Alliance)
+model Coalition {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  tag         String   @unique
+  description String?
+  founderId   String   @map("founder_id")
+  isLocked    Boolean  @default(false) @map("is_locked")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  members User[]
+  messages CoalitionMessage[]
+  invites  CoalitionInvite[]
+
+  @@map("coalitions")
+}
+
+// Coalition Chat Message
+model CoalitionMessage {
+  id          String   @id @default(uuid())
+  coalitionId String   @map("coalition_id")
+  userId      String   @map("user_id")
+  content     String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  coalition Coalition @relation(fields: [coalitionId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("coalition_messages")
+}
+
+// Coalition Invite
+model CoalitionInvite {
+  id          String   @id @default(uuid())
+  coalitionId String   @map("coalition_id")
+  userId      String   @map("user_id")
+  senderId    String   @map("sender_id")
+  status      String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  coalition Coalition @relation(fields: [coalitionId], references: [id], onDelete: Cascade)
+  user      User      @relation("ReceivedInvites", fields: [userId], references: [id], onDelete: Cascade)
+  sender    User      @relation("SentInvites", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("coalition_invites")
+}
+
+// Direct Messages (user-to-user, supports future dedicated DM window)
+model DirectMessage {
+  id          String   @id @default(uuid())
+  senderId    String   @map("sender_id")
+  receiverId  String   @map("receiver_id")
+  content     String
+  isRead      Boolean  @default(false) @map("is_read")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  sender      User     @relation("SentDMs", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("ReceivedDMs", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId, createdAt])
+  @@index([receiverId, isRead])
+  @@map("direct_messages")
+}
+
 // Planetary Colony
+
 model Planet {
   id      String @id @default(uuid())
   ownerId String @map("owner_user_id")

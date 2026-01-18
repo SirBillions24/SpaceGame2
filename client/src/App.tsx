@@ -7,6 +7,7 @@ import PlanetInterior from './components/PlanetInterior';
 import RegionSelector from './components/RegionSelector';
 import GlobalHUD from './components/GlobalHUD';
 import TravelOverview from './components/TravelOverview';
+import CoalitionPanel from './components/CoalitionPanel';
 import { SourcePlanetDropdown } from './components/SourcePlanetDropdown';
 import { api, setAuthToken, getAuthToken, getCurrentUser, type Planet } from './lib/api';
 import './App.css';
@@ -19,6 +20,7 @@ function App() {
   const [showFleetPanel, setShowFleetPanel] = useState(false);
   const [showPlanetInterior, setShowPlanetInterior] = useState(false);
   const [showTravelOverview, setShowTravelOverview] = useState(false);
+  const [showCoalitionPanel, setShowCoalitionPanel] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [needsSpawn, setNeedsSpawn] = useState(false);
   const [hudPlanet, setHudPlanet] = useState<Planet | null>(null);
@@ -218,6 +220,9 @@ function App() {
         <button onClick={() => setShowTravelOverview(true)} style={{ background: '#ff9800', color: 'black', border: '2px solid #e65100', padding: '10px 20px', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold' }}>
           Travel Overview
         </button>
+        <button onClick={() => setShowCoalitionPanel(true)} style={{ background: '#9c27b0', color: 'white', border: '2px solid #7b1fa2', padding: '10px 20px', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold' }}>
+          Coalition
+        </button>
         <button onClick={handleLogout} style={{ background: '#d32f2f', color: 'white', border: '2px solid #b71c1c', padding: '10px 20px', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold' }}>
           Logout
         </button>
@@ -236,7 +241,7 @@ function App() {
           mapContainer={mapContainer}
           onEnterPlanet={handleEnterPlanet}
           onClose={handleCloseBanner}
-          hasIntelHub={hasIntelHub && (selectedPlanet.ownerId === currentUser?.id || selectedPlanet.ownerId === getCurrentUser()?.userId)}
+          hasIntelHub={hasIntelHub && (selectedPlanet.ownerId === currentUser?.userId || selectedPlanet.ownerId === getCurrentUser()?.userId)}
           onLaunchProbe={() => {
             setIsEspionageMode(true);
             setSelectedPlanet(null);
@@ -280,6 +285,10 @@ function App() {
 
       {showTravelOverview && (
         <TravelOverview onClose={() => setShowTravelOverview(false)} />
+      )}
+
+      {showCoalitionPanel && (
+        <CoalitionPanel onClose={() => setShowCoalitionPanel(false)} />
       )}
     </div>
   );

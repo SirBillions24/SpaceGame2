@@ -463,6 +463,7 @@ export async function syncPlanetResources(planetId: string) {
     console.log(`[Desertion] Planet ${planet.name} ran out of food.`);
 
     const sustainableUpkeep = Math.max(0, stats.foodRate);
+    const lostUnits: Record<string, number> = {};
 
     if (stats.foodConsumption > sustainableUpkeep) {
       const deficitRatio = sustainableUpkeep / stats.foodConsumption;
@@ -470,16 +471,36 @@ export async function syncPlanetResources(planetId: string) {
       for (const u of planet.units) {
         if (u.count > 0) {
           const newCount = Math.floor(u.count * deficitRatio);
-          if (newCount !== u.count) {
+          const lostCount = u.count - newCount;
+          if (lostCount > 0) {
             await prisma.planetUnit.update({
               where: { id: u.id },
               data: { count: newCount }
             });
+            lostUnits[u.unitType] = lostCount;
             u.count = newCount;
           }
         }
       }
     }
+
+    // Create inbox message for desertion if units were lost
+    if (Object.keys(lostUnits).length > 0 && planet.ownerId) {
+      await prisma.inboxMessage.create({
+        data: {
+          userId: planet.ownerId,
+          type: 'starvation_desertion',
+          title: 'Troops Deserted (Starvation)',
+          content: JSON.stringify({
+            planetName: planet.name,
+            lostUnits,
+            sustainableUpkeep,
+            totalUpkeep: stats.foodConsumption
+          })
+        }
+      });
+    }
+
     newFood = 0;
   }
 

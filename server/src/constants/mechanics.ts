@@ -192,6 +192,20 @@ export const MIN_TRAVEL_TIME = 5;
 export const PROBE_SPEED_MULTIPLIER = 1.5;
 
 // =============================================================================
+// COALITIONS (ALLIANCES)
+// =============================================================================
+
+/**
+ * Cost in Credits to found a new Coalition.
+ */
+export const COALITION_FOUNDING_COST = 50000;
+
+/**
+ * Maximum number of members in a Coalition for MVP.
+ */
+export const COALITION_MAX_MEMBERS = 15;
+
+// =============================================================================
 // STABILITY (Legacy - use playerConfig.ts STABILITY_FORMULA instead)
 // =============================================================================
 

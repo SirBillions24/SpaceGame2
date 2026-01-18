@@ -7,6 +7,9 @@ export interface Planet {
   name: string;
   ownerId: string;
   ownerName: string;
+  coalitionId?: string | null;
+  coalitionTag?: string | null;
+  coalitionName?: string | null;
   units?: Record<string, number>;
   resources?: { carbon: number; titanium: number; food: number; credits: number; darkMatter: number };
   production?: { carbon: number; titanium: number; food: number };
@@ -80,8 +83,9 @@ export const getAuthToken = () => {
 
 const getHeaders = (includeAuth = false) => {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
-  if (includeAuth && authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
+  const token = getAuthToken();
+  if (includeAuth && token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
 };
@@ -701,6 +705,233 @@ export const api = {
   async getBlackHoles(): Promise<{ blackHoles: { id: string; x: number; y: number; radius: number }[] }> {
     const response = await fetch(`${API_BASE_URL}/world/black-holes`);
     if (!response.ok) throw new Error('Failed to fetch black holes');
+    return response.json();
+  },
+
+  // Coalition API
+  async getCoalitionConstants(): Promise<{ maxMembers: number }> {
+    const response = await fetch(`${API_BASE_URL}/coalitions/constants`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch coalition constants');
+    return response.json();
+  },
+
+  async searchCoalitions(query: string = '') {
+    const response = await fetch(`${API_BASE_URL}/coalitions/search?query=${encodeURIComponent(query)}`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to search coalitions');
+    return response.json();
+  },
+
+  async createCoalition(name: string, tag: string, description: string) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/create`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ name, tag, description }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create coalition');
+    }
+    return response.json();
+  },
+
+  async joinCoalition(coalitionId: string) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/join/${coalitionId}`, {
+      method: 'POST',
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to join coalition');
+    }
+    return response.json();
+  },
+
+  async leaveCoalition() {
+    const response = await fetch(`${API_BASE_URL}/coalitions/leave`, {
+      method: 'POST',
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to leave coalition');
+    }
+    return response.json();
+  },
+
+  async getMyCoalition() {
+    const response = await fetch(`${API_BASE_URL}/coalitions/my`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch coalition details');
+    return response.json();
+  },
+
+  async getCoalitionChat(cursor?: string, limit = 50) {
+    const params = new URLSearchParams();
+    if (cursor) params.set('cursor', cursor);
+    params.set('limit', String(limit));
+
+    const response = await fetch(`${API_BASE_URL}/coalitions/chat?${params}`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch chat history');
+    return response.json();
+  },
+
+  async sendCoalitionMessage(content: string) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/chat`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ content }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to send message');
+    }
+    return response.json();
+  },
+
+  // Direct Messages API
+  async getDirectMessages(partnerId: string, cursor?: string, limit = 50) {
+    const params = new URLSearchParams();
+    if (cursor) params.set('cursor', cursor);
+    params.set('limit', String(limit));
+
+    const response = await fetch(`${API_BASE_URL}/coalitions/dm/${partnerId}?${params}`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch messages');
+    }
+    return response.json();
+  },
+
+  async sendDirectMessage(partnerId: string, content: string) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/dm/${partnerId}`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ content }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to send message');
+    }
+    return response.json();
+  },
+
+  async getDmConversations() {
+    const response = await fetch(`${API_BASE_URL}/coalitions/dm`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch conversations');
+    return response.json();
+  },
+
+  async markDmConversationRead(partnerId: string) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/dm/${partnerId}/read`, {
+      method: 'POST',
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to mark as read');
+    return response.json();
+  },
+
+  async updateCoalitionSettings(settings: { isLocked?: boolean, description?: string }) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/settings`, {
+      method: 'PATCH',
+      headers: getHeaders(true),
+      body: JSON.stringify(settings),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update settings');
+    }
+    return response.json();
+  },
+
+  async promoteCoalitionMember(targetUserId: string) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/promote`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ targetUserId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to promote member');
+    }
+    return response.json();
+  },
+
+  async demoteCoalitionMember(targetUserId: string) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/demote`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ targetUserId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to demote member');
+    }
+    return response.json();
+  },
+
+  async kickCoalitionMember(targetUserId: string) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/kick`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ targetUserId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to kick member');
+    }
+    return response.json();
+  },
+
+  async inviteToCoalition(username: string) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/invite`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ username }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to send invite');
+    }
+    return response.json();
+  },
+
+  async respondToCoalitionInvite(inviteId: string, accept: boolean) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/invite/respond`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ inviteId, accept }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to respond to invite');
+    }
+    return response.json();
+  },
+
+  async getCoalitionRankings() {
+    const response = await fetch(`${API_BASE_URL}/coalitions/rankings`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch rankings');
+    return response.json();
+  },
+
+  async getCoalition(id: string) {
+    const response = await fetch(`${API_BASE_URL}/coalitions/${id}`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch coalition details');
     return response.json();
   }
 };

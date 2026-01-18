@@ -43,6 +43,7 @@ export default function WorldMap({
 
   // Storage for map objects
   const planetSpritesRef = useRef<Map<string, PIXI.Sprite>>(new Map());
+  const planetLabelsRef = useRef<Map<string, PIXI.Text>>(new Map());
 
   // Storage for fleet animation objects [fleetId -> { sprite, graphics }]
   const fleetObjectsRef = useRef<Map<string, { sprite: PIXI.Sprite, graphics: PIXI.Graphics, label: PIXI.Text }>>(new Map());
@@ -52,8 +53,18 @@ export default function WorldMap({
   const probeObjectsRef = useRef<Map<string, { sprite: PIXI.Sprite, graphics: PIXI.Graphics }>>(new Map());
 
   const [planets, setPlanets] = useState<Planet[]>([]);
+  const [myCoalitionId, setMyCoalitionId] = useState<string | null | undefined>(undefined);
   const [localEspionageMode, setLocalEspionageMode] = useState(false);
   const [selectedProbeType, setSelectedProbeType] = useState('recon_probe');
+
+  useEffect(() => {
+    // Fetch my coalition
+    api.getMyCoalition().then(data => {
+      setMyCoalitionId(data.coalition?.id || null);
+    }).catch(() => {
+      setMyCoalitionId(null);
+    });
+  }, []);
 
   useEffect(() => {
     if (ghostProbeRef.current) {
@@ -119,7 +130,7 @@ export default function WorldMap({
 
   useEffect(() => {
     const initPixi = async () => {
-      if (!canvasRef.current || appRef.current) return;
+      if (!canvasRef.current || appRef.current || myCoalitionId === undefined) return;
 
       try {
         const app = new PIXI.Application();
@@ -266,7 +277,33 @@ export default function WorldMap({
             s.cursor = 'pointer';
             s.on('pointerdown', () => onPlanetClick?.(p));
 
-            // Highlighting
+            // Highlighting & Label
+            const isAlly = p.coalitionId && p.coalitionId === myCoalitionId;
+            const isMe = p.ownerId === currentUserId;
+
+            const labelText = p.isNpc
+              ? `LVL ${p.npcLevel} ${p.name}`
+              : (p.coalitionTag ? `[${p.coalitionTag}] ${p.ownerName}` : p.ownerName);
+
+            const labelColor = isMe ? 0x00ff88 : (isAlly ? 0xd500f9 : 0x00f3ff);
+
+            const label = new PIXI.Text({
+              text: labelText,
+              style: {
+                fontFamily: 'Courier New',
+                fontSize: 14,
+                fill: labelColor,
+                fontWeight: 'bold',
+                stroke: 0x000000,
+                strokeThickness: 3
+              }
+            });
+            label.anchor.set(0.5, -1.2);
+            label.x = p.x;
+            label.y = p.y;
+            planetLayer.addChild(label);
+            planetLabelsRef.current.set(p.id, label);
+
             if (p.isNpc) {
               // Only tint if we are using the fallback texture
               if (texture === defaultTexture) {
@@ -274,10 +311,13 @@ export default function WorldMap({
               }
             } else if (sourcePlanetId === p.id) {
               s.tint = 0x00ff00; // distinct tint for selected source
+            } else if (isAlly) {
+              s.tint = 0xd500f9; // Purple tint for coalition allies
             }
 
             planetLayer.addChild(s);
             planetSpritesRef.current.set(p.id, s);
+
           });
           setLoading(false);
         } catch (e) {
@@ -564,7 +604,7 @@ export default function WorldMap({
       appRef.current?.destroy(true, { children: true });
       appRef.current = null;
     };
-  }, []);
+  }, [myCoalitionId]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>

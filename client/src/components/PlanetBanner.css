@@ -60,6 +60,27 @@
   letter-spacing: 1px;
 }
 
+.banner-coalition-tag {
+  color: #ff00ff;
+  font-weight: bold;
+}
+
+.banner-owner {
+  color: #8899bb;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 2px;
+  text-align: center;
+}
+
+.banner-coalition-name {
+  color: #ff00ff;
+  font-size: 10px;
+  font-style: italic;
+  margin-top: 1px;
+}
+
 .banner-buttons {
   display: flex;
   gap: 10px;

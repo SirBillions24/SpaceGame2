@@ -148,7 +148,9 @@ export default function Mailbox({ onClose }: MailboxProps) {
                                         <div className="report-icon">
                                             {item.type === 'battle' ? (item.isAttacker ? '⚔️' : '🛡️') :
                                                 item.type === 'espionage' ? '🛰️' :
-                                                    (item.type === 'message' && item.subType === 'transfer_complete') ? '📦' : '✉️'}
+                                                    (item.type === 'message' && item.subType === 'transfer_complete') ? '📦' : 
+                                                        (item.type === 'message' && item.subType === 'starvation_desertion') ? '💀' : 
+                                                            (item.type === 'message' && item.subType === 'coalition_invite') ? '🤝' : '✉️'}
                                         </div>
                                         <div className="report-summary">
                                             <div className="report-title">{item.title}</div>
@@ -407,6 +409,16 @@ function MessageView({ id, items, onBack }: { id: string, items: any[], onBack: 
         return <TransferCompleteMessageView message={message} onBack={onBack} />;
     }
 
+    // Handle starvation desertion messages with special styling
+    if (message.subType === 'starvation_desertion') {
+        return <StarvationDesertionView message={message} onBack={onBack} />;
+    }
+
+    // Handle coalition invite messages
+    if (message.subType === 'coalition_invite') {
+        return <CoalitionInviteView message={message} onBack={onBack} />;
+    }
+
     return (
         <div className="message-view">
             <div className="br-nav">
@@ -529,6 +541,176 @@ function TransferCompleteMessageView({ message, onBack }: { message: any, onBack
                     No units or resources were transferred with this fleet.
                 </div>
             )}
+        </div>
+    );
+}
+
+// Starvation Desertion Message View
+interface StarvationData {
+    planetName: string;
+    lostUnits: Record<string, number>;
+    sustainableUpkeep: number;
+    totalUpkeep: number;
+}
+
+function StarvationDesertionView({ message, onBack }: { message: any, onBack: () => void }) {
+    let data: StarvationData | null = null;
+    try {
+        data = JSON.parse(message.content);
+    } catch (e) {
+        // Fall back to text display
+    }
+
+    if (!data) {
+        return (
+            <div className="message-view">
+                <div className="br-nav">
+                    <button className="back-btn" onClick={onBack}>← Back</button>
+                </div>
+                <div className="message-header">
+                    <h3>{message.title}</h3>
+                    <div className="message-date">{new Date(message.createdAt).toLocaleString()}</div>
+                </div>
+                <div className="message-body">{message.content}</div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="message-view starvation-desertion-view">
+            <div className="br-nav">
+                <button className="back-btn" onClick={onBack}>← Back</button>
+            </div>
+            <div className="report-header defeat">
+                <h3>TROOPS DESERTED</h3>
+                <div className="sub-status">Critical Food Shortage on {data.planetName}</div>
+            </div>
+
+            <div style={{ padding: '20px', background: 'rgba(255, 0, 0, 0.05)', borderRadius: '8px', border: '1px solid rgba(255, 0, 0, 0.2)', marginTop: '15px' }}>
+                <p style={{ color: '#ffb74d', margin: '0 0 15px 0', fontSize: '1rem', lineHeight: '1.4' }}>
+                    Supplies ran dry on <strong>{data.planetName}</strong>. Without nutrient paste, your stationed troops have abandoned their posts.
+                </p>
+
+                <div style={{ display: 'flex', justifyContent: 'space-around', margin: '20px 0', textAlign: 'center' }}>
+                    <div>
+                        <div style={{ color: '#666', fontSize: '0.8rem', textTransform: 'uppercase' }}>Requirement</div>
+                        <div style={{ color: '#ff5252', fontSize: '1.2rem', fontWeight: 'bold' }}>{Math.round(data.totalUpkeep)}/hr</div>
+                    </div>
+                    <div style={{ alignSelf: 'center', fontSize: '1.2rem', color: '#444' }}>VS</div>
+                    <div>
+                        <div style={{ color: '#666', fontSize: '0.8rem', textTransform: 'uppercase' }}>Sustainable</div>
+                        <div style={{ color: '#4caf50', fontSize: '1.2rem', fontWeight: 'bold' }}>{Math.round(data.sustainableUpkeep)}/hr</div>
+                    </div>
+                </div>
+
+                <div style={{ marginTop: '20px' }}>
+                    <h4 style={{ margin: '0 0 10px 0', color: '#ff5252', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        💀 Casualties of Starvation
+                    </h4>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                        {Object.entries(data.lostUnits).map(([unit, count]) => (
+                            <div key={unit} style={{ background: 'rgba(255, 82, 82, 0.15)', padding: '6px 12px', borderRadius: '4px', border: '1px solid rgba(255, 82, 82, 0.3)' }}>
+                                <span style={{ textTransform: 'capitalize', color: '#ff8a80' }}>{unit.replace(/_/g, ' ')}</span>: <span style={{ fontWeight: 'bold', color: '#fff' }}>-{count}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <p style={{ marginTop: '20px', color: '#888', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                    Recommendation: Increase food production or relocate troops to prevent further desertion.
+                </p>
+            </div>
+        </div>
+    );
+}
+
+// Coalition Invite Message View
+interface InviteData {
+    inviteId: string;
+    coalitionId: string;
+    coalitionName: string;
+    coalitionTag: string;
+    senderName: string;
+}
+
+function CoalitionInviteView({ message, onBack }: { message: any, onBack: () => void }) {
+    const [responding, setSending] = useState(false);
+    const [result, setResult] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    let data: InviteData | null = null;
+    try {
+        data = JSON.parse(message.content);
+    } catch (e) { }
+
+    if (!data) return <div className="message-view">Invalid invite data.</div>;
+
+    const handleResponse = async (accept: boolean) => {
+        try {
+            setSending(true);
+            setError(null);
+            const response = await api.respondToCoalitionInvite(data!.inviteId, accept);
+            setResult(response.message);
+            // If they accepted, we might want to refresh user state globally, 
+            // but for now just show success.
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setSending(false);
+        }
+    };
+
+    if (result) {
+        return (
+            <div className="message-view">
+                <div className="br-nav"><button className="back-btn" onClick={onBack}>← Back</button></div>
+                <div className="message-header"><h3>Invitation Result</h3></div>
+                <div className="message-body" style={{ textAlign: 'center', padding: '40px' }}>
+                    <div style={{ fontSize: '1.2rem', color: '#00ff88', marginBottom: '20px' }}>{result}</div>
+                    <button className="back-btn" onClick={onBack}>Return to Comms</button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="message-view coalition-invite-view">
+            <div className="br-nav"><button className="back-btn" onClick={onBack}>← Back</button></div>
+            <div className="report-header victory" style={{ background: 'rgba(156, 39, 176, 0.2)', borderColor: '#9c27b0' }}>
+                <h3>COALITION INVITATION</h3>
+                <div className="sub-status">Encrypted Broadcast from {data.senderName}</div>
+            </div>
+
+            <div style={{ padding: '30px', textAlign: 'center', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', marginTop: '20px' }}>
+                <p style={{ fontSize: '1.1rem', marginBottom: '10px' }}>You have been requested to join</p>
+                <h2 style={{ color: '#00f3ff', margin: '0 0 5px 0' }}>{data.coalitionName}</h2>
+                <div style={{ color: '#ff00ff', fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '30px' }}>[{data.coalitionTag}]</div>
+
+                {error && <div style={{ color: '#f44336', marginBottom: '20px' }}>{error}</div>}
+
+                <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+                    <button 
+                        onClick={() => handleResponse(true)} 
+                        disabled={responding}
+                        style={{ 
+                            padding: '12px 40px', background: '#00ff88', color: '#000', 
+                            border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' 
+                        }}
+                    >
+                        ACCEPT
+                    </button>
+                    <button 
+                        onClick={() => handleResponse(false)} 
+                        disabled={responding}
+                        style={{ 
+                            padding: '12px 40px', background: 'transparent', color: '#ff4444', 
+                            border: '2px solid #ff4444', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' 
+                        }}
+                    >
+                        DECLINE
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }

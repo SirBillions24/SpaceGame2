@@ -245,7 +245,7 @@ export const GEAR_NAME_PREFIXES: Record<GearRarity, string[]> = {
     common: ['Basic', 'Standard', 'Simple'],
     uncommon: ['Refined', 'Enhanced', 'Improved'],
     rare: ['Advanced', 'Superior', 'Elite'],
-    epic: ['Masterwork', 'Legendary', 'Exalted'],
+    epic: ['Masterwork', 'Ascended', 'Exalted'],
     legendary: ['Mythic', 'Transcendent', 'Divine'],
 };
 
