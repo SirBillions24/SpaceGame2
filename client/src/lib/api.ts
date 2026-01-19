@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export interface Planet {
   id: string;
@@ -11,6 +11,8 @@ export interface Planet {
   coalitionTag?: string | null;
   coalitionName?: string | null;
   units?: Record<string, number>;
+  reserveUnits?: Record<string, number>; // Units not assigned to defense (available for dispatch)
+  unitsOnDefense?: Record<string, number>; // Units assigned to defense lanes
   resources?: { carbon: number; titanium: number; food: number; credits: number; darkMatter: number };
   production?: { carbon: number; titanium: number; food: number };
   gridSize?: number; // Legacy, use gridSizeX/gridSizeY
@@ -574,6 +576,19 @@ export const api = {
 
   async devFastForward(planetId: string) {
     const response = await fetch(`${API_BASE_URL}/dev/fast-forward`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ planetId }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Dev tool failed');
+    }
+    return response.json();
+  },
+
+  async devCleanUnits(planetId: string) {
+    const response = await fetch(`${API_BASE_URL}/dev/clean-units`, {
       method: 'POST',
       headers: getHeaders(true),
       body: JSON.stringify({ planetId }),

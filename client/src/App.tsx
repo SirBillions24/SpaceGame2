@@ -10,6 +10,8 @@ import TravelOverview from './components/TravelOverview';
 import CoalitionPanel from './components/CoalitionPanel';
 import { SourcePlanetDropdown } from './components/SourcePlanetDropdown';
 import { api, setAuthToken, getAuthToken, getCurrentUser, type Planet } from './lib/api';
+import { useSocketEvent } from './hooks/useSocketEvent';
+import { useSocket } from './lib/SocketContext';
 import './App.css';
 
 function App() {
@@ -41,16 +43,29 @@ function App() {
     }
   }, []);
 
-  // Periodic user & planet status check
+  // WebSocket subscription for real-time user updates
+  useSocketEvent<any>('user:updated', useCallback((data) => {
+    setCurrentUser((prev: any) => prev ? { ...prev, ...data } : data);
+  }, []));
+
+  // WebSocket subscription for real-time planet updates
+  useSocketEvent<Planet>('planet:updated', useCallback((data) => {
+    if (hudPlanet && data.id === hudPlanet.id) {
+      setHudPlanet(data);
+    }
+  }, [hudPlanet?.id]));
+
+  // Fallback polling when socket disconnects
+  const { isConnected } = useSocket();
   useEffect(() => {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn || isConnected) return;
 
     const interval = setInterval(() => {
       checkUserStatus();
-    }, 10000); // Check every 10 seconds for XP/Level/Planet changes
+    }, 10000);
 
     return () => clearInterval(interval);
-  }, [isLoggedIn, hudPlanet?.id]);
+  }, [isLoggedIn, isConnected]);
 
   const checkUserStatus = (targetPlanetId?: string) => {
     // Fetch full user profile (with XP/Level)

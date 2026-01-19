@@ -116,7 +116,7 @@ Output:
 Create `/etc/systemd/system/galactic-worker.service`:
 ```ini
 [Unit]
-Description=Galactic Conquest Game Worker
+Description=Dread Horizon Game Worker
 After=network.target
 
 [Service]

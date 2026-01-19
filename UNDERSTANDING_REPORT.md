@@ -1,8 +1,8 @@
-# Understanding Report: Galactic Conquest Codebase Analysis
+# Understanding Report: Dread Horizon Codebase Analysis
 
 ## Executive Summary
 
-This report documents my understanding of the **Galactic Conquest** codebase after reviewing the core documentation, database schema, and tracing the two critical functions: `syncPlanetResources` (Economy) and `resolveCombat` (Warfare). The game is a sci-fi themed persistent browser-based strategy game inspired by Goodgame Empire mechanics.
+This report documents my understanding of the **Dread Horizon** codebase after reviewing the core documentation, database schema, and tracing the two critical functions: `syncPlanetResources` (Economy) and `resolveCombat` (Warfare). The game is a sci-fi themed persistent browser-based strategy game inspired by Goodgame Empire mechanics.
 
 ---
 
@@ -14,7 +14,7 @@ This report documents my understanding of the **Galactic Conquest** codebase aft
 - **Gameplay**: Strategic depth with 3-lane combat, resource management, and persistent world
 
 ### 1.2 Key Terminology Mappings
-| Medieval (GGE) | Sci-Fi (Galactic Conquest) |
+| Medieval (GGE) | Sci-Fi (Dread Horizon) |
 |----------------|----------------------------|
 | Castle | Planetary Colony |
 | World Map | Sector Chart |

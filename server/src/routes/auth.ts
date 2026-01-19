@@ -21,7 +21,8 @@ interface LoginBody {
 // Register new user
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { username, email, password }: RegisterBody = req.body;
+    const { username, email: rawEmail, password }: RegisterBody = req.body;
+    const email = rawEmail?.toLowerCase();
 
     // Validation
     if (!username || !email || !password) {
@@ -101,7 +102,8 @@ router.post('/register', async (req: Request, res: Response) => {
 // Login
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password }: LoginBody = req.body;
+    const { email: rawEmail, password }: LoginBody = req.body;
+    const email = rawEmail?.toLowerCase();
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });

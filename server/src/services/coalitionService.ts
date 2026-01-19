@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma';
 import { COALITION_FOUNDING_COST, COALITION_MAX_MEMBERS } from '../constants/mechanics';
+import { socketService } from './socketService';
 
 export async function createCoalition(userId: string, name: string, tag: string, description?: string) {
     // 1. Check if user already in a coalition
@@ -372,7 +373,8 @@ export async function getCoalitionDetails(coalitionId: string) {
                     username: true,
                     level: true,
                     xp: true,
-                    coalitionRole: true
+                    coalitionRole: true,
+                    lastActiveAt: true
                 }
             }
         }
@@ -402,7 +404,7 @@ export async function sendCoalitionMessage(userId: string, coalitionId: string, 
         throw new Error('You are not a member of this coalition');
     }
 
-    return prisma.coalitionMessage.create({
+    const message = await prisma.coalitionMessage.create({
         data: {
             coalitionId,
             userId,
@@ -414,6 +416,17 @@ export async function sendCoalitionMessage(userId: string, coalitionId: string, 
             }
         }
     });
+
+    // Emit real-time chat message to coalition room
+    socketService.emitToCoalition(coalitionId, 'chat:message', {
+        id: message.id,
+        userId: message.userId,
+        username: message.user.username,
+        content: message.content,
+        createdAt: message.createdAt,
+    });
+
+    return message;
 }
 
 export async function getCoalitionChat(coalitionId: string, cursor?: string, limit = 50) {

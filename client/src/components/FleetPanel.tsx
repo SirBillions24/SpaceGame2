@@ -45,10 +45,13 @@ export default function FleetPanel({ fromPlanet, toPlanet, onClose, onFleetCreat
     try {
       const planet = await api.getPlanet(fromPlanet.id);
       setCurrentFromPlanet(planet); // Update with fresh data (including tools)
-      setAvailableUnits(planet.units || {});
+      // Use reserveUnits (units not on defense) for dispatch availability
+      // Fall back to units if reserveUnits not provided (for backwards compatibility)
+      const unitsForDispatch = planet.reserveUnits || planet.units || {};
+      setAvailableUnits(unitsForDispatch);
       // Init flat units
       const initial: Record<string, number> = {};
-      Object.keys(planet.units || {}).forEach(u => initial[u] = 0);
+      Object.keys(unitsForDispatch).forEach(u => initial[u] = 0);
       setFlatUnits(initial);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load units');

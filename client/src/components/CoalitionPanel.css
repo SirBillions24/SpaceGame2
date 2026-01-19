@@ -254,6 +254,26 @@
 .m-name {
     font-weight: bold;
     margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.online-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.online-status.online {
+    background: #4caf50;
+    box-shadow: 0 0 4px #4caf50;
+}
+
+.online-status.offline {
+    background: #666;
 }
 
 .m-level {
@@ -691,6 +711,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .dm-unread-badge {

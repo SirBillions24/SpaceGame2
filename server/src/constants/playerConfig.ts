@@ -18,9 +18,7 @@
  * - Unit mix affects what strategies new players can pursue
  */
 export const STARTING_UNITS: Record<string, number> = {
-    marine: 50,     // Basic melee infantry - good for early NPC raids
-    ranger: 30,     // Ranged support - helps with tougher fights
-    sentinel: 20,   // Heavy defense - protects the home base
+    marine: 10,     // Basic starting force
 };
 
 /**

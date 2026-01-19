@@ -1,4 +1,4 @@
-# Galactic Conquest
+# Dread Horizon
 
 A browser-based, persistent, multiplayer strategy game inspired by classic empire-building games like Goodgame Empire. Features deep sci-fi economy, tactical 3-sector combat with tools and admirals, and procedural NPC raider bases.
 
@@ -29,7 +29,7 @@ A browser-based, persistent, multiplayer strategy game inspired by classic empir
 ## 🏗️ Project Structure
 
 ```
-galactic-conquest/
+dread-horizon/
 ├── client/          # React + Vite frontend
 │   └── src/
 │       ├── components/   # UI components

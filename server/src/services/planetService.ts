@@ -27,11 +27,89 @@ import {
   DEMOLISH_TIME_RATE,
   MAX_SPAWN_ATTEMPTS,
 } from '../constants/playerConfig';
+import { socketService } from './socketService';
 
 const MIN_PLANET_DISTANCE = MAP_CONFIG.minPlanetDistance;
 
 interface UnitCounts {
   [unitType: string]: number;
+}
+
+/**
+ * Format planet data for socket emission - converts raw Prisma data to client-expected format
+ */
+export async function formatPlanetForSocket(planet: any) {
+  const rates = calculatePlanetRates(planet);
+
+  // Fetch user-level resources (credits and darkMatter are stored on User, not Planet)
+  const user = await prisma.user.findUnique({
+    where: { id: planet.ownerId },
+    select: { credits: true, darkMatter: true }
+  });
+
+  return {
+    id: planet.id,
+    x: planet.x,
+    y: planet.y,
+    name: planet.name,
+    ownerId: planet.ownerId,
+    resources: {
+      carbon: planet.carbon,
+      titanium: planet.titanium,
+      food: planet.food,
+      credits: user?.credits || 0,
+      darkMatter: user?.darkMatter || 0,
+    },
+    // Only send primitive stats values - exclude nested building breakdown objects
+    stats: {
+      carbonRate: rates.carbonRate,
+      titaniumRate: rates.titaniumRate,
+      foodRate: rates.foodRate,
+      netFoodRate: rates.netFoodRate,
+      foodConsumption: rates.foodConsumption,
+      creditRate: rates.creditRate,
+      darkMatterRate: rates.darkMatterRate,
+      population: rates.population,
+      publicOrder: rates.publicOrder,
+      productivity: rates.productivity,
+      maxStorage: rates.maxStorage,
+      workforceRequired: rates.workforceRequired,
+      workforceEfficiency: rates.workforceEfficiency,
+      staffingRatio: rates.staffingRatio,
+      overstaffBonus: rates.overstaffBonus,
+    },
+    production: {
+      carbon: rates.carbonRate,
+      titanium: rates.titaniumRate,
+      food: rates.foodRate,
+    },
+    construction: {
+      isBuilding: planet.isBuilding,
+      activeBuildId: planet.activeBuildId,
+      buildFinishTime: planet.buildFinishTime?.toISOString() || null,
+    },
+    buildings: planet.buildings?.map((b: any) => ({
+      id: b.id,
+      type: b.type,
+      level: b.level,
+      x: b.x,
+      y: b.y,
+      status: b.status,
+    })),
+    units: planet.units?.reduce((acc: any, u: any) => {
+      acc[u.unitType] = u.count;
+      return acc;
+    }, {}),
+    recruitmentQueue: planet.recruitmentQueue ? JSON.parse(planet.recruitmentQueue) : [],
+    taxRate: planet.taxRate,
+    gridSizeX: planet.gridSizeX,
+    gridSizeY: planet.gridSizeY,
+    defense: {
+      canopy: planet.energyCanopyLevel,
+      minefield: planet.orbitalMinefieldLevel,
+      hub: planet.dockingHubLevel,
+    },
+  };
 }
 
 // NOTE: STARTING_UNITS is now imported from playerConfig.ts
@@ -569,8 +647,8 @@ export async function syncPlanetResources(planetId: string) {
       carbon: newCarbon,
       titanium: newTitanium,
       food: newFood,
-      credits: newCredits,
-      darkMatter: newDarkMatter, // Always 0 as production moves to user
+      credits: newCredits, // Always 0, stored on User
+      darkMatter: newDarkMatter, // Always 0, stored on User
       stability: Math.round(stats.publicOrder),
       population: stats.population,
       lastResourceUpdate: now,
@@ -578,6 +656,17 @@ export async function syncPlanetResources(planetId: string) {
     },
     include: { units: true, buildings: true, tools: true },
   });
+
+  // Force-fetch fresh buildings to ensure status is up-to-date (prevent stale "constructing" status)
+  const freshBuildings = await prisma.building.findMany({
+    where: { planetId: planetId }
+  });
+  (updatedPlanet as any).buildings = freshBuildings;
+
+  // Emit socket event for real-time client updates
+  if (updatedPlanet.ownerId) {
+    socketService.emitToUser(updatedPlanet.ownerId, 'planet:updated', await formatPlanetForSocket(updatedPlanet));
+  }
 
   return updatedPlanet;
 }
@@ -667,7 +756,7 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
   });
 
   // Set Planet Construction State (skip deduction in Free Build mode)
-  await prisma.planet.update({
+  const updatedPlanet = await prisma.planet.update({
     where: { id: planet.id },
     data: {
       carbon: isFreeBuild ? planet.carbon : { decrement: carbonCost },
@@ -675,8 +764,12 @@ export async function placeBuilding(planetId: string, type: string, x: number, y
       isBuilding: true,
       activeBuildId: building.id,
       buildFinishTime: finishTime
-    }
+    },
+    include: { units: true, buildings: true, tools: true }
   });
+
+  // Emit socket event for real-time client updates
+  socketService.emitToUser(planet.ownerId, 'planet:updated', await formatPlanetForSocket(updatedPlanet));
 
   return building;
 }
@@ -722,7 +815,7 @@ export async function demolishBuilding(planetId: string, buildingId: string) {
   });
 
   // Set Planet State
-  await prisma.planet.update({
+  const updatedPlanet = await prisma.planet.update({
     where: { id: planetId },
     data: {
       carbon: { increment: carbonRefund },
@@ -730,8 +823,12 @@ export async function demolishBuilding(planetId: string, buildingId: string) {
       isBuilding: true,
       activeBuildId: buildingId,
       buildFinishTime: finishTime
-    }
+    },
+    include: { units: true, buildings: true, tools: true }
   });
+
+  // Emit socket event for real-time client updates
+  socketService.emitToUser(planet.ownerId, 'planet:updated', await formatPlanetForSocket(updatedPlanet));
 
   return { buildingId, finishTime, carbonRefund, titaniumRefund };
 }
@@ -763,7 +860,7 @@ async function upgradeBuilding(planet: any, building: any) {
   });
 
   // Update Planet State
-  await prisma.planet.update({
+  const updatedPlanet = await prisma.planet.update({
     where: { id: planet.id },
     data: {
       carbon: { decrement: carbonCost },
@@ -771,8 +868,12 @@ async function upgradeBuilding(planet: any, building: any) {
       isBuilding: true,
       activeBuildId: building.id,
       buildFinishTime: finishTime
-    }
+    },
+    include: { units: true, buildings: true, tools: true }
   });
+
+  // Emit socket event for real-time client updates
+  socketService.emitToUser(planet.ownerId, 'planet:updated', await formatPlanetForSocket(updatedPlanet));
 
   return { ...building, status: 'upgrading' };
 }
@@ -918,14 +1019,18 @@ export async function recruitUnit(planetId: string, unitType: string, count: num
   recruitmentQueue.push(newItem);
 
   // Update DB - Deduct planet resources (skip in free build mode)
-  await prisma.planet.update({
+  const updatedPlanet = await prisma.planet.update({
     where: { id: planetId },
     data: {
       carbon: isFreeBuild ? planet.carbon : { decrement: totalCarbon },
       titanium: isFreeBuild ? planet.titanium : { decrement: totalTitanium },
       recruitmentQueue: JSON.stringify(recruitmentQueue)
-    }
+    },
+    include: { units: true, buildings: true, tools: true }
   });
+
+  // Emit socket event for real-time client updates
+  socketService.emitToUser(planet.ownerId, 'planet:updated', await formatPlanetForSocket(updatedPlanet));
 
   // Deduct user credits if applicable (skip in free build mode)
   if (!isFreeBuild && totalCredits > 0) {

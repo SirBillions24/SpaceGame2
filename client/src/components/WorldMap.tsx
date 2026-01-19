@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
 import { api, type Planet, type Fleet } from '../lib/api';
+import { useSocketEvent } from '../hooks/useSocketEvent';
 import { ProceduralBackgroundManager } from './ProceduralBackground';
 import { SPRITE_CONFIG, getPlanetSpritePath } from '../config/spriteConfig';
 
@@ -100,9 +101,9 @@ export default function WorldMap({
   const cameraRef = useRef({ x: 0, y: 0, scale: 1 });
   const lastRenderedTilesRef = useRef<Set<string>>(new Set());
 
-  // Fleet & Probe Polling
+  // Initial data fetch on mount
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchInitialData = async () => {
       try {
         const [fleetData, probeData] = await Promise.all([
           api.getFleets(),
@@ -123,10 +124,64 @@ export default function WorldMap({
       }
     };
 
-    fetchData();
-    const interval = setInterval(fetchData, 2000); // Poll every 2s
-    return () => clearInterval(interval);
+    fetchInitialData();
   }, [currentUserId]);
+
+  // WebSocket subscription for real-time fleet updates
+  useSocketEvent<Fleet>('fleet:updated', useCallback((data) => {
+    // Remove completed/destroyed fleets from map
+    if (data.status === 'completed' || data.status === 'destroyed') {
+      latestFleetsRef.current = latestFleetsRef.current.filter(f => f.id !== data.id);
+      return;
+    }
+
+    // Update existing fleet or add new one
+    const existingIndex = latestFleetsRef.current.findIndex(f => f.id === data.id);
+    if (existingIndex >= 0) {
+      latestFleetsRef.current = latestFleetsRef.current.map(f => f.id === data.id ? data : f);
+    } else {
+      latestFleetsRef.current = [...latestFleetsRef.current, data];
+    }
+  }, []));
+
+  // WebSocket subscription for new planets (NPC respawns, player spawns)
+  useSocketEvent<any>('world:planetAdded', useCallback((data) => {
+    setPlanets(prev => {
+      // Update if exists, add if new
+      const exists = prev.find(p => p.id === data.id);
+      if (exists) {
+        return prev.map(p => p.id === data.id ? { ...p, ...data } : p);
+      }
+      return [...prev, data];
+    });
+  }, []));
+
+  // WebSocket subscription for probe updates
+  useSocketEvent<any>('probe:updated', useCallback((data) => {
+    // Remove if destroyed or on cooldown (returned)
+    if (data.status === 'destroyed' || data.status === 'cooldown' || data.status === 'completed') {
+      latestProbesRef.current = latestProbesRef.current.filter(p => p.id !== data.id);
+
+      // Also remove visual object immediately if exists
+      if (probeObjectsRef.current.has(data.id)) {
+        const objects = probeObjectsRef.current.get(data.id);
+        if (objects) {
+          objects.sprite.destroy();
+          objects.graphics.destroy();
+          probeObjectsRef.current.delete(data.id);
+        }
+      }
+      return;
+    }
+
+    // Update existing or add new
+    const existingIndex = latestProbesRef.current.findIndex(p => p.id === data.id);
+    if (existingIndex >= 0) {
+      latestProbesRef.current = latestProbesRef.current.map(p => p.id === data.id ? data : p);
+    } else {
+      latestProbesRef.current = [...latestProbesRef.current, data];
+    }
+  }, []));
 
   useEffect(() => {
     const initPixi = async () => {
@@ -281,9 +336,10 @@ export default function WorldMap({
             const isAlly = p.coalitionId && p.coalitionId === myCoalitionId;
             const isMe = p.ownerId === currentUserId;
 
+            // NPC: "LVL X Name", Player: "Colony Name\n[TAG] Owner" or "Colony Name\nOwner"
             const labelText = p.isNpc
               ? `LVL ${p.npcLevel} ${p.name}`
-              : (p.coalitionTag ? `[${p.coalitionTag}] ${p.ownerName}` : p.ownerName);
+              : `${p.name}\n${p.coalitionTag ? `[${p.coalitionTag}] ` : ''}${p.ownerName || 'Unknown'}`;
 
             const labelColor = isMe ? 0x00ff88 : (isAlly ? 0xd500f9 : 0x00f3ff);
 
@@ -298,9 +354,10 @@ export default function WorldMap({
                 strokeThickness: 3
               }
             });
-            label.anchor.set(0.5, -1.2);
+            label.anchor.set(0.5, 0); // Anchor at top-center of text
             label.x = p.x;
-            label.y = p.y;
+            label.y = p.y + 45; // Position below sprite (sprite is ~90px at 0.15 scale, so half is ~45)
+            label.zIndex = 100; // Ensure labels render on top
             planetLayer.addChild(label);
             planetLabelsRef.current.set(p.id, label);
 

@@ -36,6 +36,7 @@ model User {
   coalitionId String? @map("coalition_id")
   coalition   Coalition? @relation(fields: [coalitionId], references: [id], onDelete: SetNull)
   coalitionRole String @default("MEMBER") @map("coalition_role")
+  lastActiveAt  DateTime? @map("last_active_at")
 
   receivedInvites CoalitionInvite[] @relation("ReceivedInvites")
   sentInvites     CoalitionInvite[] @relation("SentInvites")

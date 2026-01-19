@@ -1,6 +1,7 @@
 
 import prisma from '../lib/prisma';
 import { XP_CURVE } from '../constants/playerConfig';
+import { socketService } from './socketService';
 
 /**
  * Calculate XP required to reach the next level.
@@ -39,6 +40,14 @@ export const addXp = async (userId: string, amount: number) => {
             xp: newXp,
             level: newLevel
         }
+    });
+
+    // Emit real-time user update for XP/level changes
+    socketService.emitToUser(userId, 'user:updated', {
+        id: updatedUser.id,
+        xp: updatedUser.xp,
+        level: updatedUser.level,
+        leveledUp,
     });
 
     return {

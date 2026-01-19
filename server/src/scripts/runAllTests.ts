@@ -22,10 +22,10 @@ async function runTest(testName: string, testFile: string) {
             `npx tsx src/scripts/${testFile}`,
             { cwd: process.cwd() }
         );
-        
+
         if (stdout) console.log(stdout);
         if (stderr) console.error(stderr);
-        
+
         console.log(`\n✅ ${testName} PASSED\n`);
         return true;
     } catch (error: any) {
@@ -38,7 +38,7 @@ async function runTest(testName: string, testFile: string) {
 
 async function main() {
     console.log('╔══════════════════════════════════════════════════════════╗');
-    console.log('║     Galactic Conquest - Comprehensive Test Suite       ║');
+    console.log('║        Dread Horizon - Comprehensive Test Suite        ║');
     console.log('╚══════════════════════════════════════════════════════════╝');
 
     const results: { name: string; passed: boolean }[] = [];
@@ -46,7 +46,7 @@ async function main() {
     for (const test of tests) {
         const passed = await runTest(test.name, test.file);
         results.push({ name: test.name, passed });
-        
+
         // Small delay between tests
         await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -66,7 +66,7 @@ async function main() {
 
     console.log(`\n${'='.repeat(60)}`);
     console.log(`Total: ${passed}/${total} tests passed`);
-    
+
     if (passed === total) {
         console.log('🎉 All tests passed!');
         process.exit(0);

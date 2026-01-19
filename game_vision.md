@@ -1,6 +1,6 @@
-Galactic Conquest: Design & Style Guide
+Dread Horizon: Design & Style Guide
 1. Core Vision
-"Galactic Conquest" is a persistent browser-based strategy game rooted in the mechanics of Goodgame Empire, but transported to a stylized Sci-Fi universe.
+"Dread Horizon" is a persistent browser-based strategy game rooted in the mechanics of Goodgame Empire, but transported to a stylized Sci-Fi universe.
 
 The Directive:
 

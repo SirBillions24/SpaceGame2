@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
 import authRoutes from './routes/auth';
 import worldRoutes from './routes/world';
 import actionsRoutes from './routes/actions';
@@ -16,10 +17,12 @@ import { seedBlackHoles, spawnMissingHarvesters } from './services/harvesterServ
 import { globalLimiter, authLimiter, heavyActionLimiter } from './middleware/rateLimiter';
 import { createGameEventsWorker } from './workers/gameEventWorker';
 import { startProbeUpdateScheduler } from './lib/jobQueue';
+import { socketService } from './services/socketService';
 
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
 app.use(cors());
@@ -45,10 +48,16 @@ app.use('/espionage', espionageRoutes);
 app.use('/coalitions', coalitionRoutes);
 app.use('/dev', devRoutes);
 
-app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`🌐 External access: http://0.0.0.0:${PORT}`);
+async function startServer() {
+  // Initialize Socket.IO with Redis adapter
+  try {
+    await socketService.initialize(httpServer);
+    console.log('✅ WebSocket server initialized');
+  } catch (err) {
+    console.error('❌ FATAL: Failed to initialize WebSocket server:', err);
+    console.error('💡 Make sure Redis is running: sudo docker compose -f infra/docker-compose.yml up -d redis');
+    process.exit(1);
+  }
 
   // Start job queue worker (Redis required)
   try {
@@ -72,4 +81,14 @@ app.listen(PORT, '0.0.0.0', async () => {
   } catch (err) {
     console.error('Failed to seed Harvesters:', err);
   }
-});
+
+  // Start listening
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    console.log(`🌐 External access: http://0.0.0.0:${PORT}`);
+    console.log(`🔌 WebSocket available at ws://0.0.0.0:${PORT}`);
+  });
+}
+
+startServer();

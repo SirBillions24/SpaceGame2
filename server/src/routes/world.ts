@@ -107,7 +107,7 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
 
     const owner = await prisma.user.findUnique({
       where: { id: syncedPlanet.ownerId },
-      select: { 
+      select: {
         username: true,
         coalitionId: true,
         coalition: {
@@ -198,7 +198,39 @@ router.get('/planet/:id', optionalAuthenticateToken, async (req: AuthRequest, re
         totalCreditRate += pStats.creditRate || 0;
       }
 
+      // Calculate units on defense vs reserve
+      const defenseLayout = await prisma.defenseLayout.findUnique({
+        where: { planetId: syncedPlanet.id },
+      });
+
+      const unitsOnDefense: Record<string, number> = {};
+      if (defenseLayout) {
+        const parseLane = (json: string) => {
+          try {
+            const data = JSON.parse(json || '{}');
+            const laneUnits = data.units || data;
+            for (const [unitType, count] of Object.entries(laneUnits)) {
+              if (typeof count === 'number' && count > 0) {
+                unitsOnDefense[unitType] = (unitsOnDefense[unitType] || 0) + count;
+              }
+            }
+          } catch (e) { /* ignore parse errors */ }
+        };
+        parseLane(defenseLayout.frontLaneJson);
+        parseLane(defenseLayout.leftLaneJson);
+        parseLane(defenseLayout.rightLaneJson);
+      }
+
+      // Reserve = total - on defense
+      const reserveUnits: Record<string, number> = {};
+      for (const [unitType, totalCount] of Object.entries(units)) {
+        const onDefense = unitsOnDefense[unitType] || 0;
+        reserveUnits[unitType] = Math.max(0, totalCount - onDefense);
+      }
+
       responseData.units = units;
+      responseData.unitsOnDefense = unitsOnDefense;
+      responseData.reserveUnits = reserveUnits;
       responseData.resources = {
         carbon: syncedPlanet.carbon,
         titanium: syncedPlanet.titanium,

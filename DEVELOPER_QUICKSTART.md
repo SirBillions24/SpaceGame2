@@ -1,6 +1,6 @@
 # Developer Quickstart Guide
 
-Welcome to the **Galactic Conquest** codebase! This guide covers key architectural concepts, common pitfalls, and how to effectively work with the system.
+Welcome to the **Dread Horizon** codebase! This guide covers key architectural concepts, common pitfalls, and how to effectively work with the system.
 
 ## 1. Core Architecture
 

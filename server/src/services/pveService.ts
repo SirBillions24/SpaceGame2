@@ -261,7 +261,8 @@ export async function generateNpcDefense(planetId: string, level: number, npcCla
         // Randomized distribution across available unit types
         const shuffled = shuffleArray([...availableUnits]);
         shuffled.forEach((u, i) => {
-            const isHeavy = u === 'sentinel' || u === 'heavy_automaton';
+            // Heavy units get a smaller allocation ratio (sentinel, guardian, brute are "heavy" types)
+            const isHeavy = u === 'sentinel' || u === 'guardian' || u === 'brute';
             const ratio = isHeavy ? 0.2 + Math.random() * 0.1 : 0.4 + Math.random() * 0.2;
             const allocation = i === shuffled.length - 1 ? remaining : Math.floor(remaining * ratio);
             if (allocation > 0) {

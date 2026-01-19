@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { api, type Planet, getCurrentUser } from '../lib/api';
+import { useSocketEvent } from '../hooks/useSocketEvent';
+import { useSocket } from '../lib/SocketContext';
 import DefensePanel from './DefensePanel';
 import WorkshopPanel from './WorkshopPanel';
 import ExpansionModal from './ExpansionModal';
@@ -215,10 +217,29 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
 
   useEffect(() => {
     loadPlanetData();
-    // Periodic refresh every 10 seconds to keep resources and queues in sync
-    const interval = setInterval(loadPlanetData, 10000);
-    return () => clearInterval(interval);
   }, [planet.id]);
+
+  // WebSocket subscription for real-time planet updates
+  useSocketEvent<Planet>('planet:updated', useCallback((data) => {
+    if (data.id === planet.id) {
+      setPlanetData(data);
+      if (data.taxRate !== undefined) {
+        setTaxRate(data.taxRate);
+      }
+    }
+  }, [planet.id]));
+
+  // Fallback polling when socket disconnects
+  const { isConnected } = useSocket();
+  useEffect(() => {
+    if (isConnected) return;
+
+    const interval = setInterval(() => {
+      loadPlanetData();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [planet.id, isConnected]);
 
   // Timer Logic
   const [timeLeft, setTimeLeft] = useState<string | null>(null);
@@ -233,7 +254,17 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
   }, []);
 
   const construction = planetData?.construction;
+  const wasBuilding = useRef(false);
+
   useEffect(() => {
+    // Detect transition from building to not-building
+    if (wasBuilding.current && !construction?.isBuilding) {
+      // Construction just completed - refresh to get updated building status
+      loadPlanetData();
+      props.onUpdate?.();
+    }
+    wasBuilding.current = !!construction?.isBuilding;
+
     if (construction?.isBuilding && construction.buildFinishTime) {
       const finish = new Date(construction.buildFinishTime!);
       const diff = Math.ceil((finish.getTime() - now.getTime()) / 1000);

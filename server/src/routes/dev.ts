@@ -216,7 +216,9 @@ if (!devRoutesEnabled) {
                 return res.status(403).json({ error: 'You do not own this planet' });
             }
 
-            const unitTypes = ['marine', 'ranger', 'sentinel', 'vanguard', 'sniper', 'enforcer', 'drone', 'mech', 'goliath', 'xeno_runner', 'xeno_stalker', 'xeno_titan'];
+            // Use unit types from the official UNIT_DATA constant
+            const { UNIT_DATA } = await import('../constants/unitData');
+            const unitTypes = Object.keys(UNIT_DATA);
             const unitCount = count || 100;
 
             for (const unitType of unitTypes) {
@@ -230,6 +232,56 @@ if (!devRoutesEnabled) {
             res.json({ message: `Added ${unitCount} of each unit type` });
         } catch (error) {
             console.error('Dev add army error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    });
+
+    // Clean up invalid units (remove old unit types that no longer exist)
+    router.post('/clean-units', authenticateToken, async (req: AuthRequest, res: Response) => {
+        try {
+            const userId = req.userId!;
+            const { planetId } = req.body;
+
+            if (!planetId) {
+                return res.status(400).json({ error: 'Missing planetId' });
+            }
+
+            const planet = await prisma.planet.findUnique({ where: { id: planetId } });
+            if (!planet || planet.ownerId !== userId) {
+                return res.status(403).json({ error: 'You do not own this planet' });
+            }
+
+            // Get current valid unit types
+            const { UNIT_DATA } = await import('../constants/unitData');
+            const validUnitTypes = new Set(Object.keys(UNIT_DATA));
+
+            // Get all units on the planet
+            const planetUnits = await prisma.planetUnit.findMany({
+                where: { planetId }
+            });
+
+            // Find invalid units
+            const invalidUnits = planetUnits.filter(u => !validUnitTypes.has(u.unitType));
+            const validUnits = planetUnits.filter(u => validUnitTypes.has(u.unitType));
+
+            // Delete invalid units
+            if (invalidUnits.length > 0) {
+                await prisma.planetUnit.deleteMany({
+                    where: {
+                        planetId,
+                        unitType: { in: invalidUnits.map(u => u.unitType) }
+                    }
+                });
+            }
+
+            res.json({
+                message: `Cleaned ${invalidUnits.length} invalid unit types`,
+                removed: invalidUnits.map(u => ({ type: u.unitType, count: u.count })),
+                remaining: validUnits.map(u => ({ type: u.unitType, count: u.count })),
+                validUnitTypes: Array.from(validUnitTypes)
+            });
+        } catch (error) {
+            console.error('Dev clean units error:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
     });

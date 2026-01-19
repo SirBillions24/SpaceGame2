@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
+import { useSocketEvent } from '../hooks/useSocketEvent';
 import './IntelligenceHubPanel.css';
 
 interface Probe {
@@ -47,21 +48,27 @@ export const IntelligenceHubPanel: React.FC<IntelligenceHubPanelProps> = ({ plan
     }
   };
 
+  // Initial fetch on mount
   useEffect(() => {
     fetchProbes();
-    const interval = setInterval(fetchProbes, 10000);
-    return () => clearInterval(interval);
   }, []);
 
+  // Fetch probe detail when selected
   useEffect(() => {
     if (selectedProbeId) {
       fetchProbeDetail(selectedProbeId);
-      const interval = setInterval(() => fetchProbeDetail(selectedProbeId), 5000);
-      return () => clearInterval(interval);
     } else {
       setProbeData(null);
     }
   }, [selectedProbeId]);
+
+  // WebSocket subscription for real-time probe updates
+  useSocketEvent<any>('probe:updated', useCallback((data) => {
+    setProbes(prev => prev.map(p => p.id === data.id ? { ...p, ...data } : p));
+    if (selectedProbeId === data.id) {
+      setProbeData((prevData: any) => prevData ? { ...prevData, ...data } : data);
+    }
+  }, [selectedProbeId]));
 
   const handleDeleteProbe = async (id: string) => {
     if (!confirm('Are you sure you want to decommission this probe? No resources will be recovered.')) return;
@@ -109,8 +116,8 @@ export const IntelligenceHubPanel: React.FC<IntelligenceHubPanelProps> = ({ plan
               <p className="empty-msg">No probes deployed. Launch one from the World Map.</p>
             ) : (
               probes.map(probe => (
-                <div 
-                  key={probe.id} 
+                <div
+                  key={probe.id}
                   className={`probe-item ${selectedProbeId === probe.id ? 'selected' : ''} ${probe.status}`}
                   onClick={() => setSelectedProbeId(probe.id)}
                 >
@@ -148,8 +155,8 @@ export const IntelligenceHubPanel: React.FC<IntelligenceHubPanelProps> = ({ plan
                   </div>
                   {(probe.status === 'active' || probe.status === 'traveling' || probe.status === 'discovered') && (
                     <div className="probe-side-actions">
-                      <button 
-                        className="recall-btn" 
+                      <button
+                        className="recall-btn"
                         onClick={(e) => { e.stopPropagation(); handleRecallProbe(probe.id); }}
                       >
                         RECALL
@@ -171,8 +178,8 @@ export const IntelligenceHubPanel: React.FC<IntelligenceHubPanelProps> = ({ plan
                     <span>Signal Integrity: {(probeData.probe.accuracy * 100).toFixed(0)}%</span>
                   </div>
 
-                  <button 
-                    className="gen-report-btn" 
+                  <button
+                    className="gen-report-btn"
                     onClick={() => handleGenerateReport(probeData.probe.id)}
                     disabled={probeData.probe.status === 'discovered'}
                   >

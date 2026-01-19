@@ -1,6 +1,6 @@
-# Galactic Conquest - Project Overview
+# Dread Horizon - Project Overview
 
-**Galactic Conquest** is a sci-fi real-time strategy game inspired by the mechanics of *Goodgame Empire*.
+**Dread Horizon** is a sci-fi real-time strategy game inspired by the mechanics of *Goodgame Empire*.
 It is built on a modern stack using **React (Vite)** for the frontend and **Node.js (Express) + Prisma + PostgreSQL** for the backend.
 
 ## Architecture

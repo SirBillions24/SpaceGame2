@@ -8,7 +8,7 @@ import {
   validateUnitsAvailable,
   deductUnits,
 } from '../services/fleetService';
-import { placeBuilding, recruitUnit, spawnPlanet, moveBuilding, syncPlanetResources, demolishBuilding } from '../services/planetService';
+import { placeBuilding, recruitUnit, spawnPlanet, moveBuilding, syncPlanetResources, demolishBuilding, formatPlanetForSocket } from '../services/planetService';
 import { UNIT_DATA } from '../constants/unitData';
 import {
   MAX_GRID_SIZE,
@@ -24,6 +24,7 @@ import {
 import { getDefenseTurrets, calculateDefenseCapacity } from '../services/defenseService';
 import { validateRequest } from '../middleware/validateRequest';
 import { BuildSchema, RecruitSchema, ManufactureSchema, ExpandSchema, DefenseTurretSchema, TaxRateSchema, MoveBuildingSchema, DemolishSchema } from '../schemas/actionSchemas';
+import { socketService } from '../services/socketService';
 
 const router = Router();
 
@@ -405,6 +406,19 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
       // Fleet was created but job not queued - this is a problem
       throw new Error('Failed to schedule fleet processing');
     }
+
+    // Emit socket event for real-time map update
+    const fleetData = {
+      id: fleet.id,
+      type: fleet.type,
+      fromPlanet: fleet.fromPlanet,
+      toPlanet: fleet.toPlanet,
+      units: JSON.parse(fleet.unitsJson),
+      departAt: fleet.departAt,
+      arriveAt: fleet.arriveAt,
+      status: fleet.status,
+    };
+    socketService.emitToUser(userId, 'fleet:updated', fleetData);
 
     res.status(201).json({
       message: 'Fleet dispatched successfully',
@@ -871,8 +885,12 @@ router.post('/tax', authenticateToken, async (req: AuthRequest, res: Response) =
 
     const planet = await prisma.planet.update({
       where: { id: planetId },
-      data: { taxRate: rate }
+      data: { taxRate: rate },
+      include: { units: true, buildings: true, tools: true }
     });
+
+    // Emit socket event for real-time updates
+    socketService.emitToUser(userId, 'planet:updated', await formatPlanetForSocket(planet));
 
     res.json({ message: 'Tax rate updated', taxRate: planet.taxRate });
 

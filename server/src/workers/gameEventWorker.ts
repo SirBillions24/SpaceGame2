@@ -18,12 +18,13 @@
 import { Worker, Job } from 'bullmq';
 import prisma from '../lib/prisma';
 import { resolveCombat } from '../services/combatService';
-import { syncPlanetResources } from '../services/planetService';
+import { syncPlanetResources, formatPlanetForSocket } from '../services/planetService';
 import { relocateNpc } from '../services/pveService';
 import { updateProbes } from '../services/espionageService';
 import { transferHarvesterOwnership } from '../services/harvesterService';
 import { FleetArrivalJob, FleetReturnJob, NpcRespawnJob, ProbeUpdateJob, redisConnectionOptions, queueNpcRespawn } from '../lib/jobQueue';
 import { NPC_BALANCE } from '../constants/npcBalanceData';
+import { socketService } from '../services/socketService';
 
 /**
  * Process fleet arrival at destination
@@ -331,6 +332,19 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
     }
 
     console.log(`✅ Fleet ${fleetId} processed successfully`);
+
+    // Emit socket events for real-time client updates
+    const updatedFleet = await prisma.fleet.findUnique({
+        where: { id: fleetId },
+        include: { fromPlanet: true, toPlanet: true },
+    });
+    if (updatedFleet) {
+        socketService.emitToUser(updatedFleet.ownerId, 'fleet:updated', updatedFleet);
+        socketService.emitToUser(updatedFleet.ownerId, 'inbox:new', {
+            type: type === 'attack' ? 'battle' : 'fleet',
+            title: `Fleet ${type === 'attack' ? 'Battle Complete' : 'Arrived'}`,
+        });
+    }
 }
 
 /**
@@ -509,6 +523,18 @@ async function processFleetReturn(job: Job<FleetReturnJob>) {
 
     if (result) {
         console.log(`✅ Fleet ${fleetId} returned home successfully`);
+
+        // Emit socket events for real-time updates
+        socketService.emitToUser(result.ownerId, 'fleet:updated', { ...result, status: 'completed' });
+
+        // Fetch and emit updated planet data
+        const updatedPlanet = await prisma.planet.findUnique({
+            where: { id: result.fromPlanetId },
+            include: { buildings: true, units: true },
+        });
+        if (updatedPlanet) {
+            socketService.emitToUser(result.ownerId, 'planet:updated', await formatPlanetForSocket(updatedPlanet));
+        }
     }
 }
 
@@ -520,6 +546,20 @@ async function processNpcRespawn(job: Job<NpcRespawnJob>) {
     console.log(`🔄 Processing NPC respawn: ${planetId}`);
 
     await relocateNpc(planetId);
+
+    // Fetch the relocated planet and emit global event for world map updates
+    const relocatedPlanet = await prisma.planet.findUnique({ where: { id: planetId } });
+    if (relocatedPlanet) {
+        socketService.emitToAll('world:planetAdded', {
+            id: relocatedPlanet.id,
+            x: relocatedPlanet.x,
+            y: relocatedPlanet.y,
+            name: relocatedPlanet.name,
+            ownerId: relocatedPlanet.ownerId,
+            isNpc: true,
+            npcLevel: relocatedPlanet.npcLevel,
+        });
+    }
 
     console.log(`✅ NPC ${planetId} respawned successfully`);
 }

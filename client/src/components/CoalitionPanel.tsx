@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api, getCurrentUser } from '../lib/api';
+import { useSocket } from '../lib/SocketContext';
+import { useSocketEvent } from '../hooks/useSocketEvent';
 import './CoalitionPanel.css';
 
 interface CoalitionPanelProps {
@@ -12,6 +14,7 @@ interface Member {
     level: number;
     xp: number;
     coalitionRole: 'LEADER' | 'OFFICER' | 'MEMBER';
+    lastActiveAt?: string;
 }
 
 interface Coalition {
@@ -116,17 +119,7 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
         if (tab === 'chat' && coalition) {
             loadChat();
             loadDmConversations();
-            if (pollInterval.current) clearInterval(pollInterval.current);
-            pollInterval.current = setInterval(() => {
-                loadChat();
-                loadDmConversations();
-                if (selectedDmPartner) loadDmMessages(selectedDmPartner.id);
-            }, 5000);
-        } else {
-            if (pollInterval.current) {
-                clearInterval(pollInterval.current);
-                pollInterval.current = null;
-            }
+            // Removed polling - now using WebSocket subscriptions for real-time updates
         }
         if (tab === 'rankings') loadRankings();
         if (tab === 'settings' && coalition) {
@@ -134,6 +127,45 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
             setSettingsDesc(coalition.description || '');
         }
     }, [tab, coalition?.id]);
+
+    // WebSocket subscription for real-time coalition chat messages
+    useSocketEvent<any>('chat:message', useCallback((msg) => {
+        setMessages(prev => {
+            // Deduplicate by ID
+            if (prev.some(m => m.id === msg.id)) return prev;
+            const updated = [...prev, {
+                id: msg.id,
+                userId: msg.userId,
+                content: msg.content,
+                createdAt: msg.createdAt,
+                user: { username: msg.username }
+            }];
+            return updated;
+        });
+        shouldAutoScrollChat.current = true;
+    }, []));
+
+    // WebSocket subscription for real-time DM messages
+    useSocketEvent<any>('dm:message', useCallback((msg) => {
+        if (selectedDmPartner && msg.senderId === selectedDmPartner.id) {
+            setDmMessages(prev => {
+                // Deduplicate by ID
+                if (prev.some(m => m.id === msg.id)) return prev;
+                return [...prev, {
+                    id: msg.id,
+                    senderId: msg.senderId,
+                    receiverId: getCurrentUser()?.userId || '',
+                    content: msg.content,
+                    createdAt: msg.createdAt,
+                    sender: { id: msg.senderId, username: msg.senderUsername },
+                    receiver: { id: getCurrentUser()?.userId || '', username: getCurrentUser()?.username || '' }
+                }];
+            });
+            shouldAutoScrollDm.current = true;
+        }
+        // Also refresh DM conversations list to update unread counts
+        loadDmConversations();
+    }, [selectedDmPartner?.id]));
 
     // Helper: check if user is scrolled near bottom
     const isNearBottom = (container: HTMLDivElement | null) => {
@@ -448,6 +480,12 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
 
     const handleSelectDmPartner = (member: Member) => {
         if (member.id === currentUser?.userId) return;
+
+        // Clear previous conversation before loading new one
+        setDmMessages([]);
+        setDmCursor(undefined);
+        setHasMoreDm(false);
+
         setSelectedDmPartner(member);
         loadDmMessages(member.id);
     };
@@ -586,7 +624,13 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
                                             <div className="m-rank">
                                                 {m.coalitionRole === 'LEADER' ? '⭐ Leader' : m.coalitionRole === 'OFFICER' ? '🎖️ Officer' : 'Member'}
                                             </div>
-                                            <div className="m-name">{m.username}</div>
+                                            <div className="m-name">
+                                                <span
+                                                    className={`online-status ${m.lastActiveAt && (Date.now() - new Date(m.lastActiveAt).getTime()) < 5 * 60 * 1000 ? 'online' : 'offline'}`}
+                                                    title={m.lastActiveAt && (Date.now() - new Date(m.lastActiveAt).getTime()) < 5 * 60 * 1000 ? 'Online' : 'Offline'}
+                                                />
+                                                {m.username}
+                                            </div>
                                             <div className="m-level">Level {m.level} ({m.xp.toLocaleString()} XP)</div>
 
                                             {/* Admin Actions */}
@@ -629,7 +673,13 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
                                                 <span className="dm-role-icon">
                                                     {member.coalitionRole === 'LEADER' ? '👑' : member.coalitionRole === 'OFFICER' ? '⚔️' : '•'}
                                                 </span>
-                                                <span className="dm-member-name">{member.username}</span>
+                                                <span className="dm-member-name">
+                                                    <span
+                                                        className={`online-status ${member.lastActiveAt && (Date.now() - new Date(member.lastActiveAt).getTime()) < 5 * 60 * 1000 ? 'online' : 'offline'}`}
+                                                        title={member.lastActiveAt && (Date.now() - new Date(member.lastActiveAt).getTime()) < 5 * 60 * 1000 ? 'Online' : 'Offline'}
+                                                    />
+                                                    {member.username}
+                                                </span>
                                                 {unread > 0 && <span className="dm-unread-badge">{unread}</span>}
                                             </div>
                                         );

@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api, type Fleet } from '../lib/api';
+import { useSocketEvent } from '../hooks/useSocketEvent';
 import './TravelOverview.css';
 
 interface Probe {
@@ -39,14 +40,37 @@ export default function TravelOverview({ onClose }: TravelOverviewProps) {
         }
     };
 
+    // Initial data fetch on mount
     useEffect(() => {
         fetchData();
+    }, []);
+
+    // Timer for countdown display only - no network fetch
+    useEffect(() => {
         const interval = setInterval(() => {
             setNow(new Date());
-            if (new Date().getSeconds() % 5 === 0) fetchData();
         }, 1000);
         return () => clearInterval(interval);
     }, []);
+
+    // WebSocket subscription for real-time fleet updates
+    useSocketEvent<Fleet>('fleet:updated', useCallback((data) => {
+        setFleets(prev => {
+            const exists = prev.find(f => f.id === data.id);
+            if (exists) {
+                // Remove completed fleets, update existing
+                if (data.status === 'completed' || data.status === 'destroyed') {
+                    return prev.filter(f => f.id !== data.id);
+                }
+                return prev.map(f => f.id === data.id ? data : f);
+            }
+            // Add new fleet if it's in transit
+            if (data.status === 'enroute' || data.status === 'returning') {
+                return [...prev, data];
+            }
+            return prev;
+        });
+    }, []));
 
     const formatDuration = (ms: number) => {
         if (ms <= 0) return 'Arriving...';

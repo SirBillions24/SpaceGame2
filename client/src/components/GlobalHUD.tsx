@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import './GlobalHUD.css';
 import { type Planet, api } from '../lib/api';
+import { useSocketEvent } from '../hooks/useSocketEvent';
+import { useSocket } from '../lib/SocketContext';
 
 import Mailbox from './Mailbox';
 import ResourceBreakdownPanel from './ResourceBreakdownPanel';
@@ -18,21 +20,31 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
     const [lastClickTime, setLastClickTime] = useState(0);
     const [selectedResourcePanel, setSelectedResourcePanel] = useState<'carbon' | 'titanium' | 'food' | null>(null);
 
+    // WebSocket connection status
+    const { isConnected } = useSocket();
+
     // Sync state if prop changes
     useEffect(() => {
         setPlanet(initialPlanet);
     }, [initialPlanet]);
 
-    // Poll for updates every 5 seconds
+    // WebSocket subscription for real-time planet updates
+    useSocketEvent<Planet>('planet:updated', useCallback((data) => {
+        if (planet && data.id === planet.id) {
+            setPlanet(data);
+        }
+    }, [planet?.id]));
+
+    // Fallback polling when socket disconnects
     useEffect(() => {
-        if (!planet?.id) return;
+        if (!planet?.id || isConnected) return;
 
         const interval = setInterval(() => {
             api.getPlanet(planet.id).then(setPlanet).catch(console.error);
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [planet?.id]);
+    }, [planet?.id, isConnected]);
 
     // Level calculation
     const level = user?.level || 1;
@@ -45,13 +57,15 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
     const xpInLevel = Math.max(0, xp - prevThreshold);
     const xpPercent = range > 0 ? (xpInLevel / range) * 100 : 0;
 
-    const darkMatter = planet?.resources?.darkMatter || 0;
+    // Safe extraction of resources (handle both object and primitive)
+    const resources = planet?.resources || {};
+    const darkMatter = typeof resources === 'object' ? (resources.darkMatter || 0) : 0;
     const darkMatterRate = planet?.stats?.darkMatterRate || 0;
 
-    const credits = planet?.resources?.credits || 0;
-    const carbon = planet?.resources?.carbon || 0;
-    const titanium = planet?.resources?.titanium || 0;
-    const food = planet?.resources?.food || 0;
+    const credits = typeof resources === 'object' ? (resources.credits || 0) : 0;
+    const carbon = typeof resources === 'object' ? (resources.carbon || 0) : 0;
+    const titanium = typeof resources === 'object' ? (resources.titanium || 0) : 0;
+    const food = typeof resources === 'object' ? (resources.food || 0) : 0;
 
     // Derived Stats
     const stats = planet?.stats;
@@ -100,7 +114,9 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
             <div className="hud-profile-section" onClick={handleBannerClick}>
                 <div className="level-badge">{level}</div>
                 <div className="profile-details">
-                    <div className="username">{user?.username || 'Commander'}</div>
+                    <div className="username">
+                        {user?.username || 'Commander'}
+                    </div>
                     <div className="xp-bar-container">
                         <div className="xp-bar" style={{ width: `${xpPercent}%` }}></div>
                     </div>

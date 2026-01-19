@@ -15,7 +15,7 @@ export const globalLimiter = rateLimit({
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 10,
-    message: { error: 'Too many authentication attempts, please try again later' },
+    message: { error: 'Too many authentication attempts. Please wait 15 minutes before trying again.' },
     standardHeaders: true,
     legacyHeaders: false,
     // Skip rate limiting for already authenticated requests (like /auth/me)

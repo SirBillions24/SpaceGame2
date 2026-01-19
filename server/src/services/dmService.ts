@@ -1,4 +1,5 @@
 import prisma from '../lib/prisma';
+import { socketService } from './socketService';
 
 /**
  * Get paginated conversation between two users
@@ -51,7 +52,7 @@ export async function sendDirectMessage(senderId: string, receiverId: string, co
     if (!receiver) throw new Error('User not found');
     if (receiverId === senderId) throw new Error('Cannot send message to yourself');
 
-    return prisma.directMessage.create({
+    const message = await prisma.directMessage.create({
         data: {
             senderId,
             receiverId,
@@ -62,6 +63,17 @@ export async function sendDirectMessage(senderId: string, receiverId: string, co
             receiver: { select: { id: true, username: true } }
         }
     });
+
+    // Emit real-time DM to receiver
+    socketService.emitToUser(receiverId, 'dm:message', {
+        id: message.id,
+        senderId: message.senderId,
+        senderUsername: message.sender.username,
+        content: message.content,
+        createdAt: message.createdAt,
+    });
+
+    return message;
 }
 
 /**

@@ -1,5 +1,5 @@
 [Unit]
-Description=Galactic Conquest Frontend (Vite)
+Description=Dread Horizon Frontend (Vite)
 After=network.target
 
 [Service]

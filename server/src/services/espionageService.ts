@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma';
 import { ESPIONAGE_DATA, ReconProbeStats } from '../constants/espionageData';
+import { socketService } from './socketService';
 
 export async function launchProbe(userId: string, fromPlanetId: string, targetX: number, targetY: number, probeType: string = 'recon_probe') {
     const fromPlanet = await prisma.planet.findUnique({
@@ -78,6 +79,9 @@ export async function launchProbe(userId: string, fromPlanetId: string, targetX:
         })
     ]);
 
+    // Emit socket event for real-time updates
+    socketService.emitToUser(userId, 'probe:updated', probe);
+
     return probe;
 }
 
@@ -111,6 +115,9 @@ export async function recallProbe(userId: string, probeId: string) {
             lastUpdateTime: new Date()
         }
     });
+
+    // Emit socket event for real-time updates
+    socketService.emitToUser(userId, 'probe:updated', updatedProbe);
 
     return updatedProbe;
 }
@@ -211,6 +218,14 @@ export async function updateProbes() {
         }
     });
 
+    // Emit updates for arrivals
+    const arrivals = await prisma.reconProbe.findMany({
+        where: { status: 'active', lastUpdateTime: now }
+    });
+    for (const p of arrivals) {
+        socketService.emitToUser(p.ownerId, 'probe:updated', p);
+    }
+
     // 2. Process returns
     const returningProbes = await prisma.reconProbe.findMany({
         where: {
@@ -230,11 +245,14 @@ export async function updateProbes() {
                     cooldownUntil: cooldownUntil
                 }
             });
+            socketService.emitToUser(probe.ownerId, 'probe:updated', { id: probe.id, status: 'cooldown', cooldownUntil });
         } else {
             // Regular return, just delete
             await prisma.reconProbe.delete({
                 where: { id: probe.id }
             });
+            // Emit deletion event
+            socketService.emitToUser(probe.ownerId, 'probe:updated', { id: probe.id, status: 'destroyed' });
         }
     }
 
@@ -245,6 +263,11 @@ export async function updateProbes() {
             cooldownUntil: { lte: now }
         }
     });
+
+    // We can't easily emit for deleted cooldowns without fetching them first, getting IDs...
+    // But typically cooldown finish is handled by the client timer or panel.
+    // For completeness, let's fetch IDs to be deleted first if we want to be strict, but cooldown -> delete is less critical for map than returning -> delete/cooldown.
+    // Actually, let's just leave this for now as map shouldn't show cooldown probes anyway.
 
     // 4. Update active probes (accuracy and discovery chance)
     const activeProbes = await prisma.reconProbe.findMany({
@@ -287,6 +310,9 @@ export async function updateProbes() {
                 },
                 include: { owner: { select: { username: true } } }
             });
+
+            // Emit socket update for discovery/recall
+            socketService.emitToUser(probe.ownerId, 'probe:updated', discoveredProbe);
 
             // ALERT ALL PLAYERS IN RADIUS
             const affectedPlanets = await prisma.planet.findMany({

@@ -109,18 +109,19 @@ export const HARVESTER_UNIT_SCALING_EXPONENT = 1.5;
  * - More balanced mix = flexible counter-play options
  */
 export const HARVESTER_BASE_UNITS: Record<string, number> = {
-    // Human faction
+    // Human faction (from unitData.ts: marine, sniper, guardian, commando)
     marine: 100,        // Melee infantry
-    ranger: 60,         // Ranged support (NOTE: 'ranger' may need to be 'sniper' based on unitData)
-    sentinel: 40,       // Heavy defense
+    sniper: 60,         // Ranged marksman
+    guardian: 40,       // Heavy infantry
     commando: 20,       // Elite attacker
 
-    // Mech faction
+    // Mech faction (from unitData.ts: drone, automaton, sentinel, interceptor)
     drone: 80,          // Cheap scouts
     automaton: 50,      // Melee bots
+    sentinel: 40,       // Heavy defense platform
     interceptor: 15,    // Elite assault craft
 
-    // Exo faction
+    // Exo faction (from unitData.ts: stalker, spitter, brute, ravager)
     stalker: 70,        // Fast melee predator
     spitter: 45,        // Ranged acid
     brute: 30,          // Heavy tank

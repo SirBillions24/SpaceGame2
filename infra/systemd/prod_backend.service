@@ -1,16 +1,17 @@
 [Unit]
-Description=Dread Horizon Backend (Nodemon)
+Description=Dread Horizon Production Backend (Stable)
 After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=/home/bone/oldschoolempire/server
-ExecStart=/usr/bin/npm run dev
+# Ensures we run the built production code
+ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=3
 Environment=PATH=/usr/bin:/usr/local/bin
-# Port 3001 is for Live Development
-Environment=PORT=3001
+# Port 3000 is for Production/Beta Testers
+Environment=PORT=3000
 StandardOutput=journal
 StandardError=journal
 

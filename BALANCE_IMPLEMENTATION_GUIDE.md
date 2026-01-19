@@ -1,6 +1,6 @@
 # Balance Implementation Guide
 
-This guide provides a centralized reference for game balance constants and scaling logic in Galactic Conquest. Following this structure ensures that balance changes are easy to implement and maintain.
+This guide provides a centralized reference for game balance constants and scaling logic in Dread Horizon. Following this structure ensures that balance changes are easy to implement and maintain.
 
 ## 1. Centralized Data Structure
 
@@ -104,5 +104,5 @@ If the HUD production rate does not match the actual resource gain:
 
 ---
 
-*This guide is part of the core documentation for Galactic Conquest. Keep it updated as the balancing system evolves.*
+*This guide is part of the core documentation for Dread Horizon. Keep it updated as the balancing system evolves.*
 
