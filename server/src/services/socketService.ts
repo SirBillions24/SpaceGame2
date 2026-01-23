@@ -1,25 +1,83 @@
 import { Server, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { createClient } from 'redis';
+import { createClient, RedisClientType } from 'redis';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import { ChatSendSchema, DMSendSchema } from '../schemas/socketSchemas';
 import * as coalitionService from './coalitionService';
 import * as dmService from './dmService';
+import { logError, isRedisReadOnlyError } from '../lib/errorLogger';
 
 class SocketService {
     private io: Server | null = null;
     private userSockets = new Map<string, Set<string>>();
+    private pubClient: RedisClientType | null = null;
+    private subClient: RedisClientType | null = null;
 
     async initialize(httpServer: any) {
         const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-        const pubClient = createClient({ url: redisUrl });
-        const subClient = pubClient.duplicate();
-        await Promise.all([pubClient.connect(), subClient.connect()]);
+        
+        // Create Redis clients with retry strategy
+        this.pubClient = createClient({ 
+            url: redisUrl,
+            socket: {
+                reconnectStrategy: (retries) => {
+                    // Log reconnection attempts
+                    logError('REDIS_CONNECTION', `Socket.IO pub client reconnect attempt ${retries}`, {
+                        client: 'pub',
+                        url: redisUrl,
+                        retries
+                    });
+                    // Exponential backoff: 100ms, 200ms, 400ms... max 5 seconds
+                    return Math.min(retries * 100, 5000);
+                }
+            }
+        });
+        
+        this.subClient = this.pubClient.duplicate();
+
+        // Attach error handlers BEFORE connecting
+        this.pubClient.on('error', (err) => {
+            const category = isRedisReadOnlyError(err) ? 'REDIS_READONLY' : 'REDIS_CONNECTION';
+            logError(category, err, { client: 'pub', url: redisUrl });
+        });
+
+        this.subClient.on('error', (err) => {
+            const category = isRedisReadOnlyError(err) ? 'REDIS_READONLY' : 'REDIS_CONNECTION';
+            logError(category, err, { client: 'sub', url: redisUrl });
+        });
+
+        // Log successful connections
+        this.pubClient.on('ready', () => {
+            console.log('✅ Redis pub client connected');
+        });
+
+        this.subClient.on('ready', () => {
+            console.log('✅ Redis sub client connected');
+        });
+
+        // Log reconnection events
+        this.pubClient.on('reconnecting', () => {
+            console.log('🔄 Redis pub client reconnecting...');
+        });
+
+        this.subClient.on('reconnecting', () => {
+            console.log('🔄 Redis sub client reconnecting...');
+        });
+
+        // Now connect
+        await Promise.all([this.pubClient.connect(), this.subClient.connect()]);
 
         this.io = new Server(httpServer, {
             cors: { origin: '*', credentials: true },
-            adapter: createAdapter(pubClient, subClient),
+            adapter: createAdapter(this.pubClient, this.subClient),
+        });
+
+        // Handle Socket.IO server errors
+        this.io.on('error', (err) => {
+            logError('SOCKET_ERROR', err instanceof Error ? err : new Error(String(err)), {
+                component: 'socket.io-server'
+            });
         });
 
         this.io.use(this.authMiddleware.bind(this));
@@ -82,6 +140,14 @@ class SocketService {
             }
             console.log(`🔌 Socket disconnected: ${userId} (${socket.id})`);
         });
+
+        // Handle individual socket errors
+        socket.on('error', (err) => {
+            logError('SOCKET_ERROR', err, { 
+                userId, 
+                socketId: socket.id 
+            });
+        });
     }
 
     // Emission methods
@@ -114,6 +180,11 @@ class SocketService {
                 if (newCoalitionId) socket.join(`coalition:${newCoalitionId}`);
             }
         }
+    }
+
+    // Check if Redis clients are connected (for health check)
+    isRedisConnected(): boolean {
+        return this.pubClient?.isReady === true && this.subClient?.isReady === true;
     }
 }
 

@@ -7,7 +7,13 @@ Type=simple
 WorkingDirectory=/home/bone/oldschoolempire/server
 ExecStart=/usr/bin/npm run dev
 Restart=always
-RestartSec=3
+RestartSec=5
+
+# Prevent runaway restart loops:
+# If service crashes 5 times within 5 minutes, stop trying
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
 Environment=PATH=/usr/bin:/usr/local/bin
 # Port 3001 is for Live Development
 Environment=PORT=3001

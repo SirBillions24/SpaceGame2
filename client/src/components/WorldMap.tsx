@@ -129,6 +129,8 @@ export default function WorldMap({
 
   // WebSocket subscription for real-time fleet updates
   useSocketEvent<Fleet>('fleet:updated', useCallback((data) => {
+    console.log('[WorldMap] fleet:updated received:', data.id, data.status);
+    
     // Remove completed/destroyed fleets from map
     if (data.status === 'completed' || data.status === 'destroyed') {
       latestFleetsRef.current = latestFleetsRef.current.filter(f => f.id !== data.id);
@@ -141,6 +143,7 @@ export default function WorldMap({
       latestFleetsRef.current = latestFleetsRef.current.map(f => f.id === data.id ? data : f);
     } else {
       latestFleetsRef.current = [...latestFleetsRef.current, data];
+      console.log('[WorldMap] New fleet added, total fleets:', latestFleetsRef.current.length);
     }
   }, []));
 
@@ -158,6 +161,8 @@ export default function WorldMap({
 
   // WebSocket subscription for probe updates
   useSocketEvent<any>('probe:updated', useCallback((data) => {
+    console.log('[WorldMap] probe:updated received:', data.id, data.status);
+    
     // Remove if destroyed or on cooldown (returned)
     if (data.status === 'destroyed' || data.status === 'cooldown' || data.status === 'completed') {
       latestProbesRef.current = latestProbesRef.current.filter(p => p.id !== data.id);
@@ -180,6 +185,7 @@ export default function WorldMap({
       latestProbesRef.current = latestProbesRef.current.map(p => p.id === data.id ? data : p);
     } else {
       latestProbesRef.current = [...latestProbesRef.current, data];
+      console.log('[WorldMap] New probe added, total probes:', latestProbesRef.current.length);
     }
   }, []));
 
@@ -440,28 +446,32 @@ export default function WorldMap({
             const elapsed = now - start;
             let progress = Math.max(0, Math.min(1, elapsed / duration));
 
-            const startX = fleet.fromPlanet.x;
-            const startY = fleet.fromPlanet.y;
-            const endX = fleet.toPlanet.x;
-            const endY = fleet.toPlanet.y;
+            // Determine visual start/end based on fleet status
+            // When returning, the fleet travels from toPlanet back to fromPlanet
+            const isReturning = fleet.status === 'returning';
+            const visualStartX = isReturning ? fleet.toPlanet.x : fleet.fromPlanet.x;
+            const visualStartY = isReturning ? fleet.toPlanet.y : fleet.fromPlanet.y;
+            const visualEndX = isReturning ? fleet.fromPlanet.x : fleet.toPlanet.x;
+            const visualEndY = isReturning ? fleet.fromPlanet.y : fleet.toPlanet.y;
 
-            const currentX = startX + (endX - startX) * progress;
-            const currentY = startY + (endY - startY) * progress;
+            const currentX = visualStartX + (visualEndX - visualStartX) * progress;
+            const currentY = visualStartY + (visualEndY - visualStartY) * progress;
 
             objects.sprite.x = currentX;
             objects.sprite.y = currentY;
 
             // Rotation (face target)
-            const angle = Math.atan2(endY - startY, endX - startX);
+            const angle = Math.atan2(visualEndY - visualStartY, visualEndX - visualStartX);
             objects.sprite.rotation = angle + Math.PI / 2; // +90deg if sprite points up
 
-            // Draw Line (dashed?)
+            // Draw Line
             objects.graphics.clear();
             // Color coding
             let color = 0xffff00; // Attack (Yellow)
             if (fleet.type === 'support') color = 0x00ff00; // Support (Green)
+            if (isReturning) color = 0x00ffaa; // Returning (Teal/Green)
             // Check if this is a transfer (attack to owned planet - same owner for from/to)
-            if (fleet.type === 'attack' && fleet.fromPlanet && fleet.toPlanet) {
+            if (fleet.type === 'attack' && fleet.fromPlanet && fleet.toPlanet && !isReturning) {
               // If going to owned planet, show as transfer (cyan)
               const fromOwner = planets.find(p => p.id === fleet.fromPlanet.id)?.ownerId;
               const toOwner = planets.find(p => p.id === fleet.toPlanet.id)?.ownerId;
@@ -470,8 +480,8 @@ export default function WorldMap({
               }
             }
 
-            objects.graphics.moveTo(startX, startY);
-            objects.graphics.lineTo(endX, endY);
+            objects.graphics.moveTo(visualStartX, visualStartY);
+            objects.graphics.lineTo(visualEndX, visualEndY);
             objects.graphics.stroke({ width: 2, color, alpha: 0.5 });
 
             // Label

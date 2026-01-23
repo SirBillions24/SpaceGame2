@@ -8,7 +8,14 @@ WorkingDirectory=/home/bone/oldschoolempire/server
 # Ensures we run the built production code
 ExecStart=/usr/bin/npm start
 Restart=always
-RestartSec=3
+RestartSec=5
+
+# Prevent runaway restart loops:
+# If service crashes 5 times within 5 minutes, stop trying
+# This prevents rapid restart loops that cause sustained 502 errors
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
 Environment=PATH=/usr/bin:/usr/local/bin
 # Port 3000 is for Production/Beta Testers
 Environment=PORT=3000

@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,204 +8,155 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  username     String   @unique
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  // Progression
-  xp    Int @default(0)
-  level Int @default(1)
-
-  planets Planet[]
-  fleets  Fleet[]
-  admiral Admiral?
-  gearPieces GearPiece[]
-  reconProbes ReconProbe[]
-  inboxMessages InboxMessage[]
-  espionageReports EspionageReport[]
+  id                String             @id @default(uuid())
+  username          String             @unique
+  email             String             @unique
+  passwordHash      String             @map("password_hash")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  xp                Int                @default(0)
+  level             Int                @default(1)
+  darkMatter        Float              @default(0) @map("dark_matter")
+  credits           Float              @default(0) @map("credits")
+  coalitionId       String?            @map("coalition_id")
+  coalitionRole     String             @default("MEMBER") @map("coalition_role")
+  lastActiveAt      DateTime?          @map("last_active_at")
+  admiral           Admiral?
+  sentInvites       CoalitionInvite[]  @relation("SentInvites")
+  receivedInvites   CoalitionInvite[]  @relation("ReceivedInvites")
   coalitionMessages CoalitionMessage[]
-  darkMatter       Float             @default(0) @map("dark_matter")
-  credits          Float             @default(0) @map("credits")
-
-  coalitionId String? @map("coalition_id")
-  coalition   Coalition? @relation(fields: [coalitionId], references: [id], onDelete: SetNull)
-  coalitionRole String @default("MEMBER") @map("coalition_role")
-  lastActiveAt  DateTime? @map("last_active_at")
-
-  receivedInvites CoalitionInvite[] @relation("ReceivedInvites")
-  sentInvites     CoalitionInvite[] @relation("SentInvites")
-
-  // Direct Messages (user-to-user, not coalition-specific for future reuse)
-  sentDMs       DirectMessage[] @relation("SentDMs")
-  receivedDMs   DirectMessage[] @relation("ReceivedDMs")
+  receivedDMs       DirectMessage[]    @relation("ReceivedDMs")
+  sentDMs           DirectMessage[]    @relation("SentDMs")
+  espionageReports  EspionageReport[]
+  fleets            Fleet[]
+  gearPieces        GearPiece[]
+  inboxMessages     InboxMessage[]
+  planets           Planet[]
+  reconProbes       ReconProbe[]
+  coalition         Coalition?         @relation(fields: [coalitionId], references: [id])
 
   @@map("users")
 }
 
-// Coalition (Alliance)
 model Coalition {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  tag         String   @unique
+  id          String             @id @default(uuid())
+  name        String             @unique
+  tag         String             @unique
   description String?
-  founderId   String   @map("founder_id")
-  isLocked    Boolean  @default(false) @map("is_locked")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  members User[]
-  messages CoalitionMessage[]
-  invites  CoalitionInvite[]
+  founderId   String             @map("founder_id")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  isLocked    Boolean            @default(false) @map("is_locked")
+  invites     CoalitionInvite[]
+  messages    CoalitionMessage[]
+  members     User[]
 
   @@map("coalitions")
 }
 
-// Coalition Chat Message
 model CoalitionMessage {
-  id          String   @id @default(uuid())
-  coalitionId String   @map("coalition_id")
-  userId      String   @map("user_id")
+  id          String    @id @default(uuid())
+  coalitionId String    @map("coalition_id")
+  userId      String    @map("user_id")
   content     String
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  coalition Coalition @relation(fields: [coalitionId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  coalition   Coalition @relation(fields: [coalitionId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("coalition_messages")
 }
 
-// Coalition Invite
 model CoalitionInvite {
-  id          String   @id @default(uuid())
-  coalitionId String   @map("coalition_id")
-  userId      String   @map("user_id")
-  senderId    String   @map("sender_id")
-  status      String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  coalition Coalition @relation(fields: [coalitionId], references: [id], onDelete: Cascade)
-  user      User      @relation("ReceivedInvites", fields: [userId], references: [id], onDelete: Cascade)
-  sender    User      @relation("SentInvites", fields: [senderId], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid())
+  coalitionId String    @map("coalition_id")
+  userId      String    @map("user_id")
+  senderId    String    @map("sender_id")
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  coalition   Coalition @relation(fields: [coalitionId], references: [id], onDelete: Cascade)
+  sender      User      @relation("SentInvites", fields: [senderId], references: [id], onDelete: Cascade)
+  user        User      @relation("ReceivedInvites", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("coalition_invites")
 }
 
-// Direct Messages (user-to-user, supports future dedicated DM window)
 model DirectMessage {
-  id          String   @id @default(uuid())
-  senderId    String   @map("sender_id")
-  receiverId  String   @map("receiver_id")
-  content     String
-  isRead      Boolean  @default(false) @map("is_read")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  sender      User     @relation("SentDMs", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver    User     @relation("ReceivedDMs", fields: [receiverId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  senderId   String   @map("sender_id")
+  receiverId String   @map("receiver_id")
+  content    String
+  isRead     Boolean  @default(false) @map("is_read")
+  createdAt  DateTime @default(now()) @map("created_at")
+  receiver   User     @relation("ReceivedDMs", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User     @relation("SentDMs", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([senderId, receiverId, createdAt])
   @@index([receiverId, isRead])
   @@map("direct_messages")
 }
 
-// Planetary Colony
-
 model Planet {
-  id      String @id @default(uuid())
-  ownerId String @map("owner_user_id")
-  x       Int
-  y       Int
-  name    String
-
-  // Economy & Resources
-  carbon     Float @default(500) // Basic building material
-  titanium   Float @default(500) // Advanced material
-  food       Float @default(500) // Nutrient Paste (Upkeep)
-  credits    Float @default(100)
-  darkMatter Float @default(0) @map("dark_matter") // Exotic resource from Horizon Harvesters
-  stability  Int   @default(0) // Public Order (0 is neutral, negative is bad)
-  taxRate    Int @default(10) // Percentage
-  population Int @default(100)
-
-  // NPC / PVE
-  isNpc    Boolean @default(false) @map("is_npc")
-  npcLevel Int     @default(0) @map("npc_level")
-  npcClass String? @map("npc_class") // 'melee' | 'ranged' | 'robotic'
-  attackCount Int @default(0) @map("attack_count")
-  maxAttacks  Int @default(15) @map("max_attacks")
-  npcLootGearId String? @map("npc_loot_gear_id")  // Unclaimed gear drop for this NPC life
-  npcRespawnCount Int @default(0) @map("npc_respawn_count")  // Tracking for level scaling
-  planetType    String  @default("colony") @map("planet_type") // "colony" | "harvester"
-
-  // Economy State (Lazy Evaluation)
-  lastResourceUpdate  DateTime @default(now()) @map("last_resource_update")
-  lastFoodConsumption DateTime @default(now()) @map("last_food_consumption")
-
-  // Agents & Special Units
-  spyCount Int @default(0) @map("spy_count")
-
-  // Grid System (Expansion Support)
-  gridSizeX Int        @default(10) @map("grid_size_x") // Starting 10x10, expandable to 50x50
-  gridSizeY Int        @default(10) @map("grid_size_y")
-  buildings Building[]
-
-  // Defense Turret System
-  defenseTurretsJson String? @map("defense_turrets_json") // JSON: [{ level: 1 }, { level: 2 }, ...] Max 20 turrets
-
-  // Construction Queue (Global/Sequential for now, or per building)
-  // One construction slot per colony.
-  // We keep this to track which building is being upgraded if we enforce single slot.
-  isBuilding      Boolean   @default(false) @map("is_building")
-  // We might store the ID of the building being constructed here
-  activeBuildId   String?   @map("active_build_id")
-  buildFinishTime DateTime? @map("build_finish_time")
-
-  // Recruitment (Military)
-  // Academy level is now determined by the building level
-  recruitmentQueue      String? @map("recruitment_queue") // JSON: [{ unit, count, finishTime }]
-  manufacturingQueue    String? @map("manufacturing_queue") // JSON: [{ tool, count, finishTime }]
-  turretConstructionQueue String? @map("turret_construction_queue") // JSON: [{ level, finishTime }]
-
-  // Defense (Sci-Fi equivalents)
-  // These also become buildings or stay as "Global Defense"? 
-  // Colonies often have defensive upgrades. For MVP grid, let's keep them as "Buildings" too?
-  // Or Keep them abstract for now to reduce complexity.
-  // The User said "copy gameplay exactly... plot of land... fit buildings".
-  // So defenses should likely be buildings or special slots.
-  // Let's keep them as abstract levels for THIS iteration to focus on the Grid Economy first.
-  energyCanopyLevel     Int @default(0) @map("energy_canopy_level")
-  orbitalMinefieldLevel Int @default(0) @map("orbital_minefield_level")
-  dockingHubLevel       Int @default(0) @map("docking_hub_level")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  owner         User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  units         PlanetUnit[]
-  tools         ToolInventory[]
-  fleetsFrom    Fleet[]         @relation("FromPlanet")
-  fleetsTo      Fleet[]         @relation("ToPlanet")
-  defenseLayout DefenseLayout?
-  stationedAdmiral Admiral?      @relation("StationedAdmiral")
-  reconProbesLaunched ReconProbe[] @relation("ProbesLaunched")
+  id                      String          @id @default(uuid())
+  ownerId                 String          @map("owner_user_id")
+  x                       Int
+  y                       Int
+  name                    String
+  carbon                  Float           @default(500)
+  titanium                Float           @default(500)
+  food                    Float           @default(500)
+  credits                 Float           @default(100)
+  stability               Int             @default(0)
+  taxRate                 Int             @default(10)
+  population              Int             @default(100)
+  isNpc                   Boolean         @default(false) @map("is_npc")
+  npcLevel                Int             @default(0) @map("npc_level")
+  npcClass                String?         @map("npc_class")
+  attackCount             Int             @default(0) @map("attack_count")
+  maxAttacks              Int             @default(15) @map("max_attacks")
+  npcLootGearId           String?         @map("npc_loot_gear_id")
+  npcRespawnCount         Int             @default(0) @map("npc_respawn_count")
+  lastResourceUpdate      DateTime        @default(now()) @map("last_resource_update")
+  lastFoodConsumption     DateTime        @default(now()) @map("last_food_consumption")
+  spyCount                Int             @default(0) @map("spy_count")
+  gridSizeX               Int             @default(10) @map("grid_size_x")
+  gridSizeY               Int             @default(10) @map("grid_size_y")
+  defenseTurretsJson      String?         @map("defense_turrets_json")
+  isBuilding              Boolean         @default(false) @map("is_building")
+  activeBuildId           String?         @map("active_build_id")
+  buildFinishTime         DateTime?       @map("build_finish_time")
+  recruitmentQueue        String?         @map("recruitment_queue")
+  manufacturingQueue      String?         @map("manufacturing_queue")
+  turretConstructionQueue String?         @map("turret_construction_queue")
+  energyCanopyLevel       Int             @default(0) @map("energy_canopy_level")
+  orbitalMinefieldLevel   Int             @default(0) @map("orbital_minefield_level")
+  dockingHubLevel         Int             @default(0) @map("docking_hub_level")
+  createdAt               DateTime        @default(now()) @map("created_at")
+  updatedAt               DateTime        @updatedAt @map("updated_at")
+  darkMatter              Float           @default(0) @map("dark_matter")
+  planetType              String          @default("colony") @map("planet_type")
+  stationedAdmiral        Admiral?        @relation("StationedAdmiral")
+  buildings               Building[]
+  defenseLayout           DefenseLayout?
+  fleetsFrom              Fleet[]         @relation("FromPlanet")
+  fleetsTo                Fleet[]         @relation("ToPlanet")
+  units                   PlanetUnit[]
+  owner                   User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  reconProbesLaunched     ReconProbe[]    @relation("ProbesLaunched")
+  tools                   ToolInventory[]
 
   @@unique([x, y])
-  @@index([ownerId])  // "My planets" queries
+  @@index([ownerId])
   @@map("planets")
 }
 
-// Colony Unit
 model PlanetUnit {
   id        String   @id @default(uuid())
   planetId  String   @map("planet_id")
-  unitType  String   @map("unit_type") // e.g., "marine", "ranger", "sentinel"
+  unitType  String   @map("unit_type")
   count     Int      @default(0)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-
-  planet Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
+  planet    Planet   @relation(fields: [planetId], references: [id], onDelete: Cascade)
 
   @@unique([planetId, unitType])
   @@map("planet_units")
@@ -217,85 +165,70 @@ model PlanetUnit {
 model ToolInventory {
   id        String   @id @default(uuid())
   planetId  String   @map("planet_id")
-  toolType  String   @map("tool_type") // e.g., "shield_jammer", "auto_turret"
+  toolType  String   @map("tool_type")
   count     Int      @default(0)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-
-  planet Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
+  planet    Planet   @relation(fields: [planetId], references: [id], onDelete: Cascade)
 
   @@unique([planetId, toolType])
   @@map("tool_inventories")
 }
 
-// Defense layout: how troops are assigned to 3 lanes + Courtyard (Surface)
 model DefenseLayout {
   id            String   @id @default(uuid())
   planetId      String   @unique @map("planet_id")
-  // Lane assignments: JSON { "front": { "marine": 50, "ranger": 30 }, "left": {...}, "right": {...} }
   frontLaneJson String   @map("front_lane_json")
   leftLaneJson  String   @map("left_lane_json")
   rightLaneJson String   @map("right_lane_json")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
-
-  planet Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
+  planet        Planet   @relation(fields: [planetId], references: [id], onDelete: Cascade)
 
   @@map("defense_layouts")
 }
 
-// Admiral system: provides combat bonuses (The Commander)
 model Admiral {
-  id           String   @id @default(uuid())
-  userId       String   @unique @map("user_id")
-  name         String   @default("Admiral") // Customizable name
-  // Gear (JSON): { "weapon": { "id": "...", "name": "...", ... }, "helmet": {...}, "spacesuit": {...}, "shield": {...} }
-  gearJson     String   @default("{}") @map("gear_json")
-  // Computed bonuses (cached) - Attack bonuses only (defense system separate)
-  meleeStrengthBonus  Int      @default(0) @map("melee_strength_bonus") // Percentage (capped at 100)
-  rangedStrengthBonus Int      @default(0) @map("ranged_strength_bonus") // Percentage (capped at 100)
-  canopyReductionBonus Int      @default(0) @map("canopy_reduction_bonus") // Percentage (capped at -100, negative)
-  // Legacy fields (kept for compatibility)
-  attackBonus  Int      @default(0) @map("attack_bonus") // DEPRECATED
-  defenseBonus Int      @default(0) @map("defense_bonus") // DEPRECATED
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fleets Fleet[]
-
-  stationedPlanetId String? @unique @map("stationed_planet_id")
-  stationedPlanet   Planet? @relation("StationedAdmiral", fields: [stationedPlanetId], references: [id], onDelete: SetNull)
+  id                   String   @id @default(uuid())
+  userId               String   @unique @map("user_id")
+  name                 String   @default("Admiral")
+  gearJson             String   @default("{}") @map("gear_json")
+  meleeStrengthBonus   Int      @default(0) @map("melee_strength_bonus")
+  rangedStrengthBonus  Int      @default(0) @map("ranged_strength_bonus")
+  canopyReductionBonus Int      @default(0) @map("canopy_reduction_bonus")
+  attackBonus          Int      @default(0) @map("attack_bonus")
+  defenseBonus         Int      @default(0) @map("defense_bonus")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  stationedPlanetId    String?  @unique @map("stationed_planet_id")
+  stationedPlanet      Planet?  @relation("StationedAdmiral", fields: [stationedPlanetId], references: [id])
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fleets               Fleet[]
 
   @@map("admirals")
 }
 
-// Gear pieces inventory - items that can be equipped to admirals
 model GearPiece {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  slotType     String   @map("slot_type") // "weapon", "helmet", "spacesuit", "shield"
-  name         String   // Display name (e.g., "Plasma Rifle", "Command Helmet")
-  rarity       String   // "common", "uncommon", "rare", "epic", "legendary"
-  level        Int      @default(1)
-  // Attack bonuses (for attacking fleets only)
-  meleeStrengthBonus  Int      @default(0) @map("melee_strength_bonus") // Percentage
-  rangedStrengthBonus Int      @default(0) @map("ranged_strength_bonus") // Percentage
-  canopyReductionBonus Int      @default(0) @map("canopy_reduction_bonus") // Percentage (negative)
-  // Legacy fields (kept for compatibility)
-  attackBonus  Int      @default(0) @map("attack_bonus") // DEPRECATED
-  defenseBonus Int      @default(0) @map("defense_bonus") // DEPRECATED
-  setName      String?  @map("set_name") // For set bonuses (e.g., "Vanguard Set")
-  iconName     String?  @map("icon_name") // Icon identifier for UI
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(uuid())
+  userId               String   @map("user_id")
+  slotType             String   @map("slot_type")
+  name                 String
+  rarity               String
+  level                Int      @default(1)
+  meleeStrengthBonus   Int      @default(0) @map("melee_strength_bonus")
+  rangedStrengthBonus  Int      @default(0) @map("ranged_strength_bonus")
+  canopyReductionBonus Int      @default(0) @map("canopy_reduction_bonus")
+  attackBonus          Int      @default(0) @map("attack_bonus")
+  defenseBonus         Int      @default(0) @map("defense_bonus")
+  setName              String?  @map("set_name")
+  iconName             String?  @map("icon_name")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("gear_pieces")
 }
 
-// Battle reports: results of combat
 model BattleReport {
   id                      String   @id @default(uuid())
   fleetId                 String   @unique @map("fleet_id")
@@ -303,109 +236,93 @@ model BattleReport {
   defenderId              String   @map("defender_user_id")
   attackerPlanetId        String   @map("attacker_planet_id")
   defenderPlanetId        String   @map("defender_planet_id")
-  // Battle outcome
-  winner                  String // "attacker" or "defender"
-  // Lane results: JSON { "front": { "attackerLosses": {...}, "defenderLosses": {...}, "winner": "attacker" }, ... }
+  winner                  String
   laneResultsJson         String   @map("lane_results_json")
-  // Summary
   attackerTotalLossesJson String   @map("attacker_total_losses_json")
   defenderTotalLossesJson String   @map("defender_total_losses_json")
-  // Resources gained/lost
-  resourcesJson           String?  @map("resources_json") // { "carbon": 100, "titanium": 50 }
+  resourcesJson           String?  @map("resources_json")
   createdAt               DateTime @default(now()) @map("created_at")
-
-  fleet Fleet @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+  fleet                   Fleet    @relation(fields: [fleetId], references: [id], onDelete: Cascade)
 
   @@map("battle_reports")
 }
 
-// Fleet / Expedition
 model Fleet {
-  id                  String   @id @default(uuid())
-  ownerId             String   @map("owner_user_id")
-  fromPlanetId        String   @map("from_planet_id")
-  toPlanetId          String   @map("to_planet_id")
-  type                String // "attack", "support", "scout", "trade"
-  unitsJson           String   @map("units_json") // JSON: { "marine": 50, "ranger": 30 }
-  // Lane assignments for attacks (3 lanes: front, left, right)
-  laneAssignmentsJson String?  @map("lane_assignments_json") // JSON: { "front": {...}, "left": {...}, "right": {...} }
-  // Tools/equipment (Breach Pods = Scaling Ladders, etc.)
-  toolsJson           String?  @map("tools_json")
-  // Loot carried by the fleet
-  cargoJson           String?  @map("cargo_json")
-  // Troops borrowed from defense layout for this mission
-  // JSON: { "front": { "marine": 10 }, "left": { "ranger": 5 }, "right": {} }
-  borrowedFromDefenseJson String? @map("borrowed_from_defense_json")
-  // Admiral assigned to this fleet (optional)
-  admiralId           String?  @map("admiral_id")
-  departAt            DateTime @default(now()) @map("depart_at")
-  arriveAt            DateTime @map("arrive_at")
-  status              String   @default("enroute") // "enroute", "arrived", "returning", "completed", "resolved"
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  id                      String        @id @default(uuid())
+  ownerId                 String        @map("owner_user_id")
+  fromPlanetId            String        @map("from_planet_id")
+  toPlanetId              String        @map("to_planet_id")
+  type                    String
+  unitsJson               String        @map("units_json")
+  laneAssignmentsJson     String?       @map("lane_assignments_json")
+  toolsJson               String?       @map("tools_json")
+  cargoJson               String?       @map("cargo_json")
+  borrowedFromDefenseJson String?       @map("borrowed_from_defense_json")
+  admiralId               String?       @map("admiral_id")
+  departAt                DateTime      @default(now()) @map("depart_at")
+  arriveAt                DateTime      @map("arrive_at")
+  status                  String        @default("enroute")
+  createdAt               DateTime      @default(now()) @map("created_at")
+  updatedAt               DateTime      @updatedAt @map("updated_at")
+  battleReport            BattleReport?
+  admiral                 Admiral?      @relation(fields: [admiralId], references: [id])
+  fromPlanet              Planet        @relation("FromPlanet", fields: [fromPlanetId], references: [id])
+  owner                   User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  toPlanet                Planet        @relation("ToPlanet", fields: [toPlanetId], references: [id])
 
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  fromPlanet   Planet        @relation("FromPlanet", fields: [fromPlanetId], references: [id])
-  toPlanet     Planet        @relation("ToPlanet", fields: [toPlanetId], references: [id])
-  admiral      Admiral?      @relation(fields: [admiralId], references: [id], onDelete: SetNull)
-  battleReport BattleReport?
-
-  @@index([status, arriveAt])    // Timer worker polling
-  @@index([ownerId, status])      // "My fleets" queries
-  @@index([toPlanetId, status])   // Incoming attacks queries
+  @@index([status, arriveAt])
+  @@index([ownerId, status])
+  @@index([toPlanetId, status])
   @@map("fleets")
 }
 
 model Building {
   id       String @id @default(uuid())
   planetId String @map("planet_id")
-  type     String // "carbon_processor", "titanium_extractor", "hydroponics", "colony_hub", "naval_academy", "orbital_garrison"
+  type     String
   x        Int
   y        Int
   level    Int    @default(1)
-  status   String @default("active") // "active", "constructing", "busted"?
-
-  planet Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
+  status   String @default("active")
+  planet   Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
 
   @@map("buildings")
 }
 
 model ReconProbe {
-  id               String   @id @default(uuid())
-  type             String   @default("recon_probe")
-  ownerId          String   @map("owner_user_id")
-  fromPlanetId     String   @map("from_planet_id")
-  targetX          Int      @map("target_x")
-  targetY          Int      @map("target_y")
-  status           String   @default("traveling") // "traveling", "active", "discovered", "returning", "cooldown", "destroyed"
-  startTime        DateTime @default(now()) @map("start_time")
-  arrivalTime      DateTime @map("arrival_time")
-  returnTime       DateTime? @map("return_time")
-  cooldownUntil    DateTime? @map("cooldown_until")
-  wasDiscovered    Boolean  @default(false) @map("was_discovered")
-  lastUpdateTime   DateTime @default(now()) @map("last_update_time")
-  discoveryChance  Float    @default(0) @map("discovery_chance") // 0.0 to 1.0
-  accuracy         Float    @default(0) @map("accuracy") // 0.0 to 1.0 (Information relay accuracy)
-  radius           Int      @default(150) // Scan radius
-  
-  owner            User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  fromPlanet       Planet   @relation("ProbesLaunched", fields: [fromPlanetId], references: [id])
+  id              String    @id @default(uuid())
+  type            String    @default("recon_probe")
+  ownerId         String    @map("owner_user_id")
+  fromPlanetId    String    @map("from_planet_id")
+  targetX         Int       @map("target_x")
+  targetY         Int       @map("target_y")
+  status          String    @default("traveling")
+  startTime       DateTime  @default(now()) @map("start_time")
+  arrivalTime     DateTime  @map("arrival_time")
+  returnTime      DateTime? @map("return_time")
+  cooldownUntil   DateTime? @map("cooldown_until")
+  wasDiscovered   Boolean   @default(false) @map("was_discovered")
+  lastUpdateTime  DateTime  @default(now()) @map("last_update_time")
+  discoveryChance Float     @default(0) @map("discovery_chance")
+  accuracy        Float     @default(0) @map("accuracy")
+  radius          Int       @default(150)
+  fromPlanet      Planet    @relation("ProbesLaunched", fields: [fromPlanetId], references: [id])
+  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@map("recon_probes")
 }
 
 model EspionageReport {
-  id               String   @id @default(uuid())
-  ownerId          String   @map("owner_user_id")
-  probeId          String?  @map("probe_id")
-  probeType        String   @map("probe_type")
-  targetX          Int      @map("target_x")
-  targetY          Int      @map("target_y")
-  accuracy         Float    @default(0)
-  dataJson         String   @map("data_json") // Detailed intel on colonies
-  createdAt        DateTime @default(now()) @map("created_at")
-
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  ownerId   String   @map("owner_user_id")
+  probeId   String?  @map("probe_id")
+  probeType String   @map("probe_type")
+  targetX   Int      @map("target_x")
+  targetY   Int      @map("target_y")
+  accuracy  Float    @default(0)
+  dataJson  String   @map("data_json")
+  createdAt DateTime @default(now()) @map("created_at")
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@map("espionage_reports")
 }
@@ -413,38 +330,35 @@ model EspionageReport {
 model InboxMessage {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
-  type      String   // "probe_alert", "system_alert", etc.
+  type      String
   title     String
   content   String
   isRead    Boolean  @default(false) @map("is_read")
   createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("inbox_messages")
 }
 
-// World configuration - dynamic bounds and expansion tracking
 model WorldConfig {
-  id              String   @id @default("singleton")  // Single row
-  sizeX           Int      @default(10000) @map("size_x")
-  sizeY           Int      @default(10000) @map("size_y")
-  expansionCount  Int      @default(0) @map("expansion_count")
-  lastExpansion   DateTime? @map("last_expansion")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  
+  id             String    @id @default("singleton")
+  sizeX          Int       @default(10000) @map("size_x")
+  sizeY          Int       @default(10000) @map("size_y")
+  expansionCount Int       @default(0) @map("expansion_count")
+  lastExpansion  DateTime? @map("last_expansion")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
   @@map("world_config")
 }
 
-// Black Holes - spawn points for Horizon Harvesters
 model BlackHole {
   id        String   @id @default(uuid())
   x         Int
   y         Int
-  radius    Int      @default(300)  // Accretion disk radius for Harvester spawning
+  radius    Int      @default(300)
   createdAt DateTime @default(now()) @map("created_at")
-  
+
   @@unique([x, y])
   @@map("black_holes")
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import './GlobalHUD.css';
-import { type Planet, api } from '../lib/api';
+import { type Planet } from '../lib/api';
 import { useSocketEvent } from '../hooks/useSocketEvent';
 import { useSocket } from '../lib/SocketContext';
 
@@ -34,17 +34,6 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
             setPlanet(data);
         }
     }, [planet?.id]));
-
-    // Fallback polling when socket disconnects
-    useEffect(() => {
-        if (!planet?.id || isConnected) return;
-
-        const interval = setInterval(() => {
-            api.getPlanet(planet.id).then(setPlanet).catch(console.error);
-        }, 5000);
-
-        return () => clearInterval(interval);
-    }, [planet?.id, isConnected]);
 
     // Level calculation
     const level = user?.level || 1;

@@ -1,0 +1,13 @@
+[Unit]
+Description=Redis Health Monitor for Dread Horizon
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/bone/oldschoolempire/monitor-redis.sh
+User=bone
+Group=bone
+
+# Allow the script to use sudo for docker commands
+# Note: User 'bone' should have passwordless sudo for docker compose commands
+

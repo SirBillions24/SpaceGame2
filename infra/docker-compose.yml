@@ -21,15 +21,17 @@ services:
     container_name: empire-redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
+    # No volume - persistence is disabled, data is ephemeral (safe for job queues)
+    # Prevent Redis from becoming read-only replica
+    # Disable persistence to avoid snapshot issues that might trigger replica mode
+    command: redis-server --appendonly no --save ""
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
 volumes:
   postgres_data:
-  redis_data:
-
+  # redis_data volume removed - persistence is disabled

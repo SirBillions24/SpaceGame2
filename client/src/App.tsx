@@ -11,7 +11,6 @@ import CoalitionPanel from './components/CoalitionPanel';
 import { SourcePlanetDropdown } from './components/SourcePlanetDropdown';
 import { api, setAuthToken, getAuthToken, getCurrentUser, type Planet } from './lib/api';
 import { useSocketEvent } from './hooks/useSocketEvent';
-import { useSocket } from './lib/SocketContext';
 import './App.css';
 
 function App() {
@@ -54,18 +53,6 @@ function App() {
       setHudPlanet(data);
     }
   }, [hudPlanet?.id]));
-
-  // Fallback polling when socket disconnects
-  const { isConnected } = useSocket();
-  useEffect(() => {
-    if (!isLoggedIn || isConnected) return;
-
-    const interval = setInterval(() => {
-      checkUserStatus();
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [isLoggedIn, isConnected]);
 
   const checkUserStatus = (targetPlanetId?: string) => {
     // Fetch full user profile (with XP/Level)
@@ -155,8 +142,7 @@ function App() {
     setSourcePlanet(null);
     setTargetPlanet(null);
     setShowFleetPanel(false);
-    // Refresh map to show new fleet - WorldMap polls every 2s, so we don't need to force reload.
-    // window.location.reload(); 
+    // Fleet updates are received via WebSocket 'fleet:updated' event in WorldMap
   };
 
   const handleLogout = () => {

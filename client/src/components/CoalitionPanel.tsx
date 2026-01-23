@@ -74,7 +74,6 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const dmChatEndRef = useRef<HTMLDivElement>(null);
     const dmContainerRef = useRef<HTMLDivElement>(null);
-    const pollInterval = useRef<NodeJS.Timeout | null>(null);
     const [chatCursor, setChatCursor] = useState<string | undefined>(undefined);
     const [hasMoreChat, setHasMoreChat] = useState(false);
     const [loadingMoreChat, setLoadingMoreChat] = useState(false);
@@ -101,9 +100,6 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
         loadMyCoalition();
         loadRankings();
         loadConstants();
-        return () => {
-            if (pollInterval.current) clearInterval(pollInterval.current);
-        };
     }, []);
 
     const loadConstants = async () => {
@@ -119,7 +115,6 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
         if (tab === 'chat' && coalition) {
             loadChat();
             loadDmConversations();
-            // Removed polling - now using WebSocket subscriptions for real-time updates
         }
         if (tab === 'rankings') loadRankings();
         if (tab === 'settings' && coalition) {
@@ -331,7 +326,7 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
                     return uniqueNew.concat(prev);
                 });
             } else {
-                // Polling update: merge new messages at the end, keep old ones
+                // Initial load or refresh: merge new messages at the end, keep old ones
                 shouldAutoScrollChat.current = isNearBottom(chatContainerRef.current);
                 setMessages(prev => {
                     if (prev.length === 0) return newMessages;
@@ -356,8 +351,7 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
                 });
             }
 
-            // Set cursor and hasMore: on loadMore, or if this is the initial load (cursor undefined)
-            // During polling, keep existing cursor and hasMore unchanged
+            // Set cursor and hasMore on loadMore or initial load
             if (loadMore || chatCursor === undefined) {
                 setChatCursor(data.nextCursor);
                 setHasMoreChat(data.hasMore);
@@ -404,7 +398,7 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
                     return uniqueNew.concat(prev);
                 });
             } else {
-                // Polling update: merge new messages at the end, keep old ones
+                // Initial load or refresh: merge new messages at the end, keep old ones
                 shouldAutoScrollDm.current = isNearBottom(dmContainerRef.current);
                 setDmMessages(prev => {
                     if (prev.length === 0) return newMessages;
@@ -436,8 +430,7 @@ export default function CoalitionPanel({ onClose }: CoalitionPanelProps) {
                 });
             }
 
-            // Set cursor and hasMore: on loadMore, or if this is the initial load (cursor undefined)
-            // During polling, keep existing cursor and hasMore unchanged
+            // Set cursor and hasMore on loadMore or initial load
             if (loadMore || dmCursor === undefined) {
                 setDmCursor(data.nextCursor);
                 setHasMoreDm(data.hasMore);

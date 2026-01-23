@@ -30,6 +30,52 @@ export const NPC_BALANCE = {
     },
 
     /**
+     * Troop regeneration between attacks
+     * NPCs regenerate troops after each attack, but at a decreasing rate
+     * 
+     * Formula: troopsForHit = baseTroops * decayMultiplier^attackCount
+     * 
+     * EXAMPLE (Level 10 NPC with 60 base troops, decayMultiplier 0.65):
+     * - Hit 1: 60 * 0.65^0 = 60 troops (100%)
+     * - Hit 2: 60 * 0.65^1 = 39 troops (65%)
+     * - Hit 3: 60 * 0.65^2 = 25 troops (42%)
+     * - Hit 4: 60 * 0.65^3 = 16 troops (27%)
+     * - Hit 5: 60 * 0.65^4 = 11 troops (18%)
+     * 
+     * GAMEPLAY IMPACT:
+     * - Higher decayMultiplier = more troops on later hits, slower decay
+     * - minimumTroopPercent = floor, prevents completely empty NPCs
+     */
+    troopRegeneration: {
+        decayMultiplier: 0.65,      // Troops = base * this^attackCount
+        minimumTroopPercent: 0.15,  // Never drop below 15% of base troops
+    },
+
+    /**
+     * Loot distribution across multiple attacks
+     * Instead of front-loading all resources, distribute across hits
+     * 
+     * Formula: lootThisHit = remainingLoot * lootPercentPerHit
+     * 
+     * EXAMPLE (10,000 total carbon, lootPercentPerHit 0.40):
+     * - Hit 1: 10,000 * 0.40 = 4,000 carbon (40% of total)
+     * - Hit 2: 6,000 * 0.40 = 2,400 carbon (24% of total)
+     * - Hit 3: 3,600 * 0.40 = 1,440 carbon (14% of total)
+     * - Hit 4: 2,160 * 0.40 = 864 carbon (9% of total)
+     * - Hit 5: 1,296 * 0.40 = 518 carbon (5% of total)
+     * 
+     * GAMEPLAY IMPACT:
+     * - Higher lootPercentPerHit = more front-loaded, less for later hits
+     * - Lower = more evenly distributed, more incentive for multiple attacks
+     * - minimumLootPercent = ensures final hits still give something
+     */
+    lootDistribution: {
+        lootPercentPerHit: 0.40,    // Take 40% of remaining resources per hit
+        minimumLootPercent: 0.10,   // Always allow at least 10% of base per hit
+        creditsPerHit: 0.25,        // Credits given per hit (25% of base per attack)
+    },
+
+    /**
      * Respawn behavior
      */
     respawn: {

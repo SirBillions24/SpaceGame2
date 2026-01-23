@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { api, type Planet, getCurrentUser } from '../lib/api';
 import { useSocketEvent } from '../hooks/useSocketEvent';
-import { useSocket } from '../lib/SocketContext';
 import DefensePanel from './DefensePanel';
 import WorkshopPanel from './WorkshopPanel';
 import ExpansionModal from './ExpansionModal';
@@ -228,18 +227,6 @@ export default function PlanetInterior(props: PlanetInteriorProps) {
       }
     }
   }, [planet.id]));
-
-  // Fallback polling when socket disconnects
-  const { isConnected } = useSocket();
-  useEffect(() => {
-    if (isConnected) return;
-
-    const interval = setInterval(() => {
-      loadPlanetData();
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [planet.id, isConnected]);
 
   // Timer Logic
   const [timeLeft, setTimeLeft] = useState<string | null>(null);

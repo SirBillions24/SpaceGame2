@@ -9,6 +9,27 @@ interface SocketContextType {
 
 const SocketContext = createContext<SocketContextType>({ socket: null, isConnected: false });
 
+/**
+ * Derive WebSocket URL from API URL.
+ * VITE_API_URL may include /api suffix which needs to be stripped for socket.io
+ */
+function getWebSocketUrl(): string {
+    // Prefer explicit WS URL if set
+    if (import.meta.env.VITE_WS_URL) {
+        return import.meta.env.VITE_WS_URL;
+    }
+    
+    // Fall back to API URL, stripping /api suffix if present
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    if (apiUrl) {
+        // Remove /api or /api/ suffix to get base URL for socket.io
+        return apiUrl.replace(/\/api\/?$/, '');
+    }
+    
+    // Local development: empty string means same origin
+    return '';
+}
+
 export function SocketProvider({ children }: { children: ReactNode }) {
     const [socket, setSocket] = useState<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
@@ -17,7 +38,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         const token = localStorage.getItem('authToken');
         if (!token) return;
 
-        const wsUrl = import.meta.env.VITE_WS_URL || import.meta.env.VITE_API_URL || '';
+        const wsUrl = getWebSocketUrl();
+        console.log('🔌 Connecting WebSocket to:', wsUrl || '(same origin)');
 
         const newSocket = io(wsUrl, {
             auth: { token },

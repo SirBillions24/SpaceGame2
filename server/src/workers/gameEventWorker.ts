@@ -19,12 +19,13 @@ import { Worker, Job } from 'bullmq';
 import prisma from '../lib/prisma';
 import { resolveCombat } from '../services/combatService';
 import { syncPlanetResources, formatPlanetForSocket } from '../services/planetService';
-import { relocateNpc } from '../services/pveService';
+import { relocateNpc, regenerateNpcTroops, getAvailableLootForNpc } from '../services/pveService';
 import { updateProbes } from '../services/espionageService';
 import { transferHarvesterOwnership } from '../services/harvesterService';
 import { FleetArrivalJob, FleetReturnJob, NpcRespawnJob, ProbeUpdateJob, redisConnectionOptions, queueNpcRespawn } from '../lib/jobQueue';
 import { NPC_BALANCE } from '../constants/npcBalanceData';
 import { socketService } from '../services/socketService';
+import { logError, isRedisReadOnlyError } from '../lib/errorLogger';
 
 /**
  * Process fleet arrival at destination
@@ -128,6 +129,28 @@ async function processFleetArrival(job: Job<FleetArrivalJob>) {
 
             console.log(`✅ Fleet ${fleetId} merged to friendly planet successfully`);
             return;
+        }
+
+        // Check if target is an NPC and prepare for combat
+        const preflightPlanet = await prisma.planet.findUnique({ where: { id: fleet.toPlanetId } });
+        if (preflightPlanet && preflightPlanet.isNpc && (preflightPlanet as any).planetType !== 'harvester') {
+            // Regenerate NPC troops based on decay formula before combat
+            // This ensures each attack faces SOME resistance, scaled by attack count
+            await regenerateNpcTroops(fleet.toPlanetId);
+
+            // Set NPC resources to distributed loot amount for this specific attack
+            // This replaces front-loaded loot with distributed loot across all attacks
+            const availableLoot = await getAvailableLootForNpc(fleet.toPlanetId);
+            await prisma.planet.update({
+                where: { id: fleet.toPlanetId },
+                data: {
+                    carbon: availableLoot.carbon,
+                    titanium: availableLoot.titanium,
+                    food: availableLoot.food,
+                    credits: availableLoot.credits,
+                }
+            });
+            console.log(`💰 NPC ${fleet.toPlanetId} loot set for attack #${preflightPlanet.attackCount + 1}: C:${availableLoot.carbon} T:${availableLoot.titanium} F:${availableLoot.food}`);
         }
 
         // Hostile attack - resolve combat
@@ -617,6 +640,27 @@ export function createGameEventsWorker() {
 
     worker.on('failed', (job, err) => {
         console.error(`❌ Job ${job?.id} (${job?.name}) failed:`, err.message);
+    });
+
+    // Handle worker-level errors (Redis connection issues, etc.)
+    // This is CRITICAL - without this handler, connection errors crash the process
+    worker.on('error', (err) => {
+        const category = isRedisReadOnlyError(err) ? 'REDIS_READONLY' : 'WORKER_ERROR';
+        logError(category, err, { 
+            component: 'gameEventsWorker',
+            workerName: 'GameEvents'
+        });
+        // Don't throw - BullMQ will attempt to reconnect automatically
+    });
+
+    // Log when worker is ready after reconnection
+    worker.on('ready', () => {
+        console.log('✅ Game Events Worker ready');
+    });
+
+    // Log stalled jobs (jobs that took too long)
+    worker.on('stalled', (jobId) => {
+        console.warn(`⚠️ Job ${jobId} stalled - will be retried`);
     });
 
     console.log('🔧 Game Events Worker started');

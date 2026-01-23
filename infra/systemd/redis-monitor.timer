@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Redis Health Monitor every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
+

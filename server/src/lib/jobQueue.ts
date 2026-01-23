@@ -15,6 +15,8 @@
  */
 
 import { Queue, QueueEvents } from 'bullmq';
+import { createClient } from 'redis';
+import { logError, isRedisReadOnlyError } from './errorLogger';
 
 // Redis connection configuration (use options object, not IORedis instance)
 export const redisConnectionOptions = {
@@ -22,6 +24,31 @@ export const redisConnectionOptions = {
     port: parseInt(process.env.REDIS_PORT || '6379'),
     password: process.env.REDIS_PASSWORD || undefined,
     maxRetriesPerRequest: null as null, // Required by BullMQ
+    // Retry strategy for connection failures
+    retryStrategy: (times: number) => {
+        if (times > 20) {
+            logError('REDIS_CONNECTION', `BullMQ giving up after ${times} retries`, {
+                component: 'jobQueue'
+            });
+            return null; // Stop retrying
+        }
+        const delay = Math.min(times * 100, 5000);
+        logError('REDIS_CONNECTION', `BullMQ reconnect attempt ${times}, next retry in ${delay}ms`, {
+            component: 'jobQueue',
+            attempt: times
+        });
+        return delay;
+    },
+    // Enable auto-reconnect
+    enableReadyCheck: true,
+    reconnectOnError: (err: Error) => {
+        // Reconnect on READONLY errors (Redis replica mode)
+        if (isRedisReadOnlyError(err)) {
+            logError('REDIS_READONLY', err, { component: 'jobQueue' });
+            return true;
+        }
+        return false;
+    },
 };
 
 /**
@@ -46,14 +73,26 @@ export const gameEventsQueue = new Queue('GameEvents', {
     },
 });
 
-// Log queue events
+// Log queue errors with proper categorization
 gameEventsQueue.on('error', (err) => {
-    console.error('❌ Queue error:', err.message);
+    const category = isRedisReadOnlyError(err) ? 'REDIS_READONLY' : 'QUEUE_ERROR';
+    logError(category, err, { 
+        component: 'gameEventsQueue',
+        queueName: 'GameEvents'
+    });
 });
 
 // Queue events for monitoring (optional)
 export const gameEventsQueueEvents = new QueueEvents('GameEvents', {
     connection: redisConnectionOptions,
+});
+
+gameEventsQueueEvents.on('error', (err) => {
+    const category = isRedisReadOnlyError(err) ? 'REDIS_READONLY' : 'QUEUE_ERROR';
+    logError(category, err, { 
+        component: 'gameEventsQueueEvents',
+        queueName: 'GameEvents'
+    });
 });
 
 /**
@@ -174,4 +213,55 @@ export async function closeQueues() {
     await gameEventsQueue.close();
     await gameEventsQueueEvents.close();
     console.log('📴 Job queues closed');
+}
+
+/**
+ * Check if Redis is healthy and writable.
+ * Used by the /health endpoint.
+ */
+export async function checkRedisHealth(): Promise<boolean> {
+    const redisUrl = `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`;
+    let client;
+    
+    try {
+        client = createClient({ 
+            url: redisUrl,
+            socket: {
+                connectTimeout: 2000, // 2 second timeout
+            }
+        });
+
+        // Don't let error events throw during health check
+        client.on('error', () => {});
+        
+        await client.connect();
+        
+        // Try a simple PING
+        const pong = await client.ping();
+        
+        // Try a write operation to detect read-only mode
+        const testKey = '__health_check__';
+        await client.set(testKey, Date.now().toString(), { EX: 10 });
+        await client.del(testKey);
+        
+        await client.quit();
+        
+        return pong === 'PONG';
+    } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        // Don't log routine health check failures as errors
+        // Only log if it's a READONLY issue (which indicates the core problem)
+        if (isRedisReadOnlyError(error)) {
+            logError('REDIS_READONLY', error, { component: 'healthCheck' });
+        }
+        
+        // Try to close the client if it exists
+        try {
+            if (client) await client.quit();
+        } catch {
+            // Ignore close errors
+        }
+        
+        return false;
+    }
 }

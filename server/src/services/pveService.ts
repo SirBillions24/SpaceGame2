@@ -317,6 +317,207 @@ export async function generateNpcDefense(planetId: string, level: number, npcCla
 }
 
 // =============================================================================
+// TROOP REGENERATION (Between Attacks)
+// =============================================================================
+
+/**
+ * Calculate the troop multiplier for a given attack count
+ * Uses decay formula: multiplier = decayMultiplier^attackCount
+ * Clamped to minimum threshold
+ */
+export function calculateTroopDecayMultiplier(attackCount: number): number {
+    const { decayMultiplier, minimumTroopPercent } = NPC_BALANCE.troopRegeneration;
+    const rawMultiplier = Math.pow(decayMultiplier, attackCount);
+    return Math.max(minimumTroopPercent, rawMultiplier);
+}
+
+/**
+ * Regenerate NPC troops for the next attack
+ * Called BEFORE combat resolution to ensure defenders are present
+ * 
+ * Uses decay-based scaling: each subsequent attack faces fewer troops
+ * but never zero (minimum floor applies)
+ */
+export async function regenerateNpcTroops(planetId: string): Promise<void> {
+    const planet = await prisma.planet.findUnique({ where: { id: planetId } });
+    if (!planet || !planet.isNpc) return;
+
+    const attackCount = planet.attackCount;
+    const level = planet.npcLevel;
+    const npcClass = planet.npcClass || 'melee';
+
+    // Calculate decay multiplier based on how many times this NPC has been hit
+    const troopMultiplier = calculateTroopDecayMultiplier(attackCount);
+
+    // Get theme for unit composition
+    const theme = NPC_THEMES[npcClass as keyof typeof NPC_THEMES];
+    if (!theme) return;
+
+    // Calculate base troops (what a fresh NPC would have)
+    const { baseUnits, unitsPerLevel, toolUnlockLevel, toolCountScaling } = NPC_BALANCE.defenseScaling;
+    const baseTroops = baseUnits + (level * unitsPerLevel);
+
+    // Apply decay: this attack's troops
+    const scaledTroops = Math.max(1, Math.floor(baseTroops * troopMultiplier));
+
+    console.log(`🛡️ Regenerating NPC ${planetId} troops: ${scaledTroops}/${baseTroops} (${Math.round(troopMultiplier * 100)}% at attack #${attackCount + 1})`);
+
+    // Randomize lane distribution (same logic as generateNpcDefense)
+    const frontRatio = 0.35 + (Math.random() * 0.15);
+    const leftRatio = (1 - frontRatio) * (0.4 + Math.random() * 0.2);
+    const rightRatio = 1 - frontRatio - leftRatio;
+
+    // Determine available units based on level
+    const themeUnlockLevels = theme.unitUnlockLevels || {};
+    const availableUnits = theme.units.filter(u => {
+        const unlockLevel = themeUnlockLevels[u];
+        return !unlockLevel || level >= unlockLevel;
+    });
+
+    // Distribute units across unit types
+    const distributeUnits = (count: number): Record<string, number> => {
+        const lane: Record<string, number> = {};
+        let remaining = count;
+
+        const shuffled = shuffleArray([...availableUnits]);
+        shuffled.forEach((u, i) => {
+            const isHeavy = u === 'sentinel' || u === 'guardian' || u === 'brute';
+            const ratio = isHeavy ? 0.2 + Math.random() * 0.1 : 0.4 + Math.random() * 0.2;
+            const allocation = i === shuffled.length - 1 ? remaining : Math.floor(remaining * ratio);
+            if (allocation > 0) {
+                lane[u] = allocation;
+                remaining -= allocation;
+            }
+        });
+        return lane;
+    };
+
+    const front = distributeUnits(Math.floor(scaledTroops * frontRatio));
+    const left = distributeUnits(Math.floor(scaledTroops * leftRatio));
+    const right = distributeUnits(Math.floor(scaledTroops * rightRatio));
+
+    // Add tools at higher levels (scaled down too)
+    const toolCount = level >= toolUnlockLevel ? Math.floor(level * toolCountScaling * troopMultiplier) : 0;
+    const tools: Record<string, number> = toolCount > 0 ? { sentry_drones: toolCount } : {};
+
+    // Update defense layout
+    await prisma.defenseLayout.upsert({
+        where: { planetId },
+        update: {
+            frontLaneJson: JSON.stringify({ units: front, tools }),
+            leftLaneJson: JSON.stringify({ units: left, tools: {} }),
+            rightLaneJson: JSON.stringify({ units: right, tools: {} }),
+        },
+        create: {
+            planetId,
+            frontLaneJson: JSON.stringify({ units: front, tools }),
+            leftLaneJson: JSON.stringify({ units: left, tools: {} }),
+            rightLaneJson: JSON.stringify({ units: right, tools: {} }),
+        }
+    });
+
+    // Update planet_units table
+    const allUnits: Record<string, number> = {};
+    [front, left, right].forEach(lane => {
+        for (const [unit, count] of Object.entries(lane)) {
+            allUnits[unit] = (allUnits[unit] || 0) + count;
+        }
+    });
+
+    // Clear old units and create new ones
+    await prisma.planetUnit.deleteMany({ where: { planetId } });
+
+    for (const [unitType, count] of Object.entries(allUnits)) {
+        if (count > 0) {
+            await prisma.planetUnit.create({
+                data: { planetId, unitType, count }
+            });
+        }
+    }
+}
+
+// =============================================================================
+// LOOT CALCULATION (Distributed across attacks)
+// =============================================================================
+
+/**
+ * Calculate how much loot is available for a specific attack
+ * Uses decay-based distribution: first hit gets most, subsequent hits get less
+ * but there's always something to loot until the NPC resets
+ * 
+ * @param baseLoot - The base loot amount for this resource (from NPC level)
+ * @param attackCount - Current attack count (0-indexed, this is the attack about to happen)
+ * @param maxAttacks - Maximum attacks before NPC resets
+ * @returns The loot available for this specific attack
+ */
+export function calculateLootForAttack(
+    baseLoot: number, 
+    attackCount: number, 
+    maxAttacks: number
+): number {
+    const { lootPercentPerHit, minimumLootPercent } = NPC_BALANCE.lootDistribution;
+
+    // Calculate remaining loot after previous attacks
+    // Each attack takes lootPercentPerHit of what remains
+    let remaining = baseLoot;
+    for (let i = 0; i < attackCount; i++) {
+        const taken = remaining * lootPercentPerHit;
+        remaining -= taken;
+    }
+
+    // This attack takes lootPercentPerHit of remaining
+    const thisHitLoot = remaining * lootPercentPerHit;
+
+    // Ensure minimum loot (prevents near-zero loot on later hits)
+    const minimumLoot = baseLoot * minimumLootPercent;
+
+    return Math.max(minimumLoot, Math.floor(thisHitLoot));
+}
+
+/**
+ * Get the available loot for an NPC at its current attack state
+ * Returns what the attacker can potentially take on this hit
+ */
+export async function getAvailableLootForNpc(planetId: string): Promise<{
+    carbon: number;
+    titanium: number;
+    food: number;
+    credits: number;
+}> {
+    const planet = await prisma.planet.findUnique({ where: { id: planetId } });
+    if (!planet || !planet.isNpc) {
+        return { carbon: 0, titanium: 0, food: 0, credits: 0 };
+    }
+
+    const attackCount = planet.attackCount;
+    const maxAttacks = planet.maxAttacks || 10;
+    const level = planet.npcLevel;
+    const npcClass = planet.npcClass || 'melee';
+
+    // Calculate base loot from level (same formula as spawn)
+    const lootRes = NPC_LOOT_RESOURCES;
+    const levelScale = level / lootRes.levelDivisor;
+
+    let baseCarbon = lootRes.baseCarbon * levelScale;
+    let baseTitanium = lootRes.baseTitanium * levelScale;
+    let baseFood = lootRes.baseFood * levelScale;
+    const baseCredits = lootRes.baseCredits * levelScale;
+
+    // Apply archetype multipliers
+    if (npcClass === 'melee') baseCarbon *= lootRes.archetypeMultiplier;
+    if (npcClass === 'robotic') baseTitanium *= lootRes.archetypeMultiplier;
+    if (npcClass === 'ranged') baseFood *= lootRes.archetypeMultiplier;
+
+    // Calculate loot for this specific attack
+    return {
+        carbon: calculateLootForAttack(baseCarbon, attackCount, maxAttacks),
+        titanium: calculateLootForAttack(baseTitanium, attackCount, maxAttacks),
+        food: calculateLootForAttack(baseFood, attackCount, maxAttacks),
+        credits: Math.floor(baseCredits * NPC_BALANCE.lootDistribution.creditsPerHit),
+    };
+}
+
+// =============================================================================
 // NPC SPAWNING & RESPAWNING
 // =============================================================================
 

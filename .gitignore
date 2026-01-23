@@ -13,6 +13,10 @@ dist/
 build/
 *.log
 
+# Error logs directory (keep .gitkeep)
+logs/*.log
+!logs/.gitkeep
+
 # IDE
 .vscode/
 .idea/

@@ -1,0 +1,15 @@
+# Logrotate config for Dread Horizon error logs
+# Copy to /etc/logrotate.d/empire-errors
+
+/home/bone/oldschoolempire/logs/errors.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 bone bone
+    dateext
+    dateformat -%Y%m%d
+}
+
