@@ -1,10 +1,10 @@
 import rateLimit from 'express-rate-limit';
 
 // Global rate limiter - more permissive for game clients with frequent polling
-// 300 requests per minute per IP (5 per second average)
+// 1000 requests per minute per IP (~16 per second)
 export const globalLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
-    max: 400,
+    max: 1000,
     message: { error: 'Too many requests, please slow down' },
     standardHeaders: true,
     legacyHeaders: false,

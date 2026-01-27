@@ -6,6 +6,21 @@ interface UnitCounts {
 }
 
 /**
+ * Interface for standardized scalable threat response
+ */
+export interface IncomingThreat {
+  id: string;
+  type: 'player_fleet' | 'npc_fleet' | 'alien_invasion' | 'unknown';
+  sourceName: string;
+  targetPlanetId: string;
+  targetPlanetName: string;
+  arrivalTime: string; // ISO string
+  etaSeconds: number;
+  isHostile: boolean;
+  unitCount?: number;
+}
+
+/**
  * Calculate distance between two points
  */
 export function calculateDistance(x1: number, y1: number, x2: number, y2: number): number {
@@ -119,4 +134,53 @@ export async function deductTools(planetId: string, tools: { [toolType: string]:
       },
     });
   }
+}
+
+/**
+ * Get all incoming threats for a user
+ */
+export async function getIncomingThreats(userId: string): Promise<IncomingThreat[]> {
+  const now = new Date();
+
+  // Find fleets where target planet is owned by user AND fleet is hostile
+  // We exclude user's own fleets (e.g. transfers, returning)
+  const hostileFleets = await prisma.fleet.findMany({
+    where: {
+      toPlanet: { ownerId: userId },
+      type: 'attack',
+      status: 'enroute', // Only active threats
+      ownerId: { not: userId } // Ensure it's not self-attack (friendly fire mechanic?) or bug
+    },
+    include: {
+      toPlanet: { select: { id: true, name: true } },
+      owner: { select: { username: true } }
+    },
+    orderBy: { arriveAt: 'asc' }
+  });
+
+  return hostileFleets
+    .filter(f => f.toPlanetId && f.toPlanet) // Filter out capital ship attacks
+    .map(f => {
+      const arrivalTime = f.arriveAt.getTime();
+      const etaSeconds = Math.max(0, Math.ceil((arrivalTime - now.getTime()) / 1000));
+
+      // Calculate simple unit count for fog of war (maybe refine later)
+      let unitCount = 0;
+      try {
+        const units = JSON.parse(f.unitsJson);
+        unitCount = Object.values(units).reduce((a: any, b: any) => a + b, 0) as number;
+      } catch { }
+
+      return {
+        id: f.id,
+        type: 'player_fleet' as const,
+        sourceName: f.owner.username,
+        targetPlanetId: f.toPlanetId!,
+        targetPlanetName: f.toPlanet!.name,
+        arrivalTime: f.arriveAt.toISOString(),
+        etaSeconds,
+        isHostile: true,
+        unitCount
+      };
+    });
 }

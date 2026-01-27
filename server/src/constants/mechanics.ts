@@ -206,6 +206,84 @@ export const COALITION_FOUNDING_COST = 50000;
 export const COALITION_MAX_MEMBERS = 15;
 
 // =============================================================================
+// RADAR & THREAT DETECTION
+// =============================================================================
+
+/**
+ * Detection distance thresholds (in map pixels/distance units) by radar level.
+ * Fleet must be within this distance of target to be detected.
+ * 
+ * No radar = only detect when very close (last-second warning).
+ * Higher levels = earlier detection at greater distances.
+ * 
+ * GAMEPLAY NOTES:
+ * - Average planet distance is ~500-1500 pixels
+ * - Fleet speed default is 50 pixels/second
+ * - So Level 3 (800px) ≈ 16 seconds before arrival at default speed
+ */
+export const RADAR_DETECTION_DISTANCE: Record<number, number> = {
+    0: 75,      // No radar: very late warning (~1.5s at default speed)
+    1: 200,     // Level 1: ~4s warning
+    2: 400,     // Level 2: ~8s warning
+    3: 800,     // Level 3: ~16s warning
+    4: 1200,    // Level 4: ~24s warning
+    5: 2000,    // Level 5: ~40s warning (configurable max)
+};
+
+/**
+ * Maximum detection range cap (even with max radar).
+ * Prevents detection from spanning entire galaxy.
+ */
+export const MAX_RADAR_DETECTION_DISTANCE = 2500;
+
+/**
+ * Intel fidelity phases based on DISTANCE from target (not time).
+ * Smaller distance = better intel. All values in map pixels.
+ */
+export const INTEL_FIDELITY_CONFIG = {
+    // Phase 1: DETECTED - just know an attack is coming
+    PHASE_1: {
+        distanceThreshold: 1000,  // Further than 1000px = Phase 1
+        fidelityMultiplier: 0,    // 0% accuracy (shows "Unknown")
+        variancePercent: 0,
+        label: 'DETECTED',
+    },
+
+    // Phase 2: ESTIMATE - rough estimate of force size
+    PHASE_2: {
+        distanceThreshold: 600,   // 600-1000px = Phase 2
+        fidelityMultiplier: 0.4,  // 40% accurate
+        variancePercent: 30,      // +/- 30% random variance
+        label: 'ESTIMATE',
+    },
+
+    // Phase 3: RECON - decent intel, can see unit types
+    PHASE_3: {
+        distanceThreshold: 250,   // 250-600px = Phase 3
+        fidelityMultiplier: 0.75, // 75% accurate
+        variancePercent: 15,      // +/- 15% variance
+        label: 'RECON',
+    },
+
+    // Phase 4: CONFIRMED - exact intel
+    PHASE_4: {
+        distanceThreshold: 0,     // <250px = Phase 4
+        fidelityMultiplier: 1.0,  // 100% accurate
+        variancePercent: 0,
+        label: 'CONFIRMED',
+    },
+};
+
+/**
+ * Radar level bonus to fidelity thresholds.
+ * Each radar level shifts phase thresholds outward by this amount.
+ * 
+ * EXAMPLE: Level 3 radar adds 150px to each threshold.
+ * So Phase 2 starts at 750px instead of 600px.
+ */
+export const RADAR_FIDELITY_BONUS_PER_LEVEL = 50; // pixels per level
+
+// =============================================================================
 // STABILITY (Legacy - use playerConfig.ts STABILITY_FORMULA instead)
 // =============================================================================
 

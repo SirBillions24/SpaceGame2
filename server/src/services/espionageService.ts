@@ -2,10 +2,29 @@ import prisma from '../lib/prisma';
 import { ESPIONAGE_DATA, ReconProbeStats } from '../constants/espionageData';
 import { socketService } from './socketService';
 
+/**
+ * Format probe data for socket emission (matches client Probe interface)
+ */
+function formatProbeForSocket(probe: any) {
+    return {
+        id: probe.id,
+        type: probe.type,
+        targetX: probe.targetX,
+        targetY: probe.targetY,
+        status: probe.status,
+        startTime: probe.startTime,
+        arrivalTime: probe.arrivalTime,
+        returnTime: probe.returnTime,
+        lastUpdateTime: probe.lastUpdateTime,
+        radius: probe.radius,
+        fromPlanet: probe.fromPlanet ? { x: probe.fromPlanet.x, y: probe.fromPlanet.y } : null,
+    };
+}
+
 export async function launchProbe(userId: string, fromPlanetId: string, targetX: number, targetY: number, probeType: string = 'recon_probe') {
     const fromPlanet = await prisma.planet.findUnique({
         where: { id: fromPlanetId },
-        include: {
+        include: { 
             buildings: {
                 where: { type: 'tavern', status: 'active' } // Intelligence Hub
             }
@@ -50,7 +69,7 @@ export async function launchProbe(userId: string, fromPlanetId: string, targetX:
     const dx = targetX - fromPlanet.x;
     const dy = targetY - fromPlanet.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-
+    
     // Make speed a bit slower if 100 is too fast? User said "not instant". 
     // Let's stick to the data but ensure it's noticeable.
     const travelTimeSeconds = distance / stats.speed;
@@ -79,9 +98,6 @@ export async function launchProbe(userId: string, fromPlanetId: string, targetX:
         })
     ]);
 
-    // Emit socket event for real-time updates
-    socketService.emitToUser(userId, 'probe:updated', probe);
-
     return probe;
 }
 
@@ -102,7 +118,7 @@ export async function recallProbe(userId: string, probeId: string) {
     const dx = probe.targetX - probe.fromPlanet.x;
     const dy = probe.targetY - probe.fromPlanet.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-
+    
     // Half speed = 2x time
     const returnTimeSeconds = (distance / (stats.speed / 2));
     const returnTime = new Date(Date.now() + returnTimeSeconds * 1000);
@@ -116,15 +132,12 @@ export async function recallProbe(userId: string, probeId: string) {
         }
     });
 
-    // Emit socket event for real-time updates
-    socketService.emitToUser(userId, 'probe:updated', updatedProbe);
-
     return updatedProbe;
 }
 
 export async function generateEspionageReport(userId: string, probeId: string) {
     const probeData = await getProbeData(userId, probeId);
-
+    
     // Save report to database
     const report = await prisma.espionageReport.create({
         data: {
@@ -144,7 +157,7 @@ export async function generateEspionageReport(userId: string, probeId: string) {
 export async function getProbeData(userId: string, probeId: string) {
     const probe = await prisma.reconProbe.findUnique({
         where: { id: probeId },
-        include: { owner: { select: { id: true, username: true } } }
+        include: { owner: true }
     });
 
     if (!probe) throw new Error('Probe not found');
@@ -185,7 +198,7 @@ export async function getProbeData(userId: string, probeId: string) {
                 min = Math.max(0, Math.floor(unit.count * (1 - variance)));
                 max = Math.ceil(unit.count * (1 + variance));
             }
-
+            
             return { type: unit.unitType, countRange: [min, max], count: null };
         });
 
@@ -205,25 +218,28 @@ export async function getProbeData(userId: string, probeId: string) {
 
 export async function updateProbes() {
     const now = new Date();
-
-    // 1. Process arrivals
-    await prisma.reconProbe.updateMany({
+    
+    // 1. Process arrivals - find probes that have arrived and update them individually for socket events
+    const arrivingProbes = await prisma.reconProbe.findMany({
         where: {
             status: 'traveling',
             arrivalTime: { lte: now }
         },
-        data: {
-            status: 'active',
-            lastUpdateTime: now
-        }
+        include: { fromPlanet: { select: { x: true, y: true } } }
     });
 
-    // Emit updates for arrivals
-    const arrivals = await prisma.reconProbe.findMany({
-        where: { status: 'active', lastUpdateTime: now }
-    });
-    for (const p of arrivals) {
-        socketService.emitToUser(p.ownerId, 'probe:updated', p);
+    for (const probe of arrivingProbes) {
+        const updated = await prisma.reconProbe.update({
+            where: { id: probe.id },
+            data: {
+                status: 'active',
+                lastUpdateTime: now
+            },
+            include: { fromPlanet: { select: { x: true, y: true } } }
+        });
+        
+        // Emit socket event for probe arrival
+        socketService.emitToUser(probe.ownerId, 'probe:updated', formatProbeForSocket(updated));
     }
 
     // 2. Process returns
@@ -231,7 +247,8 @@ export async function updateProbes() {
         where: {
             status: 'returning',
             returnTime: { lte: now }
-        }
+        },
+        include: { fromPlanet: { select: { x: true, y: true } } }
     });
 
     for (const probe of returningProbes) {
@@ -245,14 +262,22 @@ export async function updateProbes() {
                     cooldownUntil: cooldownUntil
                 }
             });
-            socketService.emitToUser(probe.ownerId, 'probe:updated', { id: probe.id, status: 'cooldown', cooldownUntil });
+            // Emit socket event for cooldown status
+            socketService.emitToUser(probe.ownerId, 'probe:updated', { 
+                id: probe.id, 
+                status: 'cooldown', 
+                cooldownUntil 
+            });
         } else {
             // Regular return, just delete
             await prisma.reconProbe.delete({
                 where: { id: probe.id }
             });
-            // Emit deletion event
-            socketService.emitToUser(probe.ownerId, 'probe:updated', { id: probe.id, status: 'destroyed' });
+            // Emit socket event for deletion
+            socketService.emitToUser(probe.ownerId, 'probe:updated', { 
+                id: probe.id, 
+                status: 'completed' 
+            });
         }
     }
 
@@ -263,11 +288,6 @@ export async function updateProbes() {
             cooldownUntil: { lte: now }
         }
     });
-
-    // We can't easily emit for deleted cooldowns without fetching them first, getting IDs...
-    // But typically cooldown finish is handled by the client timer or panel.
-    // For completeness, let's fetch IDs to be deleted first if we want to be strict, but cooldown -> delete is less critical for map than returning -> delete/cooldown.
-    // Actually, let's just leave this for now as map shouldn't show cooldown probes anyway.
 
     // 4. Update active probes (accuracy and discovery chance)
     const activeProbes = await prisma.reconProbe.findMany({
@@ -284,7 +304,7 @@ export async function updateProbes() {
 
         // Calculate new accuracy
         const newAccuracy = Math.min(1.0, probe.accuracy + stats.accuracyGainPerMinute * timeDiffMinutes);
-
+        
         // Calculate new discovery chance
         const newDiscoveryChance = Math.min(stats.maxDiscoveryChance, probe.discoveryChance + stats.discoveryChancePerMinute * timeDiffMinutes);
 
@@ -295,24 +315,27 @@ export async function updateProbes() {
             const dx = probe.targetX - probe.fromPlanet.x;
             const dy = probe.targetY - probe.fromPlanet.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
-
+            
             // 2x slower return time (Half speed = 2x time)
             const returnTimeSeconds = (distance / (stats.speed / 2));
             const returnTime = new Date(now.getTime() + returnTimeSeconds * 1000);
 
             const discoveredProbe = await prisma.reconProbe.update({
                 where: { id: probe.id },
-                data: {
-                    status: 'returning',
+                data: { 
+                    status: 'returning', 
                     wasDiscovered: true,
                     returnTime: returnTime,
-                    lastUpdateTime: now
+                    lastUpdateTime: now 
                 },
-                include: { owner: { select: { username: true } } }
+                include: { 
+                    owner: { select: { username: true } },
+                    fromPlanet: { select: { x: true, y: true } }
+                }
             });
 
-            // Emit socket update for discovery/recall
-            socketService.emitToUser(probe.ownerId, 'probe:updated', discoveredProbe);
+            // Emit socket event for discovery/recall
+            socketService.emitToUser(probe.ownerId, 'probe:updated', formatProbeForSocket(discoveredProbe));
 
             // ALERT ALL PLAYERS IN RADIUS
             const affectedPlanets = await prisma.planet.findMany({

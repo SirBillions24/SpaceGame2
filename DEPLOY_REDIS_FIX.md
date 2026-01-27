@@ -173,3 +173,5 @@ tail -f /home/bone/oldschoolempire/logs/errors.log | jq .
 sudo docker exec empire-redis redis-cli SET test_key "test" && echo "✅ Writable"
 ```
 
+
+

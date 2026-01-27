@@ -8,6 +8,8 @@ import RegionSelector from './components/RegionSelector';
 import GlobalHUD from './components/GlobalHUD';
 import TravelOverview from './components/TravelOverview';
 import CoalitionPanel from './components/CoalitionPanel';
+import AlienInvasionPanel from './components/AlienInvasionPanel';
+import EventAttackPanel from './components/EventAttackPanel';
 import { SourcePlanetDropdown } from './components/SourcePlanetDropdown';
 import { api, setAuthToken, getAuthToken, getCurrentUser, type Planet } from './lib/api';
 import { useSocketEvent } from './hooks/useSocketEvent';
@@ -22,6 +24,11 @@ function App() {
   const [showPlanetInterior, setShowPlanetInterior] = useState(false);
   const [showTravelOverview, setShowTravelOverview] = useState(false);
   const [showCoalitionPanel, setShowCoalitionPanel] = useState(false);
+  const [showAlienPanel, setShowAlienPanel] = useState(false);
+  const [hasActiveEvent, setHasActiveEvent] = useState(false);
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [selectedEventShip, setSelectedEventShip] = useState<any | null>(null);
+  const [teleportTarget, setTeleportTarget] = useState<{ x: number; y: number } | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [needsSpawn, setNeedsSpawn] = useState(false);
   const [hudPlanet, setHudPlanet] = useState<Planet | null>(null);
@@ -93,6 +100,15 @@ function App() {
             api.getPlanet(myPlanets[0].id).then(setHudPlanet);
           }
         }).catch(e => console.error(e));
+
+        // Check for active event
+        api.getActiveEvent().then(result => {
+          setHasActiveEvent(!!result.event);
+          if (result.event) setActiveEventId(result.event.id);
+        }).catch(() => {
+          setHasActiveEvent(false);
+          setActiveEventId(null);
+        });
       }
     }).catch(e => {
       console.error("Failed to fetch user profile", e);
@@ -168,6 +184,8 @@ function App() {
         currentUserId={isLoggedIn ? getCurrentUser()?.userId : undefined}
         isEspionageMode={isEspionageMode}
         onEspionageModeChange={setIsEspionageMode}
+        teleportTo={teleportTarget}
+        onTeleportComplete={() => setTeleportTarget(null)}
       />
 
       <div className="hud-overlay" style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', alignItems: 'center', gap: '12px', zIndex: 1000 }}>
@@ -221,6 +239,24 @@ function App() {
         <button onClick={() => setShowTravelOverview(true)} style={{ background: '#ff9800', color: 'black', border: '2px solid #e65100', padding: '10px 20px', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold' }}>
           Travel Overview
         </button>
+        {hasActiveEvent && (
+          <button
+            onClick={() => setShowAlienPanel(true)}
+            style={{
+              background: 'linear-gradient(135deg, #9c27b0, #7b1fa2)',
+              color: 'white',
+              border: '2px solid #9c27b0',
+              padding: '10px 20px',
+              cursor: 'pointer',
+              borderRadius: '4px',
+              fontWeight: 'bold',
+              animation: 'pulse 2s infinite',
+              boxShadow: '0 0 15px rgba(156, 39, 176, 0.5)'
+            }}
+          >
+            👾 Invasion
+          </button>
+        )}
         <button onClick={() => setShowCoalitionPanel(true)} style={{ background: '#9c27b0', color: 'white', border: '2px solid #7b1fa2', padding: '10px 20px', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold' }}>
           Coalition
         </button>
@@ -290,6 +326,45 @@ function App() {
 
       {showCoalitionPanel && (
         <CoalitionPanel onClose={() => setShowCoalitionPanel(false)} />
+      )}
+
+      {showAlienPanel && (
+        <AlienInvasionPanel
+          onClose={() => setShowAlienPanel(false)}
+          onTeleportToPortal={(x, y) => setTeleportTarget({ x, y })}
+          onShipClick={(ship) => {
+            // Only allow attack if we have a source planet selected (or HUD planet)
+            // But HUD planet might be a harvester, so prefer selectedSourceId if available, else hudPlanet
+            if (ownedPlanets.length === 0) {
+              alert("You need a colony to launch attacks from!");
+              return;
+            }
+            setSelectedEventShip(ship);
+            setShowAlienPanel(false); // Close main panel to focus on attack
+          }}
+        />
+      )}
+
+      {selectedEventShip && (selectedSourceId || hudPlanet) && (
+        <EventAttackPanel
+          eventId={activeEventId || selectedEventShip.eventId || ''} // We need eventId. WorldMap might need to pass it or we get it from activeEvent state
+          ship={selectedEventShip}
+          fromPlanet={ownedPlanets.find(p => p.id === selectedSourceId) || hudPlanet as Planet}
+          onClose={() => setSelectedEventShip(null)}
+          onAttackComplete={(result) => {
+            setSelectedEventShip(null);
+            if (result.success) {
+              let msg = result.victory ? "VICTORY! " : "DEFEAT. ";
+              msg += `Cores: ${result.xenoCoresAwarded}. Damage: ${result.damageDealt}.`;
+              if (result.mothershipKilled) msg += " MOTHERSHIP DESTROYED!";
+              alert(msg);
+              // Refresh user/planet data
+              checkUserStatus();
+            } else {
+              alert(`Attack Failed: ${result.error}`);
+            }
+          }}
+        />
       )}
     </div>
   );

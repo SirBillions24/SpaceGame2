@@ -33,7 +33,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
             ...battleReports.map(br => ({
                 id: br.id,
                 type: 'battle',
-                title: br.attackerId === userId ? `Attack on ${br.fleet.toPlanet.name}` : `Defense against ${br.fleet.fromPlanet.name}`,
+                title: br.attackerId === userId
+                    ? `Attack on ${br.fleet.toPlanet?.name ?? 'Capital Ship'}`
+                    : `Defense against ${br.fleet.fromPlanet?.name ?? 'Capital Ship'}`,
                 winner: br.winner,
                 isAttacker: br.attackerId === userId,
                 createdAt: br.createdAt,

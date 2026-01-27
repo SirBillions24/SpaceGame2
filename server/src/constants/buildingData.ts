@@ -261,6 +261,53 @@ export const BUILDING_DATA: Record<string, BuildingTypeStats> = {
                 xp: 0
             },
         }
+    },
+    // Radar Array - detects incoming attacks and provides intel
+    radar_array: {
+        type: 'radar_array',
+        name: 'Radar Array',
+        size: 3,
+        category: 'military',
+        levels: {
+            1: { level: 1, requiredPlayerLevel: 6, cost: { carbon: 200, titanium: 150 }, time: 300, xp: 10 },
+            2: { level: 2, requiredPlayerLevel: 15, cost: { carbon: 1200, titanium: 900 }, time: 1800, xp: 25 },
+            3: { level: 3, requiredPlayerLevel: 25, cost: { carbon: 4000, titanium: 3000 }, time: 7200, xp: 50 },
+            4: { level: 4, requiredPlayerLevel: 40, cost: { carbon: 15000, titanium: 12000 }, time: 28800, xp: 100 },
+            5: { level: 5, requiredPlayerLevel: 60, cost: { carbon: 50000, titanium: 40000 }, time: 86400, xp: 200 },
+        }
+    },
+    // Capital Shipyard - unlocks Capital Ship construction
+    capital_shipyard: {
+        type: 'capital_shipyard',
+        name: 'Capital Shipyard',
+        size: 5,
+        category: 'military',
+        levels: {
+            // Level 1: Unlocks first Capital Ship slot
+            1: {
+                level: 1,
+                requiredPlayerLevel: 25,
+                cost: { carbon: 25000, titanium: 20000, darkMatter: 100 },
+                time: 14400, // 4 hours 
+                xp: 200
+            },
+            // Level 2: Unlocks second Capital Ship slot
+            2: {
+                level: 2,
+                requiredPlayerLevel: 40,
+                cost: { carbon: 75000, titanium: 60000, darkMatter: 300 },
+                time: 43200, // 12 hours
+                xp: 500
+            },
+            // Level 3: Unlocks third Capital Ship slot (endgame)
+            3: {
+                level: 3,
+                requiredPlayerLevel: 60,
+                cost: { carbon: 200000, titanium: 160000, darkMatter: 800 },
+                time: 86400, // 24 hours
+                xp: 1000
+            },
+        }
     }
 };
 

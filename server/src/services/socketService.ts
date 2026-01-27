@@ -16,9 +16,9 @@ class SocketService {
 
     async initialize(httpServer: any) {
         const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-        
+
         // Create Redis clients with retry strategy
-        this.pubClient = createClient({ 
+        this.pubClient = createClient({
             url: redisUrl,
             socket: {
                 reconnectStrategy: (retries) => {
@@ -33,7 +33,7 @@ class SocketService {
                 }
             }
         });
-        
+
         this.subClient = this.pubClient.duplicate();
 
         // Attach error handlers BEFORE connecting
@@ -83,7 +83,41 @@ class SocketService {
         this.io.use(this.authMiddleware.bind(this));
         this.io.on('connection', this.handleConnection.bind(this));
 
-        console.log('✅ Socket.IO initialized with Redis adapter');
+        // Subscribe to worker-to-API socket event channels
+        // This allows the worker process to emit socket events via Redis
+        const socketSubClient = this.pubClient.duplicate();
+        await socketSubClient.connect();
+
+        await socketSubClient.subscribe('socket:emit:user', (message) => {
+            try {
+                const { userId, event, data } = JSON.parse(message);
+                console.log(`[SocketService] 📥 Received Redis relay: ${event} for user:${userId}`);
+                this.io?.to(`user:${userId}`).emit(event, data);
+                console.log(`[SocketService] ✅ Forwarded to Socket.IO: ${event} → user:${userId}`);
+            } catch (err) {
+                console.error('Failed to parse socket:emit:user message:', err);
+            }
+        });
+
+        await socketSubClient.subscribe('socket:emit:coalition', (message) => {
+            try {
+                const { coalitionId, event, data } = JSON.parse(message);
+                this.io?.to(`coalition:${coalitionId}`).emit(event, data);
+            } catch (err) {
+                console.error('Failed to parse socket:emit:coalition message:', err);
+            }
+        });
+
+        await socketSubClient.subscribe('socket:emit:all', (message) => {
+            try {
+                const { event, data } = JSON.parse(message);
+                this.io?.emit(event, data);
+            } catch (err) {
+                console.error('Failed to parse socket:emit:all message:', err);
+            }
+        });
+
+        console.log('✅ Socket.IO initialized with Redis adapter and worker relay');
     }
 
     private authMiddleware(socket: Socket, next: (err?: Error) => void) {
@@ -108,6 +142,10 @@ class SocketService {
             this.userSockets.set(userId, new Set());
         }
         this.userSockets.get(userId)!.add(socket.id);
+
+        // Join user-specific room for cross-process emission via Redis adapter
+        socket.join(`user:${userId}`);
+        console.log(`   ↳ Joined room user:${userId}`);
 
         // Join coalition room if applicable
         const user = await prisma.user.findUnique({
@@ -143,29 +181,42 @@ class SocketService {
 
         // Handle individual socket errors
         socket.on('error', (err) => {
-            logError('SOCKET_ERROR', err, { 
-                userId, 
-                socketId: socket.id 
+            logError('SOCKET_ERROR', err, {
+                userId,
+                socketId: socket.id
             });
         });
     }
 
     // Emission methods
     emitToUser(userId: string, event: string, data: any) {
-        const sockets = this.userSockets.get(userId);
-        if (sockets) {
-            sockets.forEach((socketId) => {
-                this.io?.to(socketId).emit(event, data);
-            });
+        // Use room-based emission for cross-process support via Redis adapter
+        if (this.io) {
+            console.log(`[SocketService] Emitting ${event} to user:${userId} via io.to()`);
+            this.io.to(`user:${userId}`).emit(event, data);
+        } else if (this.pubClient?.isReady) {
+            // Worker process: publish to Redis channel for API server to pick up
+            console.log(`[SocketService] Publishing ${event} for user:${userId} to Redis`);
+            this.pubClient.publish('socket:emit:user', JSON.stringify({ userId, event, data }));
+        } else {
+            console.warn(`[SocketService] Cannot emit to user ${userId}: no io and no pubClient`);
         }
     }
 
     emitToCoalition(coalitionId: string, event: string, data: any) {
-        this.io?.to(`coalition:${coalitionId}`).emit(event, data);
+        if (this.io) {
+            this.io.to(`coalition:${coalitionId}`).emit(event, data);
+        } else if (this.pubClient?.isReady) {
+            this.pubClient.publish('socket:emit:coalition', JSON.stringify({ coalitionId, event, data }));
+        }
     }
 
     emitToAll(event: string, data: any) {
-        this.io?.emit(event, data);
+        if (this.io) {
+            this.io.emit(event, data);
+        } else if (this.pubClient?.isReady) {
+            this.pubClient.publish('socket:emit:all', JSON.stringify({ event, data }));
+        }
     }
 
     // Room management for coalition changes
@@ -185,6 +236,30 @@ class SocketService {
     // Check if Redis clients are connected (for health check)
     isRedisConnected(): boolean {
         return this.pubClient?.isReady === true && this.subClient?.isReady === true;
+    }
+
+    // Initialize only Redis connection (for worker process - no Socket.IO server)
+    async initializeForWorker() {
+        if (this.pubClient?.isReady) return; // Already initialized
+
+        const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+
+        this.pubClient = createClient({
+            url: redisUrl,
+            socket: {
+                reconnectStrategy: (retries) => Math.min(retries * 100, 5000)
+            }
+        });
+
+        this.pubClient.on('error', (err) => {
+            console.error('[Worker] Redis pub client error:', err.message);
+        });
+
+        this.pubClient.on('ready', () => {
+            console.log('✅ [Worker] Redis pub client connected for socket relay');
+        });
+
+        await this.pubClient.connect();
     }
 }
 

@@ -503,6 +503,11 @@ export async function resolveCombat(fleetId: string): Promise<CombatResult> {
     throw new Error("Invalid fleet state");
   }
 
+  // Guard: Only planet attacks go through this function
+  if (!fleet.toPlanet || !fleet.toPlanetId) {
+    throw new Error("Fleet is not targeting a planet - use capital ship combat handler");
+  }
+
   // Get admiral bonuses (attack bonuses only - MUST be explicitly assigned to the fleet)
   const attackerAdmiral = fleet.admiral;
   const attackerBonuses = attackerAdmiral ? {

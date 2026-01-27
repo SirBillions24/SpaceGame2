@@ -12,9 +12,7 @@ const devRoutesEnabled = process.env.ENABLE_DEV_ROUTES !== 'false';
 
 if (!devRoutesEnabled) {
     console.log('🔒 Dev routes are disabled (ENABLE_DEV_ROUTES=false)');
-    router.all('*', (_req, res: Response) => {
-        res.status(404).json({ error: 'Not found' });
-    });
+    // Return a dummy router with no routes - all requests will 404 naturally
 } else {
     console.log('⚠️ Dev routes are ENABLED - set ENABLE_DEV_ROUTES=false to disable');
 
@@ -383,6 +381,136 @@ if (!devRoutesEnabled) {
         } catch (error) {
             console.error('Dev fast-forward error:', error);
             res.status(500).json({ error: 'Internal server error' });
+        }
+    });
+
+    // Delete a capital ship (for testing)
+    router.post('/delete-capital-ship', authenticateToken, async (req: AuthRequest, res: Response) => {
+        try {
+            const userId = req.userId!;
+            const { capitalShipId } = req.body;
+
+            if (!capitalShipId) {
+                // Delete all capital ships owned by user
+                const deleted = await prisma.capitalShip.deleteMany({
+                    where: { ownerId: userId }
+                });
+                return res.json({ message: `Deleted ${deleted.count} capital ships` });
+            }
+
+            const ship = await prisma.capitalShip.findUnique({
+                where: { id: capitalShipId }
+            });
+
+            if (!ship || ship.ownerId !== userId) {
+                return res.status(403).json({ error: 'Capital ship not found or not owned by you' });
+            }
+
+            await prisma.capitalShip.delete({
+                where: { id: capitalShipId }
+            });
+
+            res.json({ message: 'Capital ship deleted' });
+        } catch (error) {
+            console.error('Dev delete capital ship error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    });
+
+    // Reset capital ship build progress to current config values
+    router.post('/reset-capital-ship', authenticateToken, async (req: AuthRequest, res: Response) => {
+        try {
+            const userId = req.userId!;
+
+            const { getTotalCost, CAPITAL_SHIP_CONFIG } = await import('../constants/capitalShipConfig');
+
+            // Get user's constructing ships
+            const ships = await prisma.capitalShip.findMany({
+                where: {
+                    ownerId: userId,
+                    status: { in: ['constructing', 'repairing'] }
+                }
+            });
+
+            if (ships.length === 0) {
+                return res.json({ message: 'No constructing ships found' });
+            }
+
+            // Reset each ship's buildProgress to current config
+            for (const ship of ships) {
+                const isRepair = (ship.buildProgress as any)?.isRepair || false;
+                const newProgress = {
+                    required: getTotalCost(isRepair),
+                    donated: {},
+                    phase: 1,
+                    totalPhases: isRepair
+                        ? CAPITAL_SHIP_CONFIG.destruction.repairPhases
+                        : CAPITAL_SHIP_CONFIG.construction.donationPhases,
+                    isRepair,
+                };
+
+                await prisma.capitalShip.update({
+                    where: { id: ship.id },
+                    data: { buildProgress: newProgress as any }
+                });
+            }
+
+            const totalCost = getTotalCost(false);
+            res.json({
+                message: `Reset ${ships.length} ship(s) to current config`,
+                newCosts: totalCost
+            });
+        } catch (error) {
+            console.error('Dev reset capital ship error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    });
+
+    // Debug job queue status
+    router.get('/job-queue-status', authenticateToken, async (req: AuthRequest, res: Response) => {
+        try {
+            const { getQueueStats, getDelayedJobs } = await import('../lib/jobQueue');
+
+            const stats = await getQueueStats();
+            const delayedJobs = await getDelayedJobs();
+
+            res.json({
+                stats,
+                delayedJobs,
+                message: 'Job queue status retrieved'
+            });
+        } catch (error) {
+            console.error('Dev job queue status error:', error);
+            res.status(500).json({ error: 'Failed to get job queue status' });
+        }
+    });
+
+    // Force process capital ship arrival (for stuck ships)
+    router.post('/force-capital-ship-arrival', authenticateToken, async (req: AuthRequest, res: Response) => {
+        try {
+            const userId = req.userId!;
+            const { capitalShipId } = req.body;
+
+            const ship = await prisma.capitalShip.findUnique({
+                where: { id: capitalShipId }
+            });
+
+            if (!ship || ship.ownerId !== userId) {
+                return res.status(403).json({ error: 'Capital ship not found or not owned by you' });
+            }
+
+            if (ship.status !== 'traveling') {
+                return res.status(400).json({ error: `Ship is not traveling, current status: ${ship.status}` });
+            }
+
+            // Manually trigger the arrival completion
+            const { completeArrival } = await import('../services/capitalShipService');
+            await completeArrival(capitalShipId);
+
+            res.json({ message: 'Capital ship arrival forced', status: 'deployed' });
+        } catch (error) {
+            console.error('Dev force arrival error:', error);
+            res.status(500).json({ error: 'Failed to force arrival' });
         }
     });
 }

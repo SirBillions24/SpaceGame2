@@ -106,3 +106,5 @@ fi
 echo ""
 echo "Log file location: $LOG_FILE"
 
+
+

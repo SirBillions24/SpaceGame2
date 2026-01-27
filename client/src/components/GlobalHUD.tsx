@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import './GlobalHUD.css';
-import { type Planet } from '../lib/api';
+import { api, type Planet } from '../lib/api';
 import { useSocketEvent } from '../hooks/useSocketEvent';
 import { useSocket } from '../lib/SocketContext';
 
@@ -19,6 +19,10 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
     const [clickCount, setClickCount] = useState(0);
     const [lastClickTime, setLastClickTime] = useState(0);
     const [selectedResourcePanel, setSelectedResourcePanel] = useState<'carbon' | 'titanium' | 'food' | null>(null);
+    
+    // Event system state
+    const [activeEvent, setActiveEvent] = useState<{ id: string; type: string; status: string; name: string } | null>(null);
+    const [eventLoading, setEventLoading] = useState(false);
 
     // WebSocket connection status
     const { isConnected } = useSocket();
@@ -81,6 +85,43 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
     const taxRev = stats?.creditRate || 0;
     const pop = stats?.population || 0;
     const creditTooltip = `Population: ${pop}\nTax Revenue: ${taxRev.toFixed(1)}/h`;
+
+    // Check for active event when dev tools opened
+    const checkActiveEvent = useCallback(async () => {
+        try {
+            const result = await api.getActiveEvent();
+            setActiveEvent(result.event || null);
+        } catch (e) {
+            setActiveEvent(null);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (devToolsOpen) {
+            checkActiveEvent();
+        }
+    }, [devToolsOpen, checkActiveEvent]);
+
+    const handleToggleEvent = async () => {
+        setEventLoading(true);
+        try {
+            if (activeEvent) {
+                // Stop event
+                await api.deleteEvent(activeEvent.id);
+                setActiveEvent(null);
+                alert('Event stopped and cleaned up');
+            } else {
+                // Start event (30 min test event)
+                const result = await api.createTestEvent(30);
+                setActiveEvent(result.event);
+                alert('Test event started! (30 minutes)');
+            }
+        } catch (e: any) {
+            alert(e.message);
+        } finally {
+            setEventLoading(false);
+        }
+    };
 
     const handleBannerClick = () => {
         const now = Date.now();
@@ -483,6 +524,37 @@ export default function GlobalHUD({ user, currentPlanet: initialPlanet }: Global
                                 } catch (e: any) { alert(e.message); }
                             }} style={{ background: '#1abc9c', gridColumn: 'span 2' }}>
                                 🔧 Toggle Free Build Mode
+                            </button>
+
+                            {/* Event Section Header */}
+                            <div style={{ gridColumn: 'span 2', borderTop: '1px solid #444', marginTop: '12px', paddingTop: '12px' }}>
+                                <h4 style={{ margin: 0, color: '#9b59b6', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                    🛸 World Events
+                                </h4>
+                            </div>
+
+                            {/* Event Status */}
+                            <div style={{ gridColumn: 'span 2', padding: '8px', background: activeEvent ? 'rgba(46, 204, 113, 0.2)' : 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', marginBottom: '4px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '11px', color: '#aaa' }}>Status:</span>
+                                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: activeEvent ? '#2ecc71' : '#e74c3c' }}>
+                                        {activeEvent ? `${activeEvent.name} (${activeEvent.status})` : 'No Active Event'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Event Toggle Button */}
+                            <button 
+                                onClick={handleToggleEvent}
+                                disabled={eventLoading}
+                                style={{ 
+                                    background: activeEvent ? '#e74c3c' : '#9b59b6', 
+                                    gridColumn: 'span 2',
+                                    opacity: eventLoading ? 0.6 : 1,
+                                    cursor: eventLoading ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                {eventLoading ? '⏳ Processing...' : (activeEvent ? '🛑 Stop Alien Invasion' : '🛸 Start Alien Invasion (30m)')}
                             </button>
 
                             {/* Help Text */}

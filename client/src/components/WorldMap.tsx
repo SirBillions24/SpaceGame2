@@ -17,6 +17,20 @@ interface Probe {
   fromPlanet: { x: number; y: number };
 }
 
+interface EventShip {
+  id: string;
+  shipType: 'scout' | 'raider' | 'carrier' | 'dreadnought' | 'mothership';
+  name: string;
+  level: number;
+  tier: number;
+  x: number;
+  y: number;
+  zoneType: 'player_ring' | 'portal';
+  isDefeated: boolean;
+  attackCount: number;
+  maxAttacks: number | null;
+}
+
 interface WorldMapProps {
   mapImageUrl?: string; // Optional - no longer used for background
   onPlanetClick?: (planet: Planet) => void;
@@ -25,6 +39,9 @@ interface WorldMapProps {
   currentUserId?: string;
   isEspionageMode?: boolean;
   onEspionageModeChange?: (active: boolean) => void;
+  teleportTo?: { x: number; y: number } | null; // Camera teleport target
+  onTeleportComplete?: () => void; // Called after teleport
+  onEventShipClick?: (ship: EventShip) => void;
 }
 
 // Tile configuration (kept for camera scale calculation)
@@ -36,7 +53,10 @@ export default function WorldMap({
   onMapContainerReady,
   currentUserId,
   isEspionageMode: controlledEspionageMode,
-  onEspionageModeChange
+  onEspionageModeChange,
+  teleportTo,
+  onTeleportComplete,
+  onEventShipClick
 }: WorldMapProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -52,6 +72,11 @@ export default function WorldMap({
   const latestFleetsRef = useRef<Fleet[]>([]);
   const latestProbesRef = useRef<Probe[]>([]);
   const probeObjectsRef = useRef<Map<string, { sprite: PIXI.Sprite, graphics: PIXI.Graphics }>>(new Map());
+
+  // Event ship tracking
+  const latestEventShipsRef = useRef<EventShip[]>([]);
+  const eventShipObjectsRef = useRef<Map<string, { sprite: PIXI.Sprite, label: PIXI.Text, glow: PIXI.Graphics }>>(new Map());
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
 
   const [planets, setPlanets] = useState<Planet[]>([]);
   const [myCoalitionId, setMyCoalitionId] = useState<string | null | undefined>(undefined);
@@ -94,6 +119,16 @@ export default function WorldMap({
     currentUserIdRef.current = currentUserId;
   }, [currentUserId]);
 
+  // Teleport camera when teleportTo changes
+  useEffect(() => {
+    if (teleportTo && cameraRef.current) {
+      cameraRef.current.x = teleportTo.x;
+      cameraRef.current.y = teleportTo.y;
+      cameraRef.current.scale = 1; // Zoom to reasonable level
+      onTeleportComplete?.();
+    }
+  }, [teleportTo, onTeleportComplete]);
+
   // Ghost Probe for placement
   const ghostProbeRef = useRef<PIXI.Graphics | null>(null);
 
@@ -119,19 +154,47 @@ export default function WorldMap({
           const intelHub = owned.some(p => p.buildings?.some(b => b.type === 'tavern' && b.status === 'active'));
           setHasIntelHub(intelHub);
         }
+
+        // Check for active event and fetch ships
+        try {
+          const eventResult = await api.getActiveEvent();
+          if (eventResult.event) {
+            setActiveEventId(eventResult.event.id);
+            const shipsData = await api.getEventShips(eventResult.event.id);
+            latestEventShipsRef.current = shipsData.ships || [];
+          } else {
+            setActiveEventId(null);
+            latestEventShipsRef.current = [];
+          }
+        } catch {
+          setActiveEventId(null);
+          latestEventShipsRef.current = [];
+        }
       } catch (err) {
         console.error('Failed to fetch map data', err);
       }
     };
 
     fetchInitialData();
-  }, [currentUserId]);
+
+    // Refresh event ships every 30 seconds
+    const eventShipsInterval = setInterval(async () => {
+      if (activeEventId) {
+        try {
+          const shipsData = await api.getEventShips(activeEventId);
+          latestEventShipsRef.current = shipsData.ships || [];
+        } catch {
+          // Silent fail
+        }
+      }
+    }, 30000);
+
+    return () => clearInterval(eventShipsInterval);
+  }, [currentUserId, activeEventId]);
 
   // WebSocket subscription for real-time fleet updates
   useSocketEvent<Fleet>('fleet:updated', useCallback((data) => {
-    console.log('[WorldMap] fleet:updated received:', data.id, data.status);
-    
-    // Remove completed/destroyed fleets from map
+    // Remove completed/destroyed fleets from data ref - game loop handles visual cleanup
     if (data.status === 'completed' || data.status === 'destroyed') {
       latestFleetsRef.current = latestFleetsRef.current.filter(f => f.id !== data.id);
       return;
@@ -143,7 +206,6 @@ export default function WorldMap({
       latestFleetsRef.current = latestFleetsRef.current.map(f => f.id === data.id ? data : f);
     } else {
       latestFleetsRef.current = [...latestFleetsRef.current, data];
-      console.log('[WorldMap] New fleet added, total fleets:', latestFleetsRef.current.length);
     }
   }, []));
 
@@ -161,21 +223,9 @@ export default function WorldMap({
 
   // WebSocket subscription for probe updates
   useSocketEvent<any>('probe:updated', useCallback((data) => {
-    console.log('[WorldMap] probe:updated received:', data.id, data.status);
-    
-    // Remove if destroyed or on cooldown (returned)
+    // Remove if destroyed or on cooldown (returned) - game loop handles visual cleanup
     if (data.status === 'destroyed' || data.status === 'cooldown' || data.status === 'completed') {
       latestProbesRef.current = latestProbesRef.current.filter(p => p.id !== data.id);
-
-      // Also remove visual object immediately if exists
-      if (probeObjectsRef.current.has(data.id)) {
-        const objects = probeObjectsRef.current.get(data.id);
-        if (objects) {
-          objects.sprite.destroy();
-          objects.graphics.destroy();
-          probeObjectsRef.current.delete(data.id);
-        }
-      }
       return;
     }
 
@@ -185,7 +235,6 @@ export default function WorldMap({
       latestProbesRef.current = latestProbesRef.current.map(p => p.id === data.id ? data : p);
     } else {
       latestProbesRef.current = [...latestProbesRef.current, data];
-      console.log('[WorldMap] New probe added, total probes:', latestProbesRef.current.length);
     }
   }, []));
 
@@ -239,6 +288,11 @@ export default function WorldMap({
         const espionageLayer = new PIXI.Container();
         espionageLayer.zIndex = 30;
         mapContainer.addChild(espionageLayer);
+
+        // Event ships layer (alien invasion, etc.)
+        const eventLayer = new PIXI.Container();
+        eventLayer.zIndex = 15; // Between fleets and planets
+        mapContainer.addChild(eventLayer);
 
         // Note: mapImageUrl no longer used for background (procedural generation)
 
@@ -579,6 +633,90 @@ export default function WorldMap({
           if (ghostProbeRef.current) {
             ghostProbeRef.current.visible = isEspionageModeRef.current;
           }
+
+          // --- RENDER EVENT SHIPS ---
+          const currentEventShips = latestEventShipsRef.current;
+          const activeEventShipIds = new Set(currentEventShips.filter(s => !s.isDefeated).map(s => s.id));
+
+          // 1. Remove stale event ships
+          for (const [id, objects] of eventShipObjectsRef.current.entries()) {
+            if (!activeEventShipIds.has(id)) {
+              eventLayer.removeChild(objects.sprite);
+              eventLayer.removeChild(objects.label);
+              eventLayer.removeChild(objects.glow);
+              objects.sprite.destroy();
+              objects.label.destroy();
+              objects.glow.destroy();
+              eventShipObjectsRef.current.delete(id);
+            }
+          }
+
+          // 2. Update/Create active event ships
+          currentEventShips.filter(s => !s.isDefeated).forEach(ship => {
+            let objects = eventShipObjectsRef.current.get(ship.id);
+
+            if (!objects) {
+              // Create visual objects for ship
+              const sprite = new PIXI.Sprite(PIXI.Texture.WHITE);
+              sprite.anchor.set(0.5);
+
+              // Size and color based on tier
+              let size = 0.3;
+              let tint = 0x9c27b0; // Purple default
+              switch (ship.shipType) {
+                case 'scout': size = 0.2; tint = 0x4caf50; break;
+                case 'raider': size = 0.25; tint = 0x2196f3; break;
+                case 'carrier': size = 0.35; tint = 0xff9800; break;
+                case 'dreadnought': size = 0.4; tint = 0xf44336; break;
+                case 'mothership': size = 0.6; tint = 0x9c27b0; break;
+              }
+
+              sprite.scale.set(size);
+              sprite.tint = tint;
+              sprite.eventMode = 'static';
+              sprite.cursor = 'pointer';
+              sprite.on('pointerdown', () => onEventShipClick?.(ship));
+
+              // Glow effect
+              const glow = new PIXI.Graphics();
+              glow.circle(0, 0, 30 + ship.tier * 10);
+              glow.fill({ color: tint, alpha: 0.15 });
+              glow.stroke({ width: 2, color: tint, alpha: 0.4 });
+
+              // Label
+              const label = new PIXI.Text({
+                text: `LVL ${ship.level} ${ship.name}`,
+                style: {
+                  fontFamily: 'Courier New',
+                  fontSize: 11,
+                  fill: tint,
+                  fontWeight: 'bold',
+                  stroke: 0x000000,
+                  strokeThickness: 3
+                }
+              });
+              label.anchor.set(0.5, 0);
+
+              eventLayer.addChild(glow);
+              eventLayer.addChild(sprite);
+              eventLayer.addChild(label);
+
+              objects = { sprite, label, glow };
+              eventShipObjectsRef.current.set(ship.id, objects);
+            }
+
+            // Position
+            objects.sprite.x = ship.x;
+            objects.sprite.y = ship.y;
+            objects.label.x = ship.x;
+            objects.label.y = ship.y + 35;
+            objects.glow.x = ship.x;
+            objects.glow.y = ship.y;
+
+            // Animate glow
+            const pulseAlpha = 0.1 + Math.sin(Date.now() / 500 + ship.tier) * 0.05;
+            objects.glow.alpha = pulseAlpha;
+          });
         });
 
         // Create ghost probe
@@ -682,6 +820,7 @@ export default function WorldMap({
       <div style={{ position: 'absolute', top: 10, left: 10, color: 'white', background: 'rgba(0,0,0,0.5)', padding: 5 }}>
         Planets: {planets.length} <br /> Active Fleets: {latestFleetsRef.current.length} <br />
         Active Probes: {latestProbesRef.current.length}
+        {activeEventId && <><br />Event Ships: {latestEventShipsRef.current.filter(s => !s.isDefeated).length}</>}
       </div>
 
       {hasIntelHub && (

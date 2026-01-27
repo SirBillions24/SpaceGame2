@@ -948,6 +948,122 @@ export const api = {
     });
     if (!response.ok) throw new Error('Failed to fetch coalition details');
     return response.json();
+  },
+
+  // =============================================================================
+  // EVENT API
+  // =============================================================================
+
+  async getActiveEvent() {
+    const response = await fetch(`${API_BASE_URL}/events/active`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch active event');
+    return response.json();
+  },
+
+  async getEvents(includeEnded = false) {
+    const response = await fetch(`${API_BASE_URL}/events?includeEnded=${includeEnded}`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch events');
+    return response.json();
+  },
+
+  async createTestEvent(durationMinutes = 60) {
+    const response = await fetch(`${API_BASE_URL}/events/test`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ durationMinutes }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create test event');
+    }
+    return response.json();
+  },
+
+  async deleteEvent(eventId: string) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}`, {
+      method: 'DELETE',
+      headers: getHeaders(true),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete event');
+    }
+    return response.json();
+  },
+
+  async getEventShips(eventId: string) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/ships`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch event ships');
+    return response.json();
+  },
+
+  async getEventMothership(eventId: string) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/mothership`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch mothership');
+    return response.json();
+  },
+
+  async getEventPortal(eventId: string) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/portal`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch portal location');
+    return response.json();
+  },
+
+  async getEventLeaderboard(eventId: string, limit = 100) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/leaderboard?limit=${limit}`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch leaderboard');
+    return response.json();
+  },
+
+  async getEventProgress(eventId: string) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/me`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch event progress');
+    return response.json();
+  },
+
+  async getEventStats(eventId: string) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/stats`, {
+      headers: getHeaders(true),
+    });
+    if (!response.ok) throw new Error('Failed to fetch event stats');
+    return response.json();
+  },
+
+  async attackEventShip(eventId: string, shipId: string, fleet: Record<string, number>) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/ships/${shipId}/attack`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ fleet }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to attack event ship');
+    }
+    return response.json();
+  },
+
+  async estimateEventCombat(eventId: string, shipId: string, fleet: Record<string, number>) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/ships/${shipId}/estimate`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ fleet }),
+    });
+    if (!response.ok) throw new Error('Failed to estimate combat');
+    return response.json();
   }
 };
 

@@ -82,10 +82,49 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
       return res.status(400).json({ error: 'Must send at least one unit' });
     }
 
-    // Validate planet ownership
-    const ownsPlanet = await validatePlanetOwnership(userId, fromPlanetId);
-    if (!ownsPlanet) {
-      return res.status(403).json({ error: 'You do not own this planet' });
+    // Determine if source is a capital ship (ship:xxx prefix)
+    const isShipSource = fromPlanetId.startsWith('ship:');
+    const actualShipId = isShipSource ? fromPlanetId.replace('ship:', '') : null;
+    let capitalShipSource: any = null;
+
+    // Determine if destination is a capital ship (ship:xxx prefix)
+    const isShipDestination = toPlanetId.startsWith('ship:');
+    const targetShipId = isShipDestination ? toPlanetId.replace('ship:', '') : null;
+    let capitalShipDestination: any = null;
+
+    if (isShipSource) {
+      // Validate capital ship ownership
+      capitalShipSource = await prisma.capitalShip.findUnique({
+        where: { id: actualShipId! },
+      });
+      if (!capitalShipSource || capitalShipSource.ownerId !== userId) {
+        return res.status(403).json({ error: 'You do not own this capital ship' });
+      }
+      if (capitalShipSource.status !== 'deployed') {
+        return res.status(400).json({ error: 'Capital ship must be deployed to launch fleets' });
+      }
+    } else {
+      // Validate planet ownership (standard path)
+      const ownsPlanet = await validatePlanetOwnership(userId, fromPlanetId);
+      if (!ownsPlanet) {
+        return res.status(403).json({ error: 'You do not own this planet' });
+      }
+    }
+
+    // Validate capital ship destination (for transfers)
+    if (isShipDestination) {
+      capitalShipDestination = await prisma.capitalShip.findUnique({
+        where: { id: targetShipId! },
+      });
+      if (!capitalShipDestination) {
+        return res.status(404).json({ error: 'Target capital ship not found' });
+      }
+      if (capitalShipDestination.ownerId !== userId) {
+        return res.status(403).json({ error: 'You can only transfer troops to your own capital ship' });
+      }
+      if (capitalShipDestination.status !== 'deployed') {
+        return res.status(400).json({ error: 'Target capital ship must be deployed to receive transfers' });
+      }
     }
 
     // Validate admiral assignment (if provided)
@@ -119,9 +158,21 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
     }
 
     // Validate units are available
-    const unitsAvailable = await validateUnitsAvailable(fromPlanetId, units);
-    if (!unitsAvailable) {
-      return res.status(400).json({ error: 'Insufficient units at planet' });
+    if (isShipSource) {
+      // Validate against capital ship garrison
+      const garrison = capitalShipSource.garrison as any || { troops: {} };
+      const garrisonTroops = garrison.troops || {};
+      for (const [unitType, count] of Object.entries(units)) {
+        const available = garrisonTroops[unitType] || 0;
+        if ((count as number) > available) {
+          return res.status(400).json({ error: `Insufficient ${unitType} in capital ship garrison (have ${available}, need ${count})` });
+        }
+      }
+    } else {
+      const unitsAvailable = await validateUnitsAvailable(fromPlanetId, units);
+      if (!unitsAvailable) {
+        return res.status(400).json({ error: 'Insufficient units at planet' });
+      }
     }
 
     // --- TOOL VALIDATION (Attack Only) ---
@@ -160,132 +211,179 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
     }
 
 
-    // Get planet positions
-    const fromPlanet = await prisma.planet.findUnique({
-      where: { id: fromPlanetId },
-    });
-    const toPlanet = await prisma.planet.findUnique({
-      where: { id: toPlanetId },
-    });
+    // Get source position (either planet or capital ship) and target planet
+    let fromX: number, fromY: number;
+    let fromPlanet: any = null;
 
-    if (!fromPlanet || !toPlanet) {
-      return res.status(404).json({ error: 'Planet not found' });
+    if (isShipSource) {
+      // Use capital ship coordinates
+      fromX = capitalShipSource.x;
+      fromY = capitalShipSource.y;
+    } else {
+      fromPlanet = await prisma.planet.findUnique({
+        where: { id: fromPlanetId },
+      });
+      if (!fromPlanet) {
+        return res.status(404).json({ error: 'Source planet not found' });
+      }
+      fromX = fromPlanet.x;
+      fromY = fromPlanet.y;
+    }
+
+    // Get target position (either planet or capital ship)
+    let toX: number, toY: number;
+    let toPlanet: any = null;
+
+    if (isShipDestination) {
+      // Use capital ship destination coordinates
+      toX = capitalShipDestination.x;
+      toY = capitalShipDestination.y;
+    } else {
+      toPlanet = await prisma.planet.findUnique({
+        where: { id: toPlanetId },
+      });
+
+      if (!toPlanet) {
+        return res.status(404).json({ error: 'Target planet not found' });
+      }
+      toX = toPlanet.x;
+      toY = toPlanet.y;
     }
 
     // Calculate distance and travel time
-    const distance = calculateDistance(fromPlanet.x, fromPlanet.y, toPlanet.x, toPlanet.y);
+    const distance = calculateDistance(fromX, fromY, toX, toY);
     const travelTimeSeconds = calculateTravelTime(distance);
     const departAt = new Date();
     const arriveAt = new Date(departAt.getTime() + travelTimeSeconds * 1000);
 
-    // --- DEFENSE-AWARE UNIT DEDUCTION ---
-    // Get current defense layout to determine which units are on defense
-    const defenseLayout = await prisma.defenseLayout.findUnique({
-      where: { planetId: fromPlanetId },
-    });
-
-    // Get all units on the planet
-    const planetUnits = await prisma.planetUnit.findMany({ where: { planetId: fromPlanetId } });
-    const availablePool: Record<string, number> = {};
-    planetUnits.forEach(pu => availablePool[pu.unitType] = pu.count);
-
-    // Parse defense layout to determine units on defense
-    const onDefense: Record<string, Record<string, number>> = { front: {}, left: {}, right: {} };
-    if (defenseLayout) {
-      const parseLane = (json: string, laneName: string) => {
-        try {
-          const data = JSON.parse(json || '{}');
-          const units = data.units || data;
-          for (const [unitType, count] of Object.entries(units)) {
-            if (typeof count === 'number' && count > 0) {
-              onDefense[laneName][unitType] = count;
-            }
-          }
-        } catch (e) { }
-      };
-      parseLane(defenseLayout.frontLaneJson, 'front');
-      parseLane(defenseLayout.leftLaneJson, 'left');
-      parseLane(defenseLayout.rightLaneJson, 'right');
-    }
-
-    // Calculate total on defense per unit type
-    const totalOnDefense: Record<string, number> = {};
-    for (const lane of Object.values(onDefense)) {
-      for (const [unitType, count] of Object.entries(lane)) {
-        totalOnDefense[unitType] = (totalOnDefense[unitType] || 0) + count;
-      }
-    }
-
-    // For each requested unit type, take from RESERVE first, then from DEFENSE (proportionally)
+    // --- DEFENSE-AWARE UNIT DEDUCTION (Planet sources only) ---
+    // Capital ships don't have defense layouts - skip this for ship sources
+    let hasBorrowedTroops = false;
     const borrowedFromDefense: Record<string, Record<string, number>> = { front: {}, left: {}, right: {} };
-    const requestedUnits = { ...units };
 
-    for (const [unitType, requestedCount] of Object.entries(requestedUnits)) {
-      const available = availablePool[unitType] || 0;
-      const defensiveCount = totalOnDefense[unitType] || 0;
-      const reserveCount = Math.max(0, available - defensiveCount);
+    if (!isShipSource) {
+      // Get current defense layout to determine which units are on defense
+      const defenseLayout = await prisma.defenseLayout.findUnique({
+        where: { planetId: fromPlanetId },
+      });
 
-      let remaining = requestedCount as number;
+      // Get all units on the planet
+      const planetUnits = await prisma.planetUnit.findMany({ where: { planetId: fromPlanetId } });
+      const availablePool: Record<string, number> = {};
+      planetUnits.forEach(pu => availablePool[pu.unitType] = pu.count);
 
-      // Take from reserve first
-      const fromReserve = Math.min(remaining, reserveCount);
-      remaining -= fromReserve;
+      // Parse defense layout to determine units on defense
+      const onDefense: Record<string, Record<string, number>> = { front: {}, left: {}, right: {} };
+      if (defenseLayout) {
+        const parseLane = (json: string, laneName: string) => {
+          try {
+            const data = JSON.parse(json || '{}');
+            const units = data.units || data;
+            for (const [unitType, count] of Object.entries(units)) {
+              if (typeof count === 'number' && count > 0) {
+                onDefense[laneName][unitType] = count;
+              }
+            }
+          } catch (e) { }
+        };
+        parseLane(defenseLayout.frontLaneJson, 'front');
+        parseLane(defenseLayout.leftLaneJson, 'left');
+        parseLane(defenseLayout.rightLaneJson, 'right');
+      }
 
-      // If still need more, borrow from defense (proportionally from each lane)
-      if (remaining > 0 && defensiveCount > 0) {
-        for (const lane of ['front', 'left', 'right']) {
-          if (remaining <= 0) break;
-          const laneCount = onDefense[lane][unitType] || 0;
-          if (laneCount > 0) {
-            const ratio = laneCount / defensiveCount;
-            const toBorrow = Math.min(Math.ceil(remaining * ratio), laneCount, remaining);
-            if (toBorrow > 0) {
-              borrowedFromDefense[lane][unitType] = (borrowedFromDefense[lane][unitType] || 0) + toBorrow;
-              remaining -= toBorrow;
+      // Calculate total on defense per unit type
+      const totalOnDefense: Record<string, number> = {};
+      for (const lane of Object.values(onDefense)) {
+        for (const [unitType, count] of Object.entries(lane)) {
+          totalOnDefense[unitType] = (totalOnDefense[unitType] || 0) + count;
+        }
+      }
+
+      // For each requested unit type, take from RESERVE first, then from DEFENSE (proportionally)
+      const requestedUnits = { ...units };
+
+      for (const [unitType, requestedCount] of Object.entries(requestedUnits)) {
+        const available = availablePool[unitType] || 0;
+        const defensiveCount = totalOnDefense[unitType] || 0;
+        const reserveCount = Math.max(0, available - defensiveCount);
+
+        let remaining = requestedCount as number;
+
+        // Take from reserve first
+        const fromReserve = Math.min(remaining, reserveCount);
+        remaining -= fromReserve;
+
+        // If still need more, borrow from defense (proportionally from each lane)
+        if (remaining > 0 && defensiveCount > 0) {
+          for (const lane of ['front', 'left', 'right']) {
+            if (remaining <= 0) break;
+            const laneCount = onDefense[lane][unitType] || 0;
+            if (laneCount > 0) {
+              const ratio = laneCount / defensiveCount;
+              const toBorrow = Math.min(Math.ceil(remaining * ratio), laneCount, remaining);
+              if (toBorrow > 0) {
+                borrowedFromDefense[lane][unitType] = (borrowedFromDefense[lane][unitType] || 0) + toBorrow;
+                remaining -= toBorrow;
+              }
             }
           }
         }
       }
-    }
 
-    // Check if any troops were borrowed from defense
-    const hasBorrowedTroops = Object.values(borrowedFromDefense).some(
-      lane => Object.keys(lane).length > 0 && Object.values(lane).some(c => c > 0)
-    );
+      // Check if any troops were borrowed from defense
+      hasBorrowedTroops = Object.values(borrowedFromDefense).some(
+        lane => Object.keys(lane).length > 0 && Object.values(lane).some(c => c > 0)
+      );
 
-    // Update defense layout to remove borrowed troops
-    if (defenseLayout && hasBorrowedTroops) {
-      const updateData: Record<string, string> = {};
+      // Update defense layout to remove borrowed troops
+      if (defenseLayout && hasBorrowedTroops) {
+        const updateData: Record<string, string> = {};
 
-      const updateLane = (laneKey: string, laneName: string) => {
-        try {
-          const currentLane = JSON.parse((defenseLayout as any)[laneKey] || '{}');
-          const hasTools = currentLane.tools !== undefined;
-          const units = hasTools ? currentLane.units : currentLane;
+        const updateLane = (laneKey: string, laneName: string) => {
+          try {
+            const currentLane = JSON.parse((defenseLayout as any)[laneKey] || '{}');
+            const hasTools = currentLane.tools !== undefined;
+            const units = hasTools ? currentLane.units : currentLane;
 
-          for (const [unitType, borrowed] of Object.entries(borrowedFromDefense[laneName])) {
-            if (units[unitType]) {
-              units[unitType] = Math.max(0, units[unitType] - (borrowed as number));
-              if (units[unitType] === 0) delete units[unitType];
+            for (const [unitType, borrowed] of Object.entries(borrowedFromDefense[laneName])) {
+              if (units[unitType]) {
+                units[unitType] = Math.max(0, units[unitType] - (borrowed as number));
+                if (units[unitType] === 0) delete units[unitType];
+              }
             }
-          }
 
-          updateData[laneKey] = JSON.stringify(hasTools ? { units, tools: currentLane.tools } : units);
-        } catch (e) { }
-      };
+            updateData[laneKey] = JSON.stringify(hasTools ? { units, tools: currentLane.tools } : units);
+          } catch (e) { }
+        };
 
-      updateLane('frontLaneJson', 'front');
-      updateLane('leftLaneJson', 'left');
-      updateLane('rightLaneJson', 'right');
+        updateLane('frontLaneJson', 'front');
+        updateLane('leftLaneJson', 'left');
+        updateLane('rightLaneJson', 'right');
 
-      await prisma.defenseLayout.update({
-        where: { id: defenseLayout.id },
-        data: updateData,
-      });
+        await prisma.defenseLayout.update({
+          where: { id: defenseLayout.id },
+          data: updateData,
+        });
+      }
     }
 
-    // Deduct units from origin planet
-    await deductUnits(fromPlanetId, units);
+    // Deduct units from origin (ship garrison or planet)
+    if (isShipSource) {
+      // Deduct units from capital ship garrison
+      const garrison = capitalShipSource.garrison as any || { troops: {}, tools: {} };
+      const garrisonTroops = garrison.troops || {};
+      for (const [unitType, count] of Object.entries(units)) {
+        garrisonTroops[unitType] = Math.max(0, (garrisonTroops[unitType] || 0) - (count as number));
+        if (garrisonTroops[unitType] === 0) delete garrisonTroops[unitType];
+      }
+      await prisma.capitalShip.update({
+        where: { id: actualShipId! },
+        data: { garrison: { ...garrison, troops: garrisonTroops } },
+      });
+      console.log(`🚀 Deducted units from capital ship ${actualShipId} garrison:`, units);
+    } else {
+      await deductUnits(fromPlanetId, units);
+    }
 
     // Deduct tools from origin planet
     if (Object.keys(allTools).length > 0) {
@@ -365,9 +463,13 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
     const fleet = await prisma.fleet.create({
       data: {
         ownerId: userId,
-        fromPlanetId,
-        toPlanetId,
-        type,
+        // For ship sources, use null fromPlanetId and set fromCapitalShipId
+        fromPlanetId: isShipSource ? null : fromPlanetId,
+        fromCapitalShipId: isShipSource ? actualShipId : null,
+        // For ship destinations, use null toPlanetId and set toCapitalShipId
+        toPlanetId: isShipDestination ? null : toPlanetId,
+        toCapitalShipId: isShipDestination ? targetShipId : null,
+        type: isShipDestination ? 'support' : type, // Transfers to ships are always support type
         unitsJson: JSON.stringify(units),
         laneAssignmentsJson: type === 'attack' && req.body.laneAssignments
           ? JSON.stringify(req.body.laneAssignments)
@@ -384,8 +486,14 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
         fromPlanet: {
           select: { id: true, x: true, y: true, name: true },
         },
+        fromCapitalShip: {
+          select: { id: true, x: true, y: true },
+        },
         toPlanet: {
           select: { id: true, x: true, y: true, name: true },
+        },
+        toCapitalShip: {
+          select: { id: true, x: true, y: true, ownerId: true, owner: { select: { username: true } } },
         },
         admiral: {
           select: { id: true, name: true, attackBonus: true, defenseBonus: true },
@@ -398,7 +506,8 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
       const { queueFleetArrival } = await import('../lib/jobQueue');
       await queueFleetArrival({
         fleetId: fleet.id,
-        toPlanetId: fleet.toPlanetId,
+        toPlanetId: fleet.toPlanetId || null,
+        toCapitalShipId: isShipDestination ? targetShipId : null,
         type: fleet.type as 'attack' | 'support' | 'scout',
       }, arriveAt);
     } catch (queueError) {
@@ -412,7 +521,9 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
       id: fleet.id,
       type: fleet.type,
       fromPlanet: fleet.fromPlanet,
+      fromCapitalShip: fleet.fromCapitalShip || null, // For attack lines from capital ship
       toPlanet: fleet.toPlanet,
+      toCapitalShip: fleet.toCapitalShip || null, // For transfers to capital ship
       units: JSON.parse(fleet.unitsJson),
       departAt: fleet.departAt,
       arriveAt: fleet.arriveAt,
@@ -426,7 +537,9 @@ router.post('/fleet', authenticateToken, async (req: AuthRequest, res: Response)
         id: fleet.id,
         type: fleet.type,
         fromPlanet: fleet.fromPlanet,
+        fromCapitalShip: fleet.fromCapitalShip || null,
         toPlanet: fleet.toPlanet,
+        toCapitalShip: fleet.toCapitalShip || null,
         units: JSON.parse(fleet.unitsJson),
         laneAssignments: fleet.laneAssignmentsJson
           ? JSON.parse(fleet.laneAssignmentsJson)
@@ -463,6 +576,12 @@ router.get('/fleets', authenticateToken, async (req: AuthRequest, res: Response)
         toPlanet: {
           select: { id: true, x: true, y: true, name: true },
         },
+        fromCapitalShip: {
+          select: { id: true, x: true, y: true },
+        },
+        toCapitalShip: {
+          select: { id: true, x: true, y: true, ownerId: true },
+        },
       },
       orderBy: {
         arriveAt: 'asc',
@@ -474,6 +593,8 @@ router.get('/fleets', authenticateToken, async (req: AuthRequest, res: Response)
       type: fleet.type,
       fromPlanet: fleet.fromPlanet,
       toPlanet: fleet.toPlanet,
+      fromCapitalShip: fleet.fromCapitalShip || null, // For attack lines from capital ship
+      toCapitalShip: fleet.toCapitalShip || null, // For attacks targeting capital ships
       units: JSON.parse(fleet.unitsJson),
       departAt: fleet.departAt,
       arriveAt: fleet.arriveAt,

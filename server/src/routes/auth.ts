@@ -172,6 +172,8 @@ router.get('/me', authenticateToken, async (req: Request, res: Response) => {
       email: user.email,
       xp: user.xp,
       level: user.level,
+      darkMatter: user.darkMatter,
+      credits: user.credits,
     });
   } catch (error) {
     console.error('Get Me error:', error);

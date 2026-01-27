@@ -12,11 +12,20 @@
  * - REDIS_HOST (default: localhost)
  * - REDIS_PORT (default: 6379)
  * - REDIS_PASSWORD (optional)
+ * - QUEUE_PREFIX (default: 'prod') - isolates dev/prod queues
  */
 
 import { Queue, QueueEvents } from 'bullmq';
 import { createClient } from 'redis';
 import { logError, isRedisReadOnlyError } from './errorLogger';
+
+// Environment-specific queue prefix to isolate dev/prod
+// Default to 'prod' for safety - dev must explicitly set QUEUE_PREFIX=dev
+const QUEUE_PREFIX = process.env.QUEUE_PREFIX || 'prod';
+const QUEUE_NAME = `${QUEUE_PREFIX}_GameEvents`;
+
+// Export for use in worker
+export { QUEUE_NAME };
 
 // Redis connection configuration (use options object, not IORedis instance)
 export const redisConnectionOptions = {
@@ -55,7 +64,7 @@ export const redisConnectionOptions = {
  * Game Events Queue
  * Handles: Fleet arrivals, Combat resolution, Resource collection, etc.
  */
-export const gameEventsQueue = new Queue('GameEvents', {
+export const gameEventsQueue = new Queue(QUEUE_NAME, {
     connection: redisConnectionOptions,
     defaultJobOptions: {
         attempts: 3, // Retry failed jobs 3 times
@@ -76,22 +85,22 @@ export const gameEventsQueue = new Queue('GameEvents', {
 // Log queue errors with proper categorization
 gameEventsQueue.on('error', (err) => {
     const category = isRedisReadOnlyError(err) ? 'REDIS_READONLY' : 'QUEUE_ERROR';
-    logError(category, err, { 
+    logError(category, err, {
         component: 'gameEventsQueue',
-        queueName: 'GameEvents'
+        queueName: QUEUE_NAME
     });
 });
 
 // Queue events for monitoring (optional)
-export const gameEventsQueueEvents = new QueueEvents('GameEvents', {
+export const gameEventsQueueEvents = new QueueEvents(QUEUE_NAME, {
     connection: redisConnectionOptions,
 });
 
 gameEventsQueueEvents.on('error', (err) => {
     const category = isRedisReadOnlyError(err) ? 'REDIS_READONLY' : 'QUEUE_ERROR';
-    logError(category, err, { 
+    logError(category, err, {
         component: 'gameEventsQueueEvents',
-        queueName: 'GameEvents'
+        queueName: QUEUE_NAME
     });
 });
 
@@ -100,7 +109,8 @@ gameEventsQueueEvents.on('error', (err) => {
  */
 export interface FleetArrivalJob {
     fleetId: string;
-    toPlanetId: string;
+    toPlanetId: string | null;
+    toCapitalShipId?: string | null;
     type: 'attack' | 'support' | 'scout';
 }
 
@@ -122,6 +132,86 @@ export interface NpcRespawnJob {
 // No data needed - this is a scheduled tick
 export interface ProbeUpdateJob {
     tick: number; // Just a counter for logging
+}
+
+// =============================================================================
+// EVENT SYSTEM JOB TYPES
+// =============================================================================
+
+export interface EventStartJob {
+    eventId: string;
+}
+
+export interface EventEndJob {
+    eventId: string;
+}
+
+export interface EventRetaliationPhaseJob {
+    eventId: string;
+}
+
+export interface EventHeatDecayJob {
+    eventId: string;
+}
+
+export interface EventRetaliationCheckJob {
+    eventId: string;
+}
+
+export interface EventBossWeakenJob {
+    eventId: string;
+}
+
+export interface EventShipRespawnJob {
+    eventId: string;
+}
+
+export interface RetaliationArrivalJob {
+    retaliationId: string;
+}
+
+export interface RetaliationArriveJob {
+    retaliationId: string;
+}
+
+export interface EventFleetArrivalJob {
+    fleetId: string;
+    eventId: string;
+    shipId: string;
+}
+
+// =============================================================================
+// THREAT DETECTION JOB
+// =============================================================================
+
+export interface ThreatDetectionJob {
+    fleetId: string;
+    defenderId: string;
+    targetPlanetId: string;
+    attackerName: string;
+    radarLevel: number;
+    phase?: number;  // Which fidelity phase to notify for (1-4), undefined = first detection
+}
+
+// =============================================================================
+// CAPITAL SHIP JOB TYPES
+// =============================================================================
+
+export interface CapitalShipArrivalJob {
+    capitalShipId: string;
+}
+
+export interface CapitalShipReturnJob {
+    capitalShipId: string;
+}
+
+export interface CapitalShipCommitmentEndJob {
+    capitalShipId: string;
+}
+
+export interface CapitalShipFleetArrivalJob {
+    fleetId: string;
+    capitalShipId: string;
 }
 
 /**
@@ -153,6 +243,20 @@ export async function queueFleetReturn(data: FleetReturnJob, arriveAt: Date) {
 }
 
 /**
+ * Queue job to process an event attack fleet arrival
+ */
+export async function queueEventFleetArrival(data: EventFleetArrivalJob, arriveAt: Date) {
+    const delay = Math.max(0, arriveAt.getTime() - Date.now());
+
+    await gameEventsQueue.add('fleet:event-arrival', data, {
+        delay,
+        jobId: `event-fleet-arrival-${data.fleetId}`,
+    });
+
+    console.log(`👾 Queued event fleet arrival: ${data.fleetId} → ship ${data.shipId} (delay: ${Math.round(delay / 1000)}s)`);
+}
+
+/**
  * Queue job to respawn an NPC after delay
  */
 export async function queueNpcRespawn(data: NpcRespawnJob, delaySeconds: number) {
@@ -162,6 +266,76 @@ export async function queueNpcRespawn(data: NpcRespawnJob, delaySeconds: number)
     });
 
     console.log(`📤 Queued NPC respawn: ${data.planetId} (delay: ${delaySeconds}s)`);
+}
+
+/**
+ * Queue job to notify defender of incoming threat when fleet enters detection range
+ */
+export async function queueThreatDetection(data: ThreatDetectionJob, detectionTime: Date) {
+    const delay = Math.max(0, detectionTime.getTime() - Date.now());
+
+    await gameEventsQueue.add('threat:detection', data, {
+        delay,
+        jobId: `threat-detect-${data.fleetId}`, // Prevent duplicate jobs
+    });
+
+    console.log(`📡 Queued threat detection: fleet ${data.fleetId} → ${data.targetPlanetId} (delay: ${Math.round(delay / 1000)}s)`);
+}
+
+/**
+ * Queue job for Capital Ship arrival at deployment location
+ */
+export async function queueCapitalShipArrival(data: CapitalShipArrivalJob, arriveAt: Date) {
+    const delay = Math.max(0, arriveAt.getTime() - Date.now());
+
+    await gameEventsQueue.add('capitalship:arrival', data, {
+        delay,
+        jobId: `capitalship-arrival-${data.capitalShipId}`,
+    });
+
+    console.log(`🚀 Queued Capital Ship arrival: ${data.capitalShipId} (delay: ${Math.round(delay / 1000)}s)`);
+}
+
+/**
+ * Queue job for Capital Ship return to home planet
+ */
+export async function queueCapitalShipReturn(data: CapitalShipReturnJob, arriveAt: Date) {
+    const delay = Math.max(0, arriveAt.getTime() - Date.now());
+
+    await gameEventsQueue.add('capitalship:return', data, {
+        delay,
+        jobId: `capitalship-return-${data.capitalShipId}`,
+    });
+
+    console.log(`🏠 Queued Capital Ship return: ${data.capitalShipId} (delay: ${Math.round(delay / 1000)}s)`);
+}
+
+/**
+ * Queue job for fleet attacking a Capital Ship
+ */
+export async function queueCapitalShipFleetArrival(data: CapitalShipFleetArrivalJob, arriveAt: Date) {
+    const delay = Math.max(0, arriveAt.getTime() - Date.now());
+
+    await gameEventsQueue.add('capitalship:fleet-arrival', data, {
+        delay,
+        jobId: `capitalship-fleet-arrival-${data.fleetId}`,
+    });
+
+    console.log(`⚔️ Queued Capital Ship attack: fleet ${data.fleetId} → ship ${data.capitalShipId} (delay: ${Math.round(delay / 1000)}s)`);
+}
+
+/**
+ * Queue job for when a Capital Ship's commitment period ends (auto-return)
+ */
+export async function queueCapitalShipCommitmentEnd(data: CapitalShipCommitmentEndJob, endAt: Date) {
+    const delay = Math.max(0, endAt.getTime() - Date.now());
+
+    await gameEventsQueue.add('capitalship:commitment-end', data, {
+        delay,
+        jobId: `capitalship-commitment-end-${data.capitalShipId}`,
+    });
+
+    console.log(`⏰ Queued Capital Ship commitment end: ${data.capitalShipId} (delay: ${Math.round(delay / 1000)}s)`);
 }
 
 /**
@@ -177,6 +351,21 @@ export async function getQueueStats() {
     ]);
 
     return { waiting, active, completed, failed, delayed };
+}
+
+/**
+ * Get delayed jobs for debugging
+ */
+export async function getDelayedJobs() {
+    const jobs = await gameEventsQueue.getDelayed(0, 10);
+    return jobs.map(job => ({
+        id: job.id,
+        name: job.name,
+        data: job.data,
+        delay: job.opts.delay,
+        timestamp: job.timestamp,
+        processedOn: job.processedOn,
+    }));
 }
 
 /**
@@ -222,9 +411,9 @@ export async function closeQueues() {
 export async function checkRedisHealth(): Promise<boolean> {
     const redisUrl = `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`;
     let client;
-    
+
     try {
-        client = createClient({ 
+        client = createClient({
             url: redisUrl,
             socket: {
                 connectTimeout: 2000, // 2 second timeout
@@ -232,20 +421,20 @@ export async function checkRedisHealth(): Promise<boolean> {
         });
 
         // Don't let error events throw during health check
-        client.on('error', () => {});
-        
+        client.on('error', () => { });
+
         await client.connect();
-        
+
         // Try a simple PING
         const pong = await client.ping();
-        
+
         // Try a write operation to detect read-only mode
         const testKey = '__health_check__';
         await client.set(testKey, Date.now().toString(), { EX: 10 });
         await client.del(testKey);
-        
+
         await client.quit();
-        
+
         return pong === 'PONG';
     } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
@@ -254,14 +443,14 @@ export async function checkRedisHealth(): Promise<boolean> {
         if (isRedisReadOnlyError(error)) {
             logError('REDIS_READONLY', error, { component: 'healthCheck' });
         }
-        
+
         // Try to close the client if it exists
         try {
             if (client) await client.quit();
         } catch {
             // Ignore close errors
         }
-        
+
         return false;
     }
 }

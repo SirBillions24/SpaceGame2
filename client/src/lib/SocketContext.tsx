@@ -39,7 +39,6 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         if (!token) return;
 
         const wsUrl = getWebSocketUrl();
-        console.log('🔌 Connecting WebSocket to:', wsUrl || '(same origin)');
 
         const newSocket = io(wsUrl, {
             auth: { token },

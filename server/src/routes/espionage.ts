@@ -4,8 +4,28 @@ import { Router, Response } from 'express';
 import { AuthRequest, authenticateToken } from '../middleware/auth';
 import { launchProbe, getProbeData, recallProbe, generateEspionageReport } from '../services/espionageService';
 import prisma from '../lib/prisma';
+import { socketService } from '../services/socketService';
 
 const router = Router();
+
+/**
+ * Format probe data for socket emission (matches client Probe interface)
+ */
+function formatProbeForSocket(probe: any) {
+    return {
+        id: probe.id,
+        type: probe.type,
+        targetX: probe.targetX,
+        targetY: probe.targetY,
+        status: probe.status,
+        startTime: probe.startTime,
+        arrivalTime: probe.arrivalTime,
+        returnTime: probe.returnTime,
+        lastUpdateTime: probe.lastUpdateTime,
+        radius: probe.radius,
+        fromPlanet: probe.fromPlanet ? { x: probe.fromPlanet.x, y: probe.fromPlanet.y } : null,
+    };
+}
 
 // Apply authentication to all espionage routes
 router.use(authenticateToken);
@@ -17,6 +37,17 @@ router.post('/launch', async (req: AuthRequest, res: Response) => {
         const userId = req.userId!;
 
         const probe = await launchProbe(userId, fromPlanetId, targetX, targetY, probeType);
+        
+        // Fetch probe with fromPlanet for socket emission
+        const probeWithPlanet = await prisma.reconProbe.findUnique({
+            where: { id: probe.id },
+            include: { fromPlanet: { select: { x: true, y: true } } }
+        });
+        
+        if (probeWithPlanet) {
+            socketService.emitToUser(userId, 'probe:updated', formatProbeForSocket(probeWithPlanet));
+        }
+        
         res.json(probe);
     } catch (error: any) {
         res.status(400).json({ error: error.message });
@@ -30,6 +61,17 @@ router.post('/recall/:id', async (req: AuthRequest, res: Response) => {
         const probeId = req.params.id;
 
         const probe = await recallProbe(userId, probeId);
+        
+        // Fetch probe with fromPlanet for socket emission
+        const probeWithPlanet = await prisma.reconProbe.findUnique({
+            where: { id: probe.id },
+            include: { fromPlanet: { select: { x: true, y: true } } }
+        });
+        
+        if (probeWithPlanet) {
+            socketService.emitToUser(userId, 'probe:updated', formatProbeForSocket(probeWithPlanet));
+        }
+        
         res.json(probe);
     } catch (error: any) {
         res.status(400).json({ error: error.message });

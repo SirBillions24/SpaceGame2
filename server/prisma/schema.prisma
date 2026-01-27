@@ -33,6 +33,7 @@ model User {
   inboxMessages     InboxMessage[]
   planets           Planet[]
   reconProbes       ReconProbe[]
+  capitalShips      CapitalShip[]      @relation("UserCapitalShips")
   coalition         Coalition?         @relation(fields: [coalitionId], references: [id])
 
   @@map("users")
@@ -143,6 +144,7 @@ model Planet {
   owner                   User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   reconProbesLaunched     ReconProbe[]    @relation("ProbesLaunched")
   tools                   ToolInventory[]
+  capitalShips            CapitalShip[]   @relation("PlanetCapitalShips")
 
   @@unique([x, y])
   @@index([ownerId])
@@ -250,8 +252,10 @@ model BattleReport {
 model Fleet {
   id                      String        @id @default(uuid())
   ownerId                 String        @map("owner_user_id")
-  fromPlanetId            String        @map("from_planet_id")
-  toPlanetId              String        @map("to_planet_id")
+  fromPlanetId            String?       @map("from_planet_id")
+  fromCapitalShipId       String?       @map("from_capital_ship_id")
+  toPlanetId              String?       @map("to_planet_id")
+  toCapitalShipId         String?       @map("to_capital_ship_id")
   type                    String
   unitsJson               String        @map("units_json")
   laneAssignmentsJson     String?       @map("lane_assignments_json")
@@ -264,15 +268,19 @@ model Fleet {
   status                  String        @default("enroute")
   createdAt               DateTime      @default(now()) @map("created_at")
   updatedAt               DateTime      @updatedAt @map("updated_at")
+  targetEventShipId       String?       @map("target_event_ship_id")
   battleReport            BattleReport?
   admiral                 Admiral?      @relation(fields: [admiralId], references: [id])
-  fromPlanet              Planet        @relation("FromPlanet", fields: [fromPlanetId], references: [id])
+  fromPlanet              Planet?       @relation("FromPlanet", fields: [fromPlanetId], references: [id])
+  fromCapitalShip         CapitalShip?  @relation("FleetFromCapitalShip", fields: [fromCapitalShipId], references: [id])
   owner                   User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  toPlanet                Planet        @relation("ToPlanet", fields: [toPlanetId], references: [id])
+  toPlanet                Planet?       @relation("ToPlanet", fields: [toPlanetId], references: [id])
+  toCapitalShip           CapitalShip?  @relation("FleetToCapitalShip", fields: [toCapitalShipId], references: [id])
 
   @@index([status, arriveAt])
   @@index([ownerId, status])
   @@index([toPlanetId, status])
+  @@index([toCapitalShipId, status])
   @@map("fleets")
 }
 
@@ -361,4 +369,217 @@ model BlackHole {
 
   @@unique([x, y])
   @@map("black_holes")
+}
+
+// =============================================================================
+// CAPITAL SHIPS
+// =============================================================================
+
+model CapitalShip {
+  id              String    @id @default(cuid())
+  ownerId         String    @map("owner_user_id")
+  owner           User      @relation("UserCapitalShips", fields: [ownerId], references: [id])
+  fromPlanetId    String    @map("from_planet_id")
+  fromPlanet      Planet    @relation("PlanetCapitalShips", fields: [fromPlanetId], references: [id])
+  
+  // Status: constructing, ready, traveling, deployed, returning, damaged, repairing
+  status          String    @default("constructing")
+  
+  // Current position (null when docked)
+  x               Int?
+  y               Int?
+  
+  // Deployment commitment
+  commitmentDays  Int?      @map("commitment_days")
+  deployedAt      DateTime? @map("deployed_at")
+  deployedUntil   DateTime? @map("deployed_until")
+  
+  // Travel
+  targetX         Int?      @map("target_x")
+  targetY         Int?      @map("target_y")
+  arrivalTime     DateTime? @map("arrival_time")
+  travelStartedAt DateTime? @map("travel_started_at")
+  
+  // Combat stats
+  currentHp       Int       @default(0) @map("current_hp")
+  maxHp           Int       @default(1000) @map("max_hp")
+  garrison        Json?     // Allied units stationed on the capital ship
+  
+  // Construction/Repair progress (JSON: { required, donated, phase, totalPhases, isRepair })
+  buildProgress   Json?     @map("build_progress")
+  
+  // Destruction cooldown
+  cooldownUntil   DateTime? @map("cooldown_until")
+  
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  // Fleets launched from this capital ship
+  fleetsFrom      Fleet[]   @relation("FleetFromCapitalShip")
+  // Fleets targeting this capital ship
+  fleetsTo        Fleet[]   @relation("FleetToCapitalShip")
+  
+  @@index([ownerId, status])
+  @@index([status])
+  @@map("capital_ships")
+}
+
+// =============================================================================
+// WORLD EVENTS (Alien Invasion, etc.)
+// =============================================================================
+
+model WorldEvent {
+  id              String    @id @default(cuid())
+  type            String    // e.g., "alien_invasion"
+  name            String
+  status          String    @default("scheduled") // scheduled, active, retaliation, ended
+  startTime       DateTime  @map("start_time")
+  endTime         DateTime  @map("end_time")
+  retaliationTime DateTime? @map("retaliation_time")
+  config          Json?     // Event-specific configuration
+  globalState     Json?     @map("global_state") // Shared state (mothership HP, portal location, etc.)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  ships           EventShip[]
+  scores          EventScore[]
+  heatTrackers    EventHeat[]
+  retaliations    EventRetaliation[]
+  bossDamages     EventBossDamage[]
+
+  @@index([status])
+  @@map("world_events")
+}
+
+model EventShip {
+  id                String    @id @default(cuid())
+  eventId           String    @map("event_id")
+  event             WorldEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  shipType          String    @map("ship_type") // scout, raider, carrier, dreadnought, mothership
+  tier              Int       @default(1)
+  level             Int       @default(1)
+  name              String
+  
+  zoneType          String    @map("zone_type") // portal, player_ring
+  ownerUserId       String?   @map("owner_user_id") // For player_ring ships
+  
+  x                 Int
+  y                 Int
+  distanceFromOwner Int?      @map("distance_from_owner")
+  
+  // Combat state
+  garrison          Json?     // Units defending the ship
+  currentHp         Int?      @map("current_hp") // For persistent HP ships like mothership
+  maxHp             Int?      @map("max_hp")
+  attackCount       Int       @default(0) @map("attack_count")
+  maxAttacks        Int       @default(10) @map("max_attacks")
+  
+  // Defeat/respawn
+  isDefeated        Boolean   @default(false) @map("is_defeated")
+  respawnAt         DateTime? @map("respawn_at")
+  
+  // Loot configuration
+  lootConfig        Json?     @map("loot_config")
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  bossDamages       EventBossDamage[]
+
+  @@index([eventId, zoneType])
+  @@index([eventId, ownerUserId])
+  @@index([eventId, isDefeated])
+  @@map("event_ships")
+}
+
+model EventScore {
+  id              String    @id @default(cuid())
+  eventId         String    @map("event_id")
+  event           WorldEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId          String    @map("user_id")
+  coalitionId     String?   @map("coalition_id")
+  
+  xenoCores       Int       @default(0) @map("xeno_cores")
+  shipsDefeated   Int       @default(0) @map("ships_defeated")
+  damageDealt     Int       @default(0) @map("damage_dealt")
+  attacksLaunched Int       @default(0) @map("attacks_launched")
+  defensesWon     Int       @default(0) @map("defenses_won")
+  defensesLost    Int       @default(0) @map("defenses_lost")
+  
+  claimedRewards  Json?     @map("claimed_rewards") // End-of-event rewards
+  
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([eventId, userId], name: "eventId_userId")
+  @@index([eventId, xenoCores])
+  @@index([eventId, coalitionId])
+  @@map("event_scores")
+}
+
+model EventHeat {
+  id                   String    @id @default(cuid())
+  eventId              String    @map("event_id")
+  event                WorldEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId               String    @map("user_id")
+  
+  currentHeat          Int       @default(0) @map("current_heat")
+  peakHeat             Int       @default(0) @map("peak_heat")
+  lastHeatGain         DateTime? @map("last_heat_gain")
+  lastRetaliation      DateTime? @map("last_retaliation")
+  retaliationsReceived Int       @default(0) @map("retaliations_received")
+  
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@unique([eventId, userId], name: "eventId_userId")
+  @@index([eventId, currentHeat])
+  @@map("event_heat")
+}
+
+model EventRetaliation {
+  id             String    @id @default(cuid())
+  eventId        String    @map("event_id")
+  event          WorldEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  targetUserId   String    @map("target_user_id")
+  targetPlanetId String    @map("target_planet_id")
+  
+  waveType       String    @map("wave_type") // random, final_swarm
+  tier           Int       @default(1)
+  status         String    @default("incoming") // incoming, resolved, cancelled
+  outcome        String?   // defended, breached, target_missing
+  
+  scheduledAt    DateTime  @map("scheduled_at")
+  arriveAt       DateTime  @map("arrive_at")
+  
+  lootTaken      Json?     @map("loot_taken") // Resources/units lost if breached
+  
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([eventId, targetUserId])
+  @@index([eventId, status])
+  @@map("event_retaliations")
+}
+
+model EventBossDamage {
+  id            String    @id @default(cuid())
+  eventId       String    @map("event_id")
+  event         WorldEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  bossShipId    String    @map("boss_ship_id")
+  bossShip      EventShip  @relation(fields: [bossShipId], references: [id], onDelete: Cascade)
+  userId        String    @map("user_id")
+  coalitionId   String?   @map("coalition_id")
+  
+  damageDealt   Int       @default(0) @map("damage_dealt")
+  attacksLanded Int       @default(0) @map("attacks_landed")
+  wasKillingBlow Boolean  @default(false) @map("was_killing_blow")
+  
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@unique([eventId, bossShipId, userId], name: "eventId_bossShipId_userId")
+  @@index([eventId, bossShipId])
+  @@map("event_boss_damages")
 }

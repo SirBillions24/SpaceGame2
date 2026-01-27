@@ -12,6 +12,8 @@ import admiralRoutes from './routes/admiral';
 import espionageRoutes from './routes/espionage';
 import coalitionRoutes from './routes/coalitions';
 import devRoutes from './routes/dev';
+import eventsRoutes from './routes/events';
+import capitalShipRoutes from './routes/capitalShip';
 import { migrateExistingNpcs } from './services/pveService';
 import { seedBlackHoles, spawnMissingHarvesters } from './services/harvesterService';
 import { globalLimiter, authLimiter, heavyActionLimiter } from './middleware/rateLimiter';
@@ -28,7 +30,7 @@ dotenv.config();
 // =============================================================================
 
 process.on('uncaughtException', (err) => {
-  logErrorSync('UNCAUGHT_EXCEPTION', err, { 
+  logErrorSync('UNCAUGHT_EXCEPTION', err, {
     pid: process.pid,
     uptime: process.uptime(),
     memoryUsage: process.memoryUsage()
@@ -65,17 +67,17 @@ app.get('/health', async (req, res) => {
   try {
     const redisOk = await checkRedisHealth();
     const status = redisOk ? 200 : 503;
-    res.status(status).json({ 
-      ok: redisOk, 
+    res.status(status).json({
+      ok: redisOk,
       redis: redisOk ? 'connected' : 'disconnected',
       timestamp: new Date().toISOString(),
       uptime: process.uptime()
     });
   } catch (err) {
-    res.status(503).json({ 
-      ok: false, 
+    res.status(503).json({
+      ok: false,
       redis: 'error',
-      timestamp: new Date().toISOString() 
+      timestamp: new Date().toISOString()
     });
   }
 });
@@ -91,6 +93,8 @@ app.use('/admiral', admiralRoutes);
 app.use('/espionage', espionageRoutes);
 app.use('/coalitions', coalitionRoutes);
 app.use('/dev', devRoutes);
+app.use('/events', eventsRoutes);
+app.use('/capitalship', capitalShipRoutes);
 
 async function startServer() {
   // Initialize Socket.IO with Redis adapter
@@ -138,3 +142,4 @@ async function startServer() {
 }
 
 startServer();
+// Force restart Sat Jan 24 22:41:03 CST 2026
